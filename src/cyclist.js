@@ -40,6 +40,7 @@ export class Cyclist {
     this.distance = 0;
     this.wheels = [];
     const frame = new T.MeshStandardMaterial({color:0x278e86,metalness:.55,roughness:.3});
+    this.frameMaterial=frame;
     const metal = new T.MeshStandardMaterial({color:0xbcc8c5,metalness:.85,roughness:.27});
     const rubber = new T.MeshStandardMaterial({color:0x20292b,roughness:.85});
     const add = (geo, mat, position, parent=this.group) => {
@@ -136,6 +137,14 @@ export class Cyclist {
       }
       for(const [material,geometries] of batches){add(mergeGeometries(geometries),material,v(0,0,0),parent);geometries.forEach(g=>g.dispose());}
     }
+    this.parcel=new T.Group();this.parcel.name='Delivery parcel';this.parcel.visible=false;
+    const paper=new T.MeshStandardMaterial({color:0xbc9364,roughness:1});
+    add(new T.BoxGeometry(.32,.025,.34),metal,v(0,.915,-.62),this.parcel);
+    for(const side of [-1,1])tube(v(side*.07,.35,-.62),v(side*.13,.9,-.69),.009,metal,this.parcel);
+    add(new T.BoxGeometry(.3,.19,.24),paper,v(0,1.02,-.62),this.parcel);
+    add(new T.BoxGeometry(.305,.195,.022),light,v(0,1.02,-.62),this.parcel);
+    add(new T.BoxGeometry(.022,.195,.245),light,v(0,1.02,-.62),this.parcel);
+    this.group.add(this.parcel);
     // Reuse the Rocketbox mesh and textures already loaded for the pedestrians.
     this.rider=clone(template);this.rider.scale.setScalar(.01);this.group.add(this.rider);
     this.bones={};this.rider.traverse(o=>{if(o.name.startsWith('Bip01'))this.bones[o.name]=o;});
@@ -149,6 +158,12 @@ export class Cyclist {
     aim(spine,neck,spinePosition.add(v(0,.55,.14)));
     this.feet=['L','R'].map(side=>this.bones[`Bip01_${side}_Foot`].getWorldQuaternion(new T.Quaternion()));
     this.update({x:0,z:0,yaw:0,walked:0});
+  }
+
+  setQuestStage(stage,carry=true) {
+    this.parcel.visible=carry&&(stage===1||stage===2);
+    if(this.questStage===stage)return;
+    this.questStage=stage;this.frameMaterial.color.set(stage===3?0xcaa24d:(this.baseColor??0x278e86));
   }
 
   update(player) {

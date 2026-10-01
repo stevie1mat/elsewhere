@@ -4,6 +4,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import { Cyclist } from './cyclist.js';
+import { QuestWorld } from './quest-world.js';
 
 const ROOT = '/assets/';
 export class World {
@@ -13,6 +14,7 @@ export class World {
     this.night = false; this.treePositions = []; this.seed = 427;
     this.loader = new T.TextureLoader(manager);
     this.materials(); this.environment(); this.ground(); this.neighborhood(); this.waterfront(); this.garden(); this.details(); this.bake();
+    this.questWorld=new QuestWorld(scene);this.questStage=0;this.coopMode=false;this.carryParcel=true;this.remoteState=null;
     this.loadTrees(); this.loadPeople();
   }
   random() { this.seed = (this.seed * 1664525 + 1013904223) >>> 0; return this.seed / 4294967296; }
@@ -322,11 +324,24 @@ export class World {
       new GLTFLoader(this.manager).load(`${ROOT}people/${variant}.glb`,gltf=>{
         gltf.scene.traverse(o=>{if(!o.isMesh)return;const prep=old=>{const part=old.name.includes('opacity')?'opacity':old.name.includes('head')?'head':'body';return new T.MeshStandardMaterial({map:textures[part],roughness:.88,side:part==='opacity'?T.DoubleSide:T.FrontSide,alphaTest:part==='opacity'?.45:0});};o.material=Array.isArray(o.material)?o.material.map(prep):prep(o.material);o.castShadow=true;o.receiveShadow=true;o.frustumCulled=false;});
         const clip=gltf.animations.find(a=>a.name==='Walk');
-        if(prefix==='m002') { this.cyclist=new Cyclist(gltf.scene);this.scene.add(this.cyclist.group); }
+        this.questWorld.addCharacter(gltf.scene,clip,prefix);
+        if(prefix==='m002') { this.cyclist=new Cyclist(gltf.scene);this.remoteCyclist=new Cyclist(gltf.scene);this.remoteCyclist.baseColor=0x6e83bd;this.remoteCyclist.group.visible=false;this.scene.add(this.cyclist.group,this.remoteCyclist.group); }
         for(let i=0;i<3;i++){const model=clone(gltf.scene);model.scale.setScalar(.01);this.scene.add(model);const mixer=new T.AnimationMixer(model);if(clip)mixer.clipAction(clip).play();mixer.setTime(i*.4);
           this.walkers.push({model,mixer,phase:i*1.7+(prefix==='f001'?2.2:0),lane:prefix==='f001'?49:45,range:40+i*12});}
       },undefined,error=>console.warn('Pedestrian model unavailable:',error.message));
     }
+  }
+  setRemote(state,carrier) {
+    this.remoteCarrier=carrier;
+    if(!state){this.remoteState=null;this.remotePose=null;if(this.remoteCyclist)this.remoteCyclist.group.visible=false;return;}
+    this.remoteState=state;if(!this.remotePose)this.remotePose={...state};
+  }
+  updateRemote(dt) {
+    if(!this.remoteCyclist||!this.remoteState)return;
+    const target=this.remoteState,p=this.remotePose,k=1-Math.exp(-14*dt);
+    if(Math.hypot(p.x-target.x,p.z-target.z)>15)Object.assign(p,target);
+    else{p.x+=(target.x-p.x)*k;p.z+=(target.z-p.z)*k;p.yaw+=Math.atan2(Math.sin(target.yaw-p.yaw),Math.cos(target.yaw-p.yaw))*k;p.walked+=(target.walked-p.walked)*k;}
+    this.remoteCyclist.group.visible=true;this.remoteCyclist.update(p);this.remoteCyclist.setQuestStage(this.questStage,this.remoteCarrier===target.id);
   }
   setNight(night) {
     this.night=night;this.skyMaterial.uniforms.night.value=night?1:0;this.oceanMaterial.uniforms.night.value=night?1:0;
@@ -336,6 +351,8 @@ export class World {
     this.m.glass.emissive.set(night?0xb27c3b:0);this.m.glass.emissiveIntensity=night?.3:0;
   }
   update(time,dt,camera) {
+    this.questWorld.update(time,this.questStage);
+    this.cyclist?.setQuestStage(this.questStage,this.carryParcel);
     
     this.oceanMaterial.uniforms.time.value=time;this.sky.position.copy(camera.position);
     // Stabilize the moving shadow frustum to avoid shimmering at walking speed.
