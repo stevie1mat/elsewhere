@@ -1,10 +1,19 @@
 import * as THREE from 'three';
 import { World } from './world.js';
-import { SPAWN, LANDMARKS, createPlayer, stepPlayer, validateSavedPosition } from './movement.js';
+import { MumbaiWorld } from './mumbai-world.js';
+import { MUMBAI_SPAWN, MUMBAI_LANDMARKS, MUMBAI_ROADS } from './mumbai-layout.js';
+import { SPAWN as PORTO_SPAWN, LANDMARKS as PORTO_LANDMARKS, createPlayer as createPortoPlayer, stepPlayer, validateSavedPosition } from './movement.js';
 import './style.css';
 import { mapProjection,panMap,zoomMap } from './map-view.js';
 import { CoopClient,coopEndpoint } from './coop.js';
 import { restoreQuest, activeStop, canInteract, advanceQuest } from './quest.js';
+
+const isMumbai=new URLSearchParams(location.search).get('world')==='mumbai';
+const worldName=isMumbai?'Mumbai':'Porto Sol';
+const SPAWN=isMumbai?MUMBAI_SPAWN:PORTO_SPAWN;
+const LANDMARKS=isMumbai?MUMBAI_LANDMARKS:PORTO_LANDMARKS;
+const createPlayer=()=>({...createPortoPlayer(),...SPAWN});
+document.title=`Elsewhere — ${worldName}`;
 
 const icons = {
   logo:'<path d="M6 17V7h13M6 12h9M6 18h13"/><circle cx="20" cy="4" r="1.2" fill="currentColor" stroke="none"/>',
@@ -22,15 +31,15 @@ const icon = name => `<svg viewBox="0 0 24 24" aria-hidden="true">${icons[name]}
 document.querySelector('#app').innerHTML = `
   <div id="viewport" aria-label="Porto Sol 3D world"></div><div id="vignette"></div>
   <div class="ui" id="ui">
-    <header class="topbar"><div class="brand"><span class="brand-symbol">${icon('logo')}</span><span class="wordmark">elsewhere</span><span class="edition">world 001</span></div>
-      <div class="top-actions"><button class="weather" id="time-toggle" aria-label="Switch to blue hour" title="Change time of day">${icon('sun')}<span id="time-label">Golden hour</span><span class="separator"></span><span class="temp">22°</span></button>
+    <header class="topbar"><div class="brand"><span class="brand-symbol">${icon('logo')}</span><span class="wordmark">elsewhere</span><span class="edition">${isMumbai?'world 002':'world 001'}</span></div>
+      <div class="top-actions"><label class="world-select-label"><span>World</span><select id="world-select" aria-label="Choose ride environment"><option value="porto">Porto Sol</option><option value="mumbai">Mumbai lanes</option></select></label><button class="weather" id="time-toggle" aria-label="Switch to blue hour" title="Change time of day">${icon('sun')}<span id="time-label">Golden hour</span><span class="separator"></span><span class="temp">22°</span></button>
       <button class="icon-button" id="sound-toggle" aria-label="Enable ocean ambience" aria-pressed="false" title="Ocean ambience">${icon('muted')}</button>
       <button class="icon-button" id="photo" aria-label="Save a photo" title="Save a photo">${icon('camera')}</button>
       <button class="text-button" id="coop-button">Ride together</button>
       <button class="icon-button" id="settings-button" aria-label="Open settings" title="Settings">${icon('settings')}</button></div>
     </header>
-    <div class="place-label"><i class="dot"></i><span>Porto Sol</span><span> / &nbsp; The southern coast</span></div>
-    <section class="intro" id="intro"><div class="eyebrow"><span class="rule"></span>A place to just be</div><h1>Take the<br><em>scenic route.</em></h1><p>Salt in the air. Sun on the pavement.<br>A little coastal world, yours to ride.</p>
+    <div class="place-label"><i class="dot"></i><span>${worldName}</span><span> / &nbsp; ${isMumbai?'Mukund Nagar lanes':'The southern coast'}</span></div>
+    <section class="intro" id="intro"><div class="eyebrow"><span class="rule"></span>A place to just be</div><h1>Take the<br><em>scenic route.</em></h1><p>${isMumbai?'Start by the church. Follow the shade.<br>A little corner of Mumbai, yours to ride.':'Salt in the air. Sun on the pavement.<br>A little coastal world, yours to ride.'}</p>
       <button class="enter" id="enter" disabled><span>Preparing your world</span>${icon('arrow')}</button>
       <div class="loading-line" id="loading-line"><div id="progress"></div></div><div class="loading-status" id="loading-status">Unpacking the neighborhood…</div>
       <div class="intro-note">A parcel. A faded postcard. Someone waiting at the pier.</div>
@@ -66,6 +75,16 @@ document.querySelector('#app').innerHTML = `
     </div><p>On a touch screen, use the arrows to pedal and steer, and drag to orbit the camera. Ride near a landmark to discover it.</p></dialog>`;
 
 const $ = s => document.querySelector(s);
+$('#world-select').value=isMumbai?'mumbai':'porto';
+$('#world-select').onchange=event=>{const url=new URL(location.href);url.search='';url.searchParams.set('world',event.target.value);location.href=url.href;};
+if(isMumbai){
+  $('.quest-card').hidden=true;$('#coop-button').hidden=true;$('#sound-toggle').hidden=true;
+  $('#viewport').setAttribute('aria-label','Mumbai lanes 3D world');
+  $('.intro-note').textContent='Inspired by your photographs · Free ride';
+  $('.temp').textContent='29°';
+  $('#reset').parentElement.firstElementChild.textContent='Back to the church';
+  $('#settings h3 + p').textContent='Ride from the Church of God headquarters through shaded Mumbai lanes. An original interpretation of the supplied photographs; surrounding streets are not a surveyed map. Mumbai is a solo free ride.';
+}
 const viewport = $('#viewport');
 const player = createPlayer();
 let started=false, ready=false, selected=null, elapsed=0, night=false, bob=!matchMedia('(prefers-reduced-motion: reduce)').matches, soundOn=false, quality='high';
@@ -75,7 +94,7 @@ let mapExpanded=false;
 const cameraRay=new THREE.Raycaster(), cameraAim=new THREE.Vector3(), cameraDesired=new THREE.Vector3();
 let renderer, scene, camera, world, audioContext, audioGain, toastTimer, discoveryTimer;
 const keys=new Set(), discovered=new Set();
-const storage={get(key){try{return JSON.parse(localStorage.getItem(`elsewhere:${key}`));}catch{return null;}},set(key,value){try{localStorage.setItem(`elsewhere:${key}`,JSON.stringify(value));return true;}catch{return false;}}};
+const storage={get(key){try{return JSON.parse(localStorage.getItem(`elsewhere:${isMumbai?'mumbai:':''}${key}`));}catch{return null;}},set(key,value){try{localStorage.setItem(`elsewhere:${isMumbai?'mumbai:':''}${key}`,JSON.stringify(value));return true;}catch{return false;}}};
 let quest=restoreQuest(storage.get('quest'));
 let dialogueStop=null;
 let pendingInvite=false, entryRoom=null, returningRoom=false;
@@ -96,7 +115,7 @@ const coop=new CoopClient({
   onError(message){pendingInvite=false;refreshEntry();$('#loading-status').textContent=message;$('#coop-status').textContent=message;$('#quest-confirm').disabled=false;toast(message);}
 });
 let lastRoom=null;try{lastRoom=sessionStorage.getItem('elsewhere:last-room');}catch{}
-const invitedRoom=new URLSearchParams(location.search).get('room')||lastRoom;
+const invitedRoom=isMumbai?null:new URLSearchParams(location.search).get('room')||lastRoom;
 entryRoom=invitedRoom&&/^[a-f0-9]{16}$/.test(invitedRoom)?invitedRoom:null;
 try{returningRoom=!!(entryRoom&&sessionStorage.getItem(`elsewhere:room:${entryRoom}`));}catch{}
 if(invitedRoom&&/^[a-f0-9]{16}$/.test(invitedRoom)){$('#coop-code').value=invitedRoom;$('#coop-status').textContent=returningRoom?'Your previous room is ready to resume.':'Your friend invited you. Select Join to ride together.';}
@@ -114,8 +133,8 @@ function refreshEntry(){
   if(!ready)return;
   const joining=pendingInvite&&coop.active&&!coop.connected;
   $('#enter').disabled=joining;
-  $('#enter span').textContent=joining?(returningRoom?'Rejoining your ride…':'Joining your friend…'):coop.connected?'Ride together in Porto Sol':entryRoom?(returningRoom?'Resume your shared ride':'Join your friend & ride'):'Ride into Porto Sol';
-  $('.intro-note').textContent=entryRoom&&!coop.connected?(returningRoom?'Continue riding in your previous room.':'You have a room invite. This button joins your friend.'):'A parcel. A faded postcard. Someone waiting at the pier.';
+  $('#enter span').textContent=joining?(returningRoom?'Rejoining your ride…':'Joining your friend…'):coop.connected?'Ride together in Porto Sol':entryRoom?(returningRoom?'Resume your shared ride':'Join your friend & ride'):`Ride into ${worldName}`;
+  $('.intro-note').textContent=isMumbai?'Inspired by your photographs · Free ride':entryRoom&&!coop.connected?(returningRoom?'Continue riding in your previous room.':'You have a room invite. This button joins your friend.'):'A parcel. A faded postcard. Someone waiting at the pier.';
 }
 function clearEntryRoom(){
   entryRoom=null;returningRoom=false;
@@ -138,12 +157,13 @@ function updateDiscoveries(){
   $('#discovered-count').textContent=`${discovered.size} / 3`;
   document.querySelectorAll('.destination').forEach(button=>{const id=button.dataset.destination;button.classList.toggle('visited',discovered.has(id));button.classList.toggle('active',id===selected);button.setAttribute('aria-pressed',String(id===selected));button.querySelector('.destination-number').textContent=discovered.has(id)?'✓':LANDMARKS.find(l=>l.id===id).number;});
 }
-function reset(){Object.assign(player,createPlayer());orbitYaw=0;releaseKeys();toast('Back where the sea meets the street.');}
+function reset(){Object.assign(player,createPlayer());orbitYaw=0;releaseKeys();toast(isMumbai?'Back outside the church.':'Back where the sea meets the street.');}
 function setNight(value){night=value;world?.setNight(night);$('#time-label').textContent=night?'Blue hour':'Golden hour';$('#time-toggle').querySelector('svg').outerHTML=icon(night?'moon':'sun');$('#time-toggle').setAttribute('aria-label',night?'Switch to golden hour':'Switch to blue hour');document.querySelectorAll('[data-time]').forEach(b=>b.classList.toggle('active',(b.dataset.time==='night')===night));savePrefs();}
 function setQuality(value){quality=value;if(renderer){renderer.setPixelRatio(Math.min(devicePixelRatio,quality==='high'?1.25:1));renderer.shadowMap.enabled=quality==='high';renderer.setSize(innerWidth,innerHeight);}document.querySelectorAll('[data-quality]').forEach(b=>b.classList.toggle('active',b.dataset.quality===quality));savePrefs();}
 function setBob(){ $('#bob-toggle').textContent=bob?'On':'Off';$('#bob-toggle').setAttribute('aria-pressed',String(bob)); }
 
 function updateQuest() {
+  if(isMumbai){if(world)world.questStage=0;return;}
   const stop=activeStop(quest);
   $('#quest-count').textContent=`${Math.min(quest.stage,3)} / 3`;
   $('#quest-title').textContent=stop?.title ?? 'A delivery to remember';
@@ -159,6 +179,7 @@ function updateQuest() {
   if(world)world.questStage=quest.stage;
 }
 function talk() {
+  if(isMumbai)return;
   if(!started||modalOpen()||!canInteract(quest,player))return;
   if(coop.active&&!coop.connected){toast('Reconnect to the room before continuing the shared quest.');return;}
   dialogueStop=activeStop(quest);
@@ -185,14 +206,14 @@ function initialize(){
   renderer.setPixelRatio(Math.min(devicePixelRatio,quality==='high'?1.25:1));renderer.setSize(innerWidth,innerHeight);
   renderer.shadowMap.enabled=quality==='high';renderer.shadowMap.type=THREE.PCFShadowMap;
   renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=.88;
-  renderer.domElement.setAttribute('aria-label','Third-person cycling in Porto Sol');renderer.domElement.tabIndex=0;viewport.appendChild(renderer.domElement);
+  renderer.domElement.setAttribute('aria-label',`Third-person cycling in ${worldName}`);renderer.domElement.tabIndex=0;viewport.appendChild(renderer.domElement);
   scene=new THREE.Scene();camera=new THREE.PerspectiveCamera(66,innerWidth/innerHeight,.08,3500);camera.rotation.order='YXZ';
   const manager=new THREE.LoadingManager();let failed=0;
-  manager.onProgress=(_,loaded,total)=>{$('#progress').style.width=`${loaded/total*100}%`;$('#loading-status').textContent=`Bringing Porto Sol to life · ${Math.round(loaded/total*100)}%`;};
+  manager.onProgress=(_,loaded,total)=>{$('#progress').style.width=`${loaded/total*100}%`;$('#loading-status').textContent=`Bringing ${worldName} to life · ${Math.round(loaded/total*100)}%`;};
   manager.onError=()=>{failed++;};
-  const finish=()=>{if(ready)return;ready=true;$('#enter').disabled=false;$('#enter span').textContent='Ride into Porto Sol';$('#progress').style.width='100%';$('#loading-line').hidden=true;$('#loading-status').textContent=failed?'Ready to explore. Some detail assets could not load.':'Ready when you are. Headphones optional.';refreshEntry();resumeRoom();if(pendingInvite&&coop.connected){pendingInvite=false;if($('#coop-dialog').open)$('#coop-dialog').close();startRide();}};
+  const finish=()=>{if(ready)return;ready=true;$('#enter').disabled=false;$('#enter span').textContent=`Ride into ${worldName}`;$('#progress').style.width='100%';$('#loading-line').hidden=true;$('#loading-status').textContent=failed?'Ready to explore. Some detail assets could not load.':'Ready when you are. Headphones optional.';refreshEntry();resumeRoom();if(pendingInvite&&coop.connected){pendingInvite=false;if($('#coop-dialog').open)$('#coop-dialog').close();startRide();}};
   manager.onLoad=finish;
-  world=new World(scene,renderer,manager);
+  world=isMumbai?new MumbaiWorld(scene,renderer,manager):new World(scene,renderer,manager);
   const saved=validateSavedPosition(storage.get('spot'),world.obstacles);if(saved)Object.assign(player,saved);
   setNight(night);setQuality(quality);setBob();updateDiscoveries();updateQuest();
   setTimeout(()=>{if(!ready){finish();$('#loading-status').textContent='You can explore while the remaining details load.';}},25000);
@@ -242,7 +263,7 @@ function updateHUD(){
       if(discovered.size===LANDMARKS.length)$('#journey-hint').textContent='Every corner found. Stay a little longer.';
     }
   }
-  $('#zone').textContent=player.x>64?'The old pier':player.x<-36&&player.z>50?'Jardim do Sol':player.x>35?'Seafront promenade':'Old town';
+  $('#zone').textContent=isMumbai?(player.x<-58&&Math.abs(player.z-20)<15?'Shrinagar Complex Road':player.z>30&&player.x>-10?'Church headquarters':Math.abs(player.z-20)<9?'Marigold lane':'Mukund Nagar lanes'):player.x>64?'The old pier':player.x<-36&&player.z>50?'Jardim do Sol':player.x>35?'Seafront promenade':'Old town';
   drawMap();
 }
 const mapCard=$('.map-card'),mapCanvas=$('#map'),mapHome=document.createComment('Map position');
@@ -307,12 +328,17 @@ function drawMap(){
   const {scale,ox,oz}=mapProjection(mapView,player,w,h);
   const px=x=>ox+x*scale,pz=z=>oz+z*scale;
   const rect=(x,z,ww,dd,color)=>{ctx.fillStyle=color;ctx.fillRect(px(x),pz(z),ww*scale,dd*scale);};
+  if(isMumbai){
+    rect(-120,-140,184,260,'#737763');
+    for(const r of MUMBAI_ROADS)rect(r.x-r.w/2,r.z-r.d/2,r.w,r.d,'#c5bca2');
+  }else{
   rect(-120,-140,184,260,'#68786c');rect(-120,-140,156,260,'#526457');rect(-31.5,-140,15,260,'#a4ad92');rect(-120,33,184,14,'#a4ad92');rect(64,-42,53,12,'#b4b294');rect(-101.5,53,65,60,'#415c44');rect(-59.5,53,5,60,'#9aa784');rect(-101.5,67.5,65,5,'#9aa784');
+  }
   for(const b of world.obstacles){if(b.maxX-b.minX>10&&b.maxZ-b.minZ>10)rect(b.minX,b.minZ,b.maxX-b.minX,b.maxZ-b.minZ,'#c2baa0');}
   ctx.strokeStyle='#a0b9aa25';ctx.lineWidth=1;for(let x=0;x<w;x+=24){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke();}for(let y=0;y<h;y+=24){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}
   if(selected){const dest=LANDMARKS.find(l=>l.id===selected);ctx.beginPath();ctx.setLineDash([4,5]);ctx.strokeStyle='#e6ecbc70';ctx.moveTo(px(player.x),pz(player.z));ctx.lineTo(px(dest.x),pz(dest.z));ctx.stroke();ctx.setLineDash([]);}
   for(const landmark of LANDMARKS){ctx.beginPath();ctx.arc(px(landmark.x),pz(landmark.z),selected===landmark.id?10:7,0,Math.PI*2);ctx.fillStyle=selected===landmark.id?'#e7edbb':'#203c35';ctx.fill();ctx.lineWidth=1.5;ctx.strokeStyle='#d3dcaf';ctx.stroke();ctx.fillStyle=selected===landmark.id?'#243c33':'#e5ebc5';ctx.font='9px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(discovered.has(landmark.id)?'✓':landmark.number.replace('0',''),px(landmark.x),pz(landmark.z)+.5);if(mapExpanded){ctx.font='22px sans-serif';ctx.textAlign='left';ctx.fillStyle='#f5efd7';ctx.strokeStyle='#203c35';ctx.lineWidth=4;ctx.strokeText(landmark.name,px(landmark.x)+17,pz(landmark.z));ctx.fillText(landmark.name,px(landmark.x)+17,pz(landmark.z));}}
-  const questStop=activeStop(quest);
+  const questStop=isMumbai?null:activeStop(quest);
   if(questStop){
     ctx.beginPath();ctx.setLineDash([3,4]);ctx.strokeStyle='#f1ce7e';ctx.moveTo(px(player.x),pz(player.z));ctx.lineTo(px(questStop.x),pz(questStop.z));ctx.stroke();ctx.setLineDash([]);
     ctx.save();ctx.translate(px(questStop.x),pz(questStop.z));ctx.rotate(Math.PI/4);ctx.fillStyle='#f1ce7e';ctx.fillRect(-5,-5,10,10);ctx.restore();
@@ -363,7 +389,7 @@ $('#photo-exit').onclick=()=>document.body.classList.remove('photo-hidden');
 document.querySelectorAll('[data-destination]').forEach(b=>b.onclick=()=>{selected=selected===b.dataset.destination?null:b.dataset.destination;updateDiscoveries();$('#journey-hint').textContent=selected?'Marker set. The dotted line points toward your destination.':'Choose a place to mark it on your map.';});
 $('#photo').onclick=()=>{
   if(!renderer)return;renderer.render(scene,camera);
-  renderer.domElement.toBlob(blob=>{if(!blob){toast('Photo couldn’t be saved. Please try again.');return;}const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`porto-sol-${night?'blue-hour':'golden-hour'}.png`;link.click();setTimeout(()=>URL.revokeObjectURL(url),10000);toast('A little piece of Porto Sol, saved.');},'image/png');
+  renderer.domElement.toBlob(blob=>{if(!blob){toast('Photo couldn’t be saved. Please try again.');return;}const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`${isMumbai?'mumbai':'porto-sol'}-${night?'blue-hour':'golden-hour'}.png`;link.click();setTimeout(()=>URL.revokeObjectURL(url),10000);toast(`A little piece of ${worldName}, saved.`);},'image/png');
 };
 $('#sound-toggle').onclick=async()=>{
   try{

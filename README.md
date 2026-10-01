@@ -1,4 +1,4 @@
-# Elsewhere — Porto Sol
+# Elsewhere — Porto Sol & Mumbai lanes
 
 ## Deploy to Vercel
 
@@ -106,3 +106,23 @@ The service provides `/health` for health checks and `/coop` for WebSocket conne
 Set **Vercel's** public build variable `VITE_COOP_URL=wss://your-server-domain/coop`, then redeploy the frontend. This is a public endpoint, not a secret. `.env.example` documents it. A production site without this setting remains solo-only and explains that co-op is not configured; it does not simulate an online connection. Localhost invite links work only on the same computer. Two different computers require a reachable hosted server and frontend URL.
 
 `npm test` includes a real two-WebSocket-client test that shares positions, completes all quest steps, rejects a third rider, and reconnects with the completed quest intact.
+
+
+## Mumbai lanes (world 002)
+
+Choose **Mumbai lanes** in the World selector, or open `http://127.0.0.1:5174/?world=mumbai`.
+The new solo free ride starts outside the Church of God headquarters. Follow the lane to
+Marigold lane and the colorful temple junction on Shrinagar Complex Road. Connected side
+lanes form two rideable loops. The church facade, compound gate, covered entrance, grilles,
+shutters, marigolds, parked scooters, rickshaw, utility wires, and tree canopy are procedural
+interpretations of the user-supplied Street View screenshots. Distances and the surrounding
+loop layout are artistic approximations, not surveyed geography. No Google imagery is bundled.
+
+The original Porto Sol story and co-op remain available in Porto Sol. Mumbai has its own
+saved spot, discoveries, and preferences. **R** returns to the church; the map, day/night,
+photo export, graphics settings, and cycling controls work in both environments. Ocean audio
+and the Porto Sol delivery story are omitted from Mumbai.
+
+`src/mumbai-world.js` builds the scenery; `src/mumbai-layout.js` defines its roads, spawn,
+and landmarks. `tests/mumbai.test.js` checks actual collision geometry for connected routes,
+spawn clearance, perimeter walls, and successful mesh batching.

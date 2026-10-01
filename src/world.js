@@ -8,13 +8,14 @@ import { QuestWorld } from './quest-world.js';
 
 const ROOT = '/assets/';
 export class World {
-  constructor(scene, renderer, manager) {
+  constructor(scene, renderer, manager, location = 'porto') {
+    this.location = location;
     this.scene = scene; this.renderer = renderer; this.manager = manager;
     this.obstacles = []; this.cameraColliders = []; this.batches = new Map(); this.walkers = []; this.birds = []; this.lights = [];
     this.night = false; this.treePositions = []; this.seed = 427;
     this.loader = new T.TextureLoader(manager);
     this.materials(); this.environment(); this.ground(); this.neighborhood(); this.waterfront(); this.garden(); this.details(); this.bake();
-    this.questWorld=new QuestWorld(scene);this.questStage=0;this.coopMode=false;this.carryParcel=true;this.remoteState=null;
+    this.questWorld=location === 'mumbai' ? {addCharacter(){},update(){}} : new QuestWorld(scene);this.questStage=0;this.coopMode=false;this.carryParcel=true;this.remoteState=null;
     this.loadTrees(); this.loadPeople();
   }
   random() { this.seed = (this.seed * 1664525 + 1013904223) >>> 0; return this.seed / 4294967296; }
@@ -107,6 +108,7 @@ export class World {
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
       }`});
+    if(this.location === 'mumbai') return;
     const ocean=new T.Mesh(new T.PlaneGeometry(3600,3600),this.oceanMaterial);ocean.rotation.x=-Math.PI/2;ocean.position.y=-1.15;this.scene.add(ocean);
     // A layered headland and a small lighthouse across the water.
     const rock=this.mat(0x7c8980);const hill=this.mat(0x657661);
@@ -360,7 +362,7 @@ export class World {
     this.sun.position.set(sx+95,100,sz-65);this.sun.target.position.set(sx,0,sz);this.sun.target.updateMatrixWorld();
     if(this.night){const nearest=this.lights.map(light=>({light,d:light.position.distanceToSquared(camera.position)})).sort((a,b)=>a.d-b.d).slice(0,5);const active=new Set(nearest.map(item=>item.light));this.lights.forEach(light=>{light.visible=active.has(light);});}
     for(const w of this.walkers){w.phase+=dt*.016;const angle=w.phase;const x=w.lane+Math.cos(angle)*1.5,z=-10+Math.sin(angle)*w.range;
-      w.model.position.set(x,0,z);w.model.rotation.y=Math.atan2(-Math.sin(angle)*1.5,Math.cos(angle)*w.range);w.mixer.update(dt*.85);}
+      w.model.position.set(this.location==='mumbai'?2.8+Math.cos(angle)*.25:x,0,z);w.model.rotation.y=Math.atan2(-Math.sin(angle)*1.5,Math.cos(angle)*w.range);w.mixer.update(dt*.85);}
     for(const {bird,phase,radius} of this.birds){const a=time*.065+phase;bird.position.set(95+Math.cos(a)*radius,16+Math.sin(a*2)*3+phase,Math.sin(a)*radius-25);bird.rotation.y=-a;
       bird.children[0].rotation.z=Math.sin(time*3+phase)*.2;bird.children[1].rotation.z=-Math.sin(time*3+phase)*.2;}
   }
