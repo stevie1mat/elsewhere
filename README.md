@@ -89,7 +89,11 @@ A dropped connection retries automatically. Disconnected riders keep their slot 
 
 ### Hosting alongside Vercel
 
-The frontend remains a normal Vercel Vite deployment. Host `server/index.js` as one continuously running Node 22 service with WebSocket support. A Dockerfile is provided at `server/Dockerfile`, using the repository root as build context. Alternatively install with `npm ci --omit=dev` and run `npm run multiplayer`.
+The frontend remains a normal Vercel Vite deployment. Host `server/index.js` as one continuously running Node 22 service with WebSocket support. The `server` folder is self-contained, with its own dependency manifest, lockfile, and shared game rules. The frontend imports those same rules so client and server stay consistent.
+
+On Render, set **Root Directory** to `server`, **Dockerfile Path** to `./Dockerfile`, and **Docker Build Context Directory** to `.`. Set the health check path to `/health`.
+
+To build locally from the repository root, run `docker build -t elsewhere-multiplayer ./server`. Alternatively, from inside `server`, run `npm ci --omit=dev` followed by `npm start`. The existing root-level `npm run multiplayer` command also works.
 
 Set these **server** variables:
 

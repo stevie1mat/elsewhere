@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
-import { activeStop,canInteract } from '../src/quest.js';
-import { SPAWN,onLand } from '../src/movement.js';
+import { activeStop,canInteract } from './shared/quest.js';
+import { SPAWN,onLand } from './shared/movement.js';
 
 const token=()=>randomBytes(16).toString('hex');
 export function validPosition(p){

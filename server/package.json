@@ -1,0 +1,15 @@
+{
+  "name": "elsewhere-multiplayer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "dependencies": {
+    "ws": "^8.22.0"
+  }
+}
