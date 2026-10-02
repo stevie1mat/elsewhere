@@ -3,7 +3,7 @@ import { World } from './world.js';
 import { MUMBAI_ROADS } from './mumbai-layout.js';
 
 export class MumbaiWorld extends World {
-  constructor(scene,renderer,manager){super(scene,renderer,manager,'mumbai');}
+  constructor(scene,renderer,manager,location='mumbai'){super(scene,renderer,manager,location);}
   mesh(geometry,...args){
     // Extruded pediments and faceted crowns are non-indexed; batches need one format.
     if(geometry.index){const original=geometry;geometry=geometry.toNonIndexed();original.dispose();}

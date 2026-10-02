@@ -126,3 +126,30 @@ and the Porto Sol delivery story are omitted from Mumbai.
 `src/mumbai-world.js` builds the scenery; `src/mumbai-layout.js` defines its roads, spawn,
 and landmarks. `tests/mumbai.test.js` checks actual collision geometry for connected routes,
 spawn clearance, perimeter walls, and successful mesh batching.
+
+
+## Chai District (world 003)
+
+Choose **Chai District** in the World selector, or open `/?world=chai`. This is a separate,
+original solo delivery neighborhood. Stop at Asha’s stall and press **F** (or tap the pickup
+button), follow the gold map marker to the mechanics, then stop and press **F** to serve.
+Return to the stall for the flower-market order. Orders alternate, and the best delivery
+score is saved locally. **R** or **Restart at the stall** starts a fresh run. Active deliveries
+reset on reload; saved favorite spots do not override the delivery spawn.
+
+The cup is mounted on the bicycle. Its tea level, temperature, slosh, and delivery score
+react to riding: gentle turns preserve tea; fast turns, sharp braking, impacts, and marked
+potholes spill it. Tea cools over time. Below 15% remaining or 38°C, return for a refill.
+Menus and background tabs pause delivery time. There is no countdown that forces racing.
+
+The district includes textured asphalt and weathered plaster, open shop shelves, shutters,
+laundry, drainpipes, utility cables, steam from the tea pot, puddles, street lighting, parked
+scooters, moving cars and auto rickshaws, 14 animated human models, two dogs, two cows, and
+pigeons that scatter nearby. People, ground animals, and traffic have collision clearance;
+vehicles yield near the bicycle. Traffic follows predefined loops, not a full traffic simulator.
+Animals, vehicles, and architecture are original procedural models; human models and surface
+assets retain the credits above. This is detailed real-time 3D, not a photogrammetric recreation.
+
+`src/chai.js` contains standalone delivery rules and the layout. `src/chai-world.js` builds and
+animates the district. `tests/chai.test.js` checks pickup/delivery/refill, spilling and cooling,
+frame-rate consistency, reachable customers, clear traffic paths, and scenery/animal geometry.

@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { World } from './world.js';
 import { MumbaiWorld } from './mumbai-world.js';
+import { ChaiWorld } from './chai-world.js';
+import { CHAI_SPAWN,CHAI_LANDMARKS,CHAI_ROADS,createChai,chaiTarget,canServe,serveChai,stepChai } from './chai.js';
 import { MUMBAI_SPAWN, MUMBAI_LANDMARKS, MUMBAI_ROADS } from './mumbai-layout.js';
 import { SPAWN as PORTO_SPAWN, LANDMARKS as PORTO_LANDMARKS, createPlayer as createPortoPlayer, stepPlayer, validateSavedPosition } from './movement.js';
 import './style.css';
@@ -9,9 +11,11 @@ import { CoopClient,coopEndpoint } from './coop.js';
 import { restoreQuest, activeStop, canInteract, advanceQuest } from './quest.js';
 
 const isMumbai=new URLSearchParams(location.search).get('world')==='mumbai';
-const worldName=isMumbai?'Mumbai':'Porto Sol';
-const SPAWN=isMumbai?MUMBAI_SPAWN:PORTO_SPAWN;
-const LANDMARKS=isMumbai?MUMBAI_LANDMARKS:PORTO_LANDMARKS;
+const isChai=new URLSearchParams(location.search).get('world')==='chai';
+const isUrban=isMumbai||isChai;
+const worldName=isChai?'Chai District':isMumbai?'Mumbai':'Porto Sol';
+const SPAWN=isChai?CHAI_SPAWN:isMumbai?MUMBAI_SPAWN:PORTO_SPAWN;
+const LANDMARKS=isChai?CHAI_LANDMARKS:isMumbai?MUMBAI_LANDMARKS:PORTO_LANDMARKS;
 const createPlayer=()=>({...createPortoPlayer(),...SPAWN});
 document.title=`Elsewhere — ${worldName}`;
 
@@ -31,15 +35,15 @@ const icon = name => `<svg viewBox="0 0 24 24" aria-hidden="true">${icons[name]}
 document.querySelector('#app').innerHTML = `
   <div id="viewport" aria-label="Porto Sol 3D world"></div><div id="vignette"></div>
   <div class="ui" id="ui">
-    <header class="topbar"><div class="brand"><span class="brand-symbol">${icon('logo')}</span><span class="wordmark">elsewhere</span><span class="edition">${isMumbai?'world 002':'world 001'}</span></div>
-      <div class="top-actions"><label class="world-select-label"><span>World</span><select id="world-select" aria-label="Choose ride environment"><option value="porto">Porto Sol</option><option value="mumbai">Mumbai lanes</option></select></label><button class="weather" id="time-toggle" aria-label="Switch to blue hour" title="Change time of day">${icon('sun')}<span id="time-label">Golden hour</span><span class="separator"></span><span class="temp">22°</span></button>
+    <header class="topbar"><div class="brand"><span class="brand-symbol">${icon('logo')}</span><span class="wordmark">elsewhere</span><span class="edition">${isChai?'world 003':isMumbai?'world 002':'world 001'}</span></div>
+      <div class="top-actions"><label class="world-select-label"><span>World</span><select id="world-select" aria-label="Choose ride environment"><option value="porto">Porto Sol</option><option value="mumbai">Mumbai lanes</option><option value="chai">Chai District</option></select></label><button class="weather" id="time-toggle" aria-label="Switch to blue hour" title="Change time of day">${icon('sun')}<span id="time-label">Golden hour</span><span class="separator"></span><span class="temp">22°</span></button>
       <button class="icon-button" id="sound-toggle" aria-label="Enable ocean ambience" aria-pressed="false" title="Ocean ambience">${icon('muted')}</button>
       <button class="icon-button" id="photo" aria-label="Save a photo" title="Save a photo">${icon('camera')}</button>
       <button class="text-button" id="coop-button">Ride together</button>
       <button class="icon-button" id="settings-button" aria-label="Open settings" title="Settings">${icon('settings')}</button></div>
     </header>
-    <div class="place-label"><i class="dot"></i><span>${worldName}</span><span> / &nbsp; ${isMumbai?'Mukund Nagar lanes':'The southern coast'}</span></div>
-    <section class="intro" id="intro"><div class="eyebrow"><span class="rule"></span>A place to just be</div><h1>Take the<br><em>scenic route.</em></h1><p>${isMumbai?'Start by the church. Follow the shade.<br>A little corner of Mumbai, yours to ride.':'Salt in the air. Sun on the pavement.<br>A little coastal world, yours to ride.'}</p>
+    <div class="place-label"><i class="dot"></i><span>${worldName}</span><span> / &nbsp; ${isChai?'THE CHAI RUN':isMumbai?'Mukund Nagar lanes':'The southern coast'}</span></div>
+    <section class="intro" id="intro"><div class="eyebrow"><span class="rule"></span>A place to just be</div><h1>${isChai?'Every drop<br><em>counts.</em>':'Take the<br><em>scenic route.</em>'}</h1><p>${isChai?'Hot chai. Busy streets. A delicate delivery.<br>Ride gently. Bring the neighborhood its tea.':isMumbai?'Start by the church. Follow the shade.<br>A little corner of Mumbai, yours to ride.':'Salt in the air. Sun on the pavement.<br>A little coastal world, yours to ride.'}</p>
       <button class="enter" id="enter" disabled><span>Preparing your world</span>${icon('arrow')}</button>
       <div class="loading-line" id="loading-line"><div id="progress"></div></div><div class="loading-status" id="loading-status">Unpacking the neighborhood…</div>
       <div class="intro-note">A parcel. A faded postcard. Someone waiting at the pier.</div>
@@ -75,7 +79,7 @@ document.querySelector('#app').innerHTML = `
     </div><p>On a touch screen, use the arrows to pedal and steer, and drag to orbit the camera. Ride near a landmark to discover it.</p></dialog>`;
 
 const $ = s => document.querySelector(s);
-$('#world-select').value=isMumbai?'mumbai':'porto';
+$('#world-select').value=isChai?'chai':isMumbai?'mumbai':'porto';
 $('#world-select').onchange=event=>{const url=new URL(location.href);url.search='';url.searchParams.set('world',event.target.value);location.href=url.href;};
 if(isMumbai){
   $('.quest-card').hidden=true;$('#coop-button').hidden=true;$('#sound-toggle').hidden=true;
@@ -84,6 +88,16 @@ if(isMumbai){
   $('.temp').textContent='29°';
   $('#reset').parentElement.firstElementChild.textContent='Back to the church';
   $('#settings h3 + p').textContent='Ride from the Church of God headquarters through shaded Mumbai lanes. An original interpretation of the supplied photographs; surrounding streets are not a surveyed map. Mumbai is a solo free ride.';
+}
+if(isChai){
+  document.body.classList.add('chai-world');
+  $('#coop-button').hidden=true;$('#sound-toggle').hidden=true;
+  $('#viewport').setAttribute('aria-label','Chai District 3D world');
+  $('.temp').textContent='28°';
+  $('.quest-eyebrow').innerHTML='THE CHAI RUN <span id="quest-count"></span>';
+  $('.quest-card').insertAdjacentHTML('beforeend','<div class="chai-dashboard"><div class="chai-glass"><div id="chai-liquid"></div><span>चाय</span></div><div class="chai-readings"><strong id="chai-volume">100% full</strong><span id="chai-heat">92°C · Freshly brewed</span><span id="chai-warning">Brake early. Take wide turns.</span></div></div><button id="chai-retry" class="text-button">Restart at the stall</button>');
+  $('#reset').parentElement.firstElementChild.textContent='Back to the chai stall';
+  $('#settings h3 + p').textContent='An original neighborhood built for chai deliveries. Collect a fresh cup at Asha’s stall, then stop at the gold marker to serve it. Sharp turns, hard braking, collisions, and potholes spill tea. Traffic yields, but give people and animals room. Solo play; R restarts your delivery.';
 }
 const viewport = $('#viewport');
 const player = createPlayer();
@@ -94,8 +108,10 @@ let mapExpanded=false;
 const cameraRay=new THREE.Raycaster(), cameraAim=new THREE.Vector3(), cameraDesired=new THREE.Vector3();
 let renderer, scene, camera, world, audioContext, audioGain, toastTimer, discoveryTimer;
 const keys=new Set(), discovered=new Set();
-const storage={get(key){try{return JSON.parse(localStorage.getItem(`elsewhere:${isMumbai?'mumbai:':''}${key}`));}catch{return null;}},set(key,value){try{localStorage.setItem(`elsewhere:${isMumbai?'mumbai:':''}${key}`,JSON.stringify(value));return true;}catch{return false;}}};
+const storage={get(key){try{return JSON.parse(localStorage.getItem(`elsewhere:${isChai?'chai:':isMumbai?'mumbai:':''}${key}`));}catch{return null;}},set(key,value){try{localStorage.setItem(`elsewhere:${isChai?'chai:':isMumbai?'mumbai:':''}${key}`,JSON.stringify(value));return true;}catch{return false;}}};
 let quest=restoreQuest(storage.get('quest'));
+let chai=createChai();
+let chaiBest=Number(storage.get('best'))||0;
 let dialogueStop=null;
 let pendingInvite=false, entryRoom=null, returningRoom=false;
 const coop=new CoopClient({
@@ -115,7 +131,7 @@ const coop=new CoopClient({
   onError(message){pendingInvite=false;refreshEntry();$('#loading-status').textContent=message;$('#coop-status').textContent=message;$('#quest-confirm').disabled=false;toast(message);}
 });
 let lastRoom=null;try{lastRoom=sessionStorage.getItem('elsewhere:last-room');}catch{}
-const invitedRoom=isMumbai?null:new URLSearchParams(location.search).get('room')||lastRoom;
+const invitedRoom=isUrban?null:new URLSearchParams(location.search).get('room')||lastRoom;
 entryRoom=invitedRoom&&/^[a-f0-9]{16}$/.test(invitedRoom)?invitedRoom:null;
 try{returningRoom=!!(entryRoom&&sessionStorage.getItem(`elsewhere:room:${entryRoom}`));}catch{}
 if(invitedRoom&&/^[a-f0-9]{16}$/.test(invitedRoom)){$('#coop-code').value=invitedRoom;$('#coop-status').textContent=returningRoom?'Your previous room is ready to resume.':'Your friend invited you. Select Join to ride together.';}
@@ -134,7 +150,7 @@ function refreshEntry(){
   const joining=pendingInvite&&coop.active&&!coop.connected;
   $('#enter').disabled=joining;
   $('#enter span').textContent=joining?(returningRoom?'Rejoining your ride…':'Joining your friend…'):coop.connected?'Ride together in Porto Sol':entryRoom?(returningRoom?'Resume your shared ride':'Join your friend & ride'):`Ride into ${worldName}`;
-  $('.intro-note').textContent=isMumbai?'Inspired by your photographs · Free ride':entryRoom&&!coop.connected?(returningRoom?'Continue riding in your previous room.':'You have a room invite. This button joins your friend.'):'A parcel. A faded postcard. Someone waiting at the pier.';
+  $('.intro-note').textContent=isChai?'Collect • Ride • Deliver · Keep the chai hot and the cup full':isMumbai?'Inspired by your photographs · Free ride':entryRoom&&!coop.connected?(returningRoom?'Continue riding in your previous room.':'You have a room invite. This button joins your friend.'):'A parcel. A faded postcard. Someone waiting at the pier.';
 }
 function clearEntryRoom(){
   entryRoom=null;returningRoom=false;
@@ -157,12 +173,13 @@ function updateDiscoveries(){
   $('#discovered-count').textContent=`${discovered.size} / 3`;
   document.querySelectorAll('.destination').forEach(button=>{const id=button.dataset.destination;button.classList.toggle('visited',discovered.has(id));button.classList.toggle('active',id===selected);button.setAttribute('aria-pressed',String(id===selected));button.querySelector('.destination-number').textContent=discovered.has(id)?'✓':LANDMARKS.find(l=>l.id===id).number;});
 }
-function reset(){Object.assign(player,createPlayer());orbitYaw=0;releaseKeys();toast(isMumbai?'Back outside the church.':'Back where the sea meets the street.');}
+function reset(){Object.assign(player,createPlayer());if(isChai){chai=createChai();if(world)world.delivery=chai;}orbitYaw=0;releaseKeys();toast(isChai?'Fresh start at Asha’s chai stall.':isMumbai?'Back outside the church.':'Back where the sea meets the street.');}
 function setNight(value){night=value;world?.setNight(night);$('#time-label').textContent=night?'Blue hour':'Golden hour';$('#time-toggle').querySelector('svg').outerHTML=icon(night?'moon':'sun');$('#time-toggle').setAttribute('aria-label',night?'Switch to golden hour':'Switch to blue hour');document.querySelectorAll('[data-time]').forEach(b=>b.classList.toggle('active',(b.dataset.time==='night')===night));savePrefs();}
 function setQuality(value){quality=value;if(renderer){renderer.setPixelRatio(Math.min(devicePixelRatio,quality==='high'?1.25:1));renderer.shadowMap.enabled=quality==='high';renderer.setSize(innerWidth,innerHeight);}document.querySelectorAll('[data-quality]').forEach(b=>b.classList.toggle('active',b.dataset.quality===quality));savePrefs();}
 function setBob(){ $('#bob-toggle').textContent=bob?'On':'Off';$('#bob-toggle').setAttribute('aria-pressed',String(bob)); }
 
 function updateQuest() {
+  if(isChai){updateChaiHUD();return;}
   if(isMumbai){if(world)world.questStage=0;return;}
   const stop=activeStop(quest);
   $('#quest-count').textContent=`${Math.min(quest.stage,3)} / 3`;
@@ -179,6 +196,14 @@ function updateQuest() {
   if(world)world.questStage=quest.stage;
 }
 function talk() {
+  if(isChai){
+    if(!started||modalOpen()||!serveChai(chai,player))return;
+    if(chai.phase==='delivered'){
+      const best=chai.lastTip>chaiBest;if(best){chaiBest=chai.lastTip;storage.set('best',chaiBest);}
+      toast(`Delivered! ${Math.round(chai.volume)}% remaining · ${Math.round(chai.heat)}°C · ${chai.lastTip} points${best?' · Personal best!':''}`);
+    }else toast(`Fresh chai loaded. Deliver to ${chaiTarget(chai).name}.`);
+    updateChaiHUD();return;
+  }
   if(isMumbai)return;
   if(!started||modalOpen()||!canInteract(quest,player))return;
   if(coop.active&&!coop.connected){toast('Reconnect to the room before continuing the shared quest.');return;}
@@ -190,7 +215,7 @@ function talk() {
   openDialog('#quest-dialog');updateQuest();
 }
 $('#quest-interact').onclick=talk;
-$('#quest-track').onclick=()=>{const stop=activeStop(quest);if(!stop)return;selected=stop.id;updateDiscoveries();toast(stop.objective+' Follow the gold marker.');};
+$('#quest-track').onclick=()=>{const stop=isChai?chaiTarget(chai):activeStop(quest);if(!stop)return;selected=stop.id;updateDiscoveries();toast((isChai?stop.name:stop.objective)+' Follow the gold marker.');};
 $('#quest-confirm').onclick=()=>{
   if(coop.active){if(!coop.connected){toast('Waiting for the room to reconnect.');return;}$('#quest-confirm').disabled=true;coop.position(player);coop.advance(quest.stage,dialogueStop?.id);return;}
   const next=advanceQuest(quest,player,dialogueStop?.id);
@@ -200,6 +225,23 @@ $('#quest-confirm').onclick=()=>{
   toast(!saved?'Progress could not be saved in this browser.':quest.stage===3?'Delivery complete · Sunset Gold paint unlocked!':dialogueStop.hint);
   dialogueStop=null;
 };
+
+
+function updateChaiHUD(){
+  const target=chaiTarget(chai),distance=Math.round(Math.hypot(player.x-target.x,player.z-target.z));
+  $('#quest-count').textContent=`${chai.delivered} served`;
+  $('#quest-title').textContent=chai.phase==='riding'?target.name:chai.phase==='failed'?'This cup needs a refill':chai.phase==='delivered'?'A well-earned tea break':'Asha has your first order';
+  $('#quest-objective').textContent=chai.phase==='riding'?`Deliver a hot cup · ${distance}m to the customer`:chai.phase==='delivered'?`${chai.lastTip} points! Return for the next order · ${distance}m`:`Stop at the stall and press F · ${distance}m`;
+  $('#quest-item').textContent=`Score ${chai.score} · Best delivery ${chaiBest} · ${Math.floor(chai.elapsed)}s`;
+  $('#chai-volume').textContent=`${Math.round(chai.volume)}% full`;
+  $('#chai-heat').textContent=`${Math.round(chai.heat)}°C · ${chai.heat>65?'Hot':chai.heat>38?'Cooling':'Cold'}`;
+  $('#chai-warning').textContent=chai.phase==='failed'?'Return to the stall for fresh chai.':chai.volume<45?'Easy now — keep the rest in the cup.':'Brake early. Avoid potholes.';
+  $('#chai-liquid').style.height=`${chai.volume}%`;$('#chai-liquid').style.transform=`rotate(${chai.tilt*45}deg)`;
+  $('#quest-interact').hidden=!(started&&!modalOpen()&&canServe(chai,player));
+  $('#quest-interact').textContent=chai.phase==='riding'?'F · Serve chai':'F · Pick up fresh chai';
+  if(world)world.delivery=chai;
+}
+if(isChai)$('#chai-retry').onclick=reset;
 
 function initialize(){
   renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
@@ -213,8 +255,9 @@ function initialize(){
   manager.onError=()=>{failed++;};
   const finish=()=>{if(ready)return;ready=true;$('#enter').disabled=false;$('#enter span').textContent=`Ride into ${worldName}`;$('#progress').style.width='100%';$('#loading-line').hidden=true;$('#loading-status').textContent=failed?'Ready to explore. Some detail assets could not load.':'Ready when you are. Headphones optional.';refreshEntry();resumeRoom();if(pendingInvite&&coop.connected){pendingInvite=false;if($('#coop-dialog').open)$('#coop-dialog').close();startRide();}};
   manager.onLoad=finish;
-  world=isMumbai?new MumbaiWorld(scene,renderer,manager):new World(scene,renderer,manager);
-  const saved=validateSavedPosition(storage.get('spot'),world.obstacles);if(saved)Object.assign(player,saved);
+  world=isChai?new ChaiWorld(scene,renderer,manager):isMumbai?new MumbaiWorld(scene,renderer,manager):new World(scene,renderer,manager);
+  if(isChai)world.delivery=chai;
+  const saved=isChai?null:validateSavedPosition(storage.get('spot'),world.obstacles);if(saved)Object.assign(player,saved);
   setNight(night);setQuality(quality);setBob();updateDiscoveries();updateQuest();
   setTimeout(()=>{if(!ready){finish();$('#loading-status').textContent='You can explore while the remaining details load.';}},25000);
   let previous=performance.now(),frames=0,frameClock=0,uiClock=0;
@@ -222,8 +265,10 @@ function initialize(){
     const dt=Math.min((now-previous)/1000,.05);previous=now;
     if(!document.hidden){
       elapsed+=dt;const active=started&&!modalOpen();
+      if(isChai)world.updateStreet(active?dt:0,player);
       if(active){
-        stepPlayer(player,{forward:(keys.has('KeyW')||keys.has('ArrowUp')?1:0)-(keys.has('KeyS')||keys.has('ArrowDown')?1:0),right:(keys.has('KeyD')||keys.has('KeyE')||keys.has('ArrowRight')?1:0)-(keys.has('KeyA')||keys.has('KeyQ')||keys.has('ArrowLeft')?1:0),sprint:keys.has('ShiftLeft')||keys.has('ShiftRight'),brake:keys.has('Space')},dt,world.obstacles);
+        stepPlayer(player,{forward:(keys.has('KeyW')||keys.has('ArrowUp')?1:0)-(keys.has('KeyS')||keys.has('ArrowDown')?1:0),right:(keys.has('KeyD')||keys.has('KeyE')||keys.has('ArrowRight')?1:0)-(keys.has('KeyA')||keys.has('KeyQ')||keys.has('ArrowLeft')?1:0),sprint:keys.has('ShiftLeft')||keys.has('ShiftRight'),brake:keys.has('Space')},dt,isChai?world.obstacles.concat(world.dynamicObstacles):world.obstacles);
+        if(isChai)stepChai(chai,player,dt);
 
       }
       world.cyclist?.update(player);
@@ -250,7 +295,7 @@ function initialize(){
   renderer.domElement.addEventListener('webglcontextlost',event=>{event.preventDefault();releaseKeys();toast('Graphics paused. Waiting for the browser to restore the scene…');});
   renderer.domElement.addEventListener('webglcontextrestored',()=>toast('Graphics restored. Welcome back.'));
   addControls();
-  if(import.meta.env.DEV){window.__ELSEWHERE__={getState:()=>({player:{...player},quest:{...quest},coop:{connected:coop.connected,room:coop.room,players:coop.state?.players.length??0},ready,started,night,quality,selected,discovered:[...discovered],drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,obstacles:world.obstacles.length}),landmarks:LANDMARKS};}
+  if(import.meta.env.DEV){window.__ELSEWHERE__={getState:()=>({player:{...player},quest:{...quest},chai:isChai?{...chai}:null,coop:{connected:coop.connected,room:coop.room,players:coop.state?.players.length??0},ready,started,night,quality,selected,discovered:[...discovered],drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,obstacles:world.obstacles.length}),landmarks:LANDMARKS};}
 }
 
 function updateHUD(){
@@ -263,7 +308,7 @@ function updateHUD(){
       if(discovered.size===LANDMARKS.length)$('#journey-hint').textContent='Every corner found. Stay a little longer.';
     }
   }
-  $('#zone').textContent=isMumbai?(player.x<-58&&Math.abs(player.z-20)<15?'Shrinagar Complex Road':player.z>30&&player.x>-10?'Church headquarters':Math.abs(player.z-20)<9?'Marigold lane':'Mukund Nagar lanes'):player.x>64?'The old pier':player.x<-36&&player.z>50?'Jardim do Sol':player.x>35?'Seafront promenade':'Old town';
+  $('#zone').textContent=isChai?(player.z>50?'Chai bazaar':player.x<-60?'Flower market':'Motor works'):isMumbai?(player.x<-58&&Math.abs(player.z-20)<15?'Shrinagar Complex Road':player.z>30&&player.x>-10?'Church headquarters':Math.abs(player.z-20)<9?'Marigold lane':'Mukund Nagar lanes'):player.x>64?'The old pier':player.x<-36&&player.z>50?'Jardim do Sol':player.x>35?'Seafront promenade':'Old town';
   drawMap();
 }
 const mapCard=$('.map-card'),mapCanvas=$('#map'),mapHome=document.createComment('Map position');
@@ -328,9 +373,9 @@ function drawMap(){
   const {scale,ox,oz}=mapProjection(mapView,player,w,h);
   const px=x=>ox+x*scale,pz=z=>oz+z*scale;
   const rect=(x,z,ww,dd,color)=>{ctx.fillStyle=color;ctx.fillRect(px(x),pz(z),ww*scale,dd*scale);};
-  if(isMumbai){
+  if(isUrban){
     rect(-120,-140,184,260,'#737763');
-    for(const r of MUMBAI_ROADS)rect(r.x-r.w/2,r.z-r.d/2,r.w,r.d,'#c5bca2');
+    for(const r of (isChai?CHAI_ROADS:MUMBAI_ROADS))rect(r.x-r.w/2,r.z-r.d/2,r.w,r.d,'#c5bca2');
   }else{
   rect(-120,-140,184,260,'#68786c');rect(-120,-140,156,260,'#526457');rect(-31.5,-140,15,260,'#a4ad92');rect(-120,33,184,14,'#a4ad92');rect(64,-42,53,12,'#b4b294');rect(-101.5,53,65,60,'#415c44');rect(-59.5,53,5,60,'#9aa784');rect(-101.5,67.5,65,5,'#9aa784');
   }
@@ -338,7 +383,7 @@ function drawMap(){
   ctx.strokeStyle='#a0b9aa25';ctx.lineWidth=1;for(let x=0;x<w;x+=24){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke();}for(let y=0;y<h;y+=24){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}
   if(selected){const dest=LANDMARKS.find(l=>l.id===selected);ctx.beginPath();ctx.setLineDash([4,5]);ctx.strokeStyle='#e6ecbc70';ctx.moveTo(px(player.x),pz(player.z));ctx.lineTo(px(dest.x),pz(dest.z));ctx.stroke();ctx.setLineDash([]);}
   for(const landmark of LANDMARKS){ctx.beginPath();ctx.arc(px(landmark.x),pz(landmark.z),selected===landmark.id?10:7,0,Math.PI*2);ctx.fillStyle=selected===landmark.id?'#e7edbb':'#203c35';ctx.fill();ctx.lineWidth=1.5;ctx.strokeStyle='#d3dcaf';ctx.stroke();ctx.fillStyle=selected===landmark.id?'#243c33':'#e5ebc5';ctx.font='9px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(discovered.has(landmark.id)?'✓':landmark.number.replace('0',''),px(landmark.x),pz(landmark.z)+.5);if(mapExpanded){ctx.font='22px sans-serif';ctx.textAlign='left';ctx.fillStyle='#f5efd7';ctx.strokeStyle='#203c35';ctx.lineWidth=4;ctx.strokeText(landmark.name,px(landmark.x)+17,pz(landmark.z));ctx.fillText(landmark.name,px(landmark.x)+17,pz(landmark.z));}}
-  const questStop=isMumbai?null:activeStop(quest);
+  const questStop=isChai?chaiTarget(chai):isMumbai?null:activeStop(quest);
   if(questStop){
     ctx.beginPath();ctx.setLineDash([3,4]);ctx.strokeStyle='#f1ce7e';ctx.moveTo(px(player.x),pz(player.z));ctx.lineTo(px(questStop.x),pz(questStop.z));ctx.stroke();ctx.setLineDash([]);
     ctx.save();ctx.translate(px(questStop.x),pz(questStop.z));ctx.rotate(Math.PI/4);ctx.fillStyle='#f1ce7e';ctx.fillRect(-5,-5,10,10);ctx.restore();
@@ -389,7 +434,7 @@ $('#photo-exit').onclick=()=>document.body.classList.remove('photo-hidden');
 document.querySelectorAll('[data-destination]').forEach(b=>b.onclick=()=>{selected=selected===b.dataset.destination?null:b.dataset.destination;updateDiscoveries();$('#journey-hint').textContent=selected?'Marker set. The dotted line points toward your destination.':'Choose a place to mark it on your map.';});
 $('#photo').onclick=()=>{
   if(!renderer)return;renderer.render(scene,camera);
-  renderer.domElement.toBlob(blob=>{if(!blob){toast('Photo couldn’t be saved. Please try again.');return;}const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`${isMumbai?'mumbai':'porto-sol'}-${night?'blue-hour':'golden-hour'}.png`;link.click();setTimeout(()=>URL.revokeObjectURL(url),10000);toast(`A little piece of ${worldName}, saved.`);},'image/png');
+  renderer.domElement.toBlob(blob=>{if(!blob){toast('Photo couldn’t be saved. Please try again.');return;}const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`${isChai?'chai-district':isMumbai?'mumbai':'porto-sol'}-${night?'blue-hour':'golden-hour'}.png`;link.click();setTimeout(()=>URL.revokeObjectURL(url),10000);toast(`A little piece of ${worldName}, saved.`);},'image/png');
 };
 $('#sound-toggle').onclick=async()=>{
   try{

@@ -15,7 +15,7 @@ export class World {
     this.night = false; this.treePositions = []; this.seed = 427;
     this.loader = new T.TextureLoader(manager);
     this.materials(); this.environment(); this.ground(); this.neighborhood(); this.waterfront(); this.garden(); this.details(); this.bake();
-    this.questWorld=location === 'mumbai' ? {addCharacter(){},update(){}} : new QuestWorld(scene);this.questStage=0;this.coopMode=false;this.carryParcel=true;this.remoteState=null;
+    this.questWorld=location !== 'porto' ? {addCharacter(){},update(){}} : new QuestWorld(scene);this.questStage=0;this.coopMode=false;this.carryParcel=true;this.remoteState=null;
     this.loadTrees(); this.loadPeople();
   }
   random() { this.seed = (this.seed * 1664525 + 1013904223) >>> 0; return this.seed / 4294967296; }
@@ -108,7 +108,7 @@ export class World {
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
       }`});
-    if(this.location === 'mumbai') return;
+    if(this.location !== 'porto') return;
     const ocean=new T.Mesh(new T.PlaneGeometry(3600,3600),this.oceanMaterial);ocean.rotation.x=-Math.PI/2;ocean.position.y=-1.15;this.scene.add(ocean);
     // A layered headland and a small lighthouse across the water.
     const rock=this.mat(0x7c8980);const hill=this.mat(0x657661);
@@ -309,6 +309,7 @@ export class World {
   async loadTrees() {
     try{
       const [gltf,alpha]=await Promise.all([new GLTFLoader(this.manager).loadAsync(ROOT+'hd/tree/tree-optimized.gltf'),this.loader.loadAsync(ROOT+'hd/tree/textures/island_tree_01_leaves_alpha_1k.png')]);
+      alpha.flipY=false; // Match the glTF UV convention used by the leaf color texture.
       gltf.scene.updateMatrixWorld(true);const bounds=new T.Box3().setFromObject(gltf.scene);const size=bounds.getSize(new T.Vector3()),center=bounds.getCenter(new T.Vector3());
       const normal=new T.Matrix4().makeScale(1/size.y,1/size.y,1/size.y).multiply(new T.Matrix4().makeTranslation(-center.x,-bounds.min.y,-center.z));
       gltf.scene.traverse(o=>{if(!o.isMesh)return;const geo=o.geometry.clone().applyMatrix4(new T.Matrix4().multiplyMatrices(normal,o.matrixWorld));
@@ -328,7 +329,7 @@ export class World {
         const clip=gltf.animations.find(a=>a.name==='Walk');
         this.questWorld.addCharacter(gltf.scene,clip,prefix);
         if(prefix==='m002') { this.cyclist=new Cyclist(gltf.scene);this.remoteCyclist=new Cyclist(gltf.scene);this.remoteCyclist.baseColor=0x6e83bd;this.remoteCyclist.group.visible=false;this.scene.add(this.cyclist.group,this.remoteCyclist.group); }
-        for(let i=0;i<3;i++){const model=clone(gltf.scene);model.scale.setScalar(.01);this.scene.add(model);const mixer=new T.AnimationMixer(model);if(clip)mixer.clipAction(clip).play();mixer.setTime(i*.4);
+        for(let i=0;i<(this.location==='chai'?7:3);i++){const model=clone(gltf.scene);model.scale.setScalar(.01);this.scene.add(model);const mixer=new T.AnimationMixer(model);if(clip)mixer.clipAction(clip).play();mixer.setTime(i*.4);
           this.walkers.push({model,mixer,phase:i*1.7+(prefix==='f001'?2.2:0),lane:prefix==='f001'?49:45,range:40+i*12});}
       },undefined,error=>console.warn('Pedestrian model unavailable:',error.message));
     }
