@@ -4,7 +4,7 @@ import { SPAWN,onLand } from './shared/movement.js';
 
 const token=()=>randomBytes(16).toString('hex');
 export function validPosition(p){
-  return p && ['x','z','yaw','walked','speed'].every(k=>Number.isFinite(p[k])) && onLand(p.x,p.z) && Math.abs(p.speed)<=10.1 && Math.abs(p.yaw)<1e8 && Math.abs(p.walked)<1e9;
+  return p && ['x','z','yaw','walked','speed'].every(k=>Number.isFinite(p[k])) && onLand(p.x,p.z,p.mode==='walking'?.35:.95) && Math.abs(p.speed)<=10.1 && Math.abs(p.yaw)<1e8 && Math.abs(p.walked)<1e9;
 }
 export class Rooms {
   constructor(now=Date.now){this.rooms=new Map();this.now=now;}
@@ -27,7 +27,16 @@ export class Rooms {
     return {room,player:p};
   }
   snapshot(room){return {type:'state',room:room.code,stage:room.stage,carrier:room.carrier,players:[...room.players.values()].filter(p=>p.peer).map(p=>({id:p.id,...p.position}))};}
-  position(room,p,value){if(!validPosition(value))return false;p.position={x:value.x,z:value.z,yaw:value.yaw,walked:value.walked,speed:value.speed};p.lastSeen=this.now();room.updated=this.now();return true;}
+  position(room,p,value) {
+    if(!validPosition(value))return false;
+    const bike=value.bike;
+    const walking=value.mode==='walking'&&bike&&['x','z','yaw','walked'].every(k=>Number.isFinite(bike[k]))
+      &&onLand(bike.x,bike.z)&&Math.abs(bike.yaw)<1e8&&Math.abs(bike.walked)<1e9;
+    if(value.mode==='walking'&&!walking)return false;
+    p.position={x:value.x,z:value.z,yaw:value.yaw,walked:value.walked,speed:value.speed,
+      mode:walking?'walking':'cycling',bike:walking?{x:bike.x,z:bike.z,yaw:bike.yaw,walked:bike.walked}:null};
+    p.lastSeen=this.now();room.updated=this.now();return true;
+  }
   advance(room,p,message){
     if(message.stage!==room.stage||message.stop!==activeStop({stage:room.stage})?.id)throw Error('Your quest has already changed. Follow the current gold marker.');
     const players=[...room.players.values()].filter(p=>p.peer);

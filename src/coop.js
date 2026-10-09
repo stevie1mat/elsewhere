@@ -51,7 +51,7 @@ export class CoopClient {
     };
   }
   send(message){if(this.connected&&this.socket.readyState===WebSocket.OPEN)this.socket.send(JSON.stringify(message));}
-  position(p){this.send({type:'position',position:{x:p.x,z:p.z,yaw:p.yaw,walked:p.walked,speed:p.speed}});}
+  position(p){this.send({type:'position',position:{x:p.x,z:p.z,yaw:p.yaw,walked:p.walked,speed:p.speed,mode:p.mode,bike:p.bike}});}
   advance(stage,stop){this.send({type:'advance',stage,stop});}
   forgetRoom(){
     try{if(this.room)sessionStorage.removeItem(`elsewhere:room:${this.room}`);if(sessionStorage.getItem('elsewhere:last-room')===this.room)sessionStorage.removeItem('elsewhere:last-room');}catch{}

@@ -27,6 +27,8 @@ PATH=/opt/homebrew/opt/node@22/bin:$PATH npm run dev -- --port 5174
 
 **The Last Light — Chapter 01:** Follow the gold marker to Inês outside Café Luma. Stop your bicycle and press **F** (or tap the interaction button) to collect a parcel. Find the postcard beside the garden path, then deliver the parcel to Tomás on the pier. Completing the story equips Sunset Gold bike paint. The parcel is visible on your bike while carrying it; quest progress and the reward save automatically in this browser. Closing a conversation leaves the objective available. The map’s gold line points toward the objective, rather than providing street-by-street navigation.
 
+- **X** (or the left-side button): stop and get off your bicycle. Walk back within 2.8m to remount; your bicycle is marked on the map. **W/S** walks forward/back, **A/D** turns, and **Shift** runs.
+- **Wardrobe** on the left, or **V**: choose an outfit color, helmet, canvas backpack, and sunglasses. Your look saves in this browser and appears in cycling and walking modes. These controls apply to Porto Sol.
 - **W/S**: pedal / reverse; **A/D**: steer; **Shift**: pedal faster; **Space**: brake.
 - Click the scene to capture the mouse. **Esc** releases it.
 - **Q/E** or **left/right arrows** also steer. Up/down arrows pedal/reverse.
@@ -63,6 +65,7 @@ Tests cover cycling across frame rates, steering, braking, reverse, bike clearan
 ## Source layout
 
 - `src/world.js`: procedural scenery, lighting, ocean shader, asset loading, pedestrians.
+- `src/explorer.js`: cycling/walking avatar, animated wardrobe accessories.
 - `src/cyclist.js`: bicycle geometry, rider pose, pedaling, and player avatar.
 - `src/quest.js` and `src/quest-world.js`: delivery story, saved progression, characters, and objective markers.
 - `src/movement.js`: bicycle controller and traversable boundaries.
@@ -71,6 +74,8 @@ Tests cover cycling across frame rates, steering, braking, reverse, bike clearan
 - `tests/movement.test.js`: standalone movement checks.
 
 ## Asset credits
+
+- New scanned cobblestone, plaster, and worn timber surfaces: **Poly Haven**, CC0. Color, normal, and roughness maps are bundled at 1K; credits in [`public/assets/porto/CREDITS.md`](public/assets/porto/CREDITS.md).
 
 - Ground textures, sky/HDR environment, and tree: **Poly Haven**, CC0. Details: [`public/assets/hd/CREDITS.md`](public/assets/hd/CREDITS.md).
 - Human models, textures, and walking animation: **Microsoft Rocketbox**, MIT. Details: [`public/assets/people/CREDITS.md`](public/assets/people/CREDITS.md); original license: [`public/assets/people/LICENSE.txt`](public/assets/people/LICENSE.txt).

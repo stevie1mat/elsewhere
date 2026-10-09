@@ -17,30 +17,31 @@ export function canOccupy(x, z, obstacles, radius = 0.95) {
 }
 
 export function createPlayer() {
-  return { ...SPAWN, y: 0, vx: 0, vz: 0, vy: 0, grounded: true, walked: 0, moving: false, speed: 0, steering: 0 };
+  return { ...SPAWN, mode: 'cycling', bike: null, y: 0, vx: 0, vz: 0, vy: 0, grounded: true, walked: 0, moving: false, speed: 0, steering: 0 };
 }
 
 export function stepPlayer(p, input, delta, obstacles) {
   const dt = Math.min(Math.max(delta, 0), 0.05);
   const forward = Math.max(-1, Math.min(1, input.forward || 0));
   const steering = Math.max(-1, Math.min(1, input.right || 0));
-  const maxSpeed = input.sprint ? 10 : 6;
-  const targetSpeed = forward > 0 ? maxSpeed : forward < 0 ? -2.5 : 0;
-  const acceleration = input.brake ? 18 : forward ? 4 : 1.8;
+  const walking = p.mode === 'walking';
+  const maxSpeed = walking ? (input.sprint ? 4.2 : 2.2) : (input.sprint ? 10 : 6);
+  const targetSpeed = forward > 0 ? maxSpeed : forward < 0 ? (walking ? -1.5 : -2.5) : 0;
+  const acceleration = input.brake ? 18 : forward ? (walking ? 12 : 4) : (walking ? 14 : 1.8);
   const target = input.brake ? 0 : targetSpeed;
   p.speed += Math.sign(target-p.speed)*Math.min(Math.abs(target-p.speed), acceleration*dt);
   p.steering += (steering-p.steering)*(1-Math.exp(-10*dt));
   // Steering changes heading, never strafes; reverse steering follows the wheels.
-  p.yaw += p.steering * Math.min(Math.abs(p.speed)/2, 1) * Math.sign(p.speed) * 1.35 * dt;
+  p.yaw += p.steering * (walking ? 2.3 : Math.min(Math.abs(p.speed)/2, 1) * Math.sign(p.speed) * 1.35) * dt;
   p.vx = Math.sin(p.yaw)*p.speed;
   p.vz = -Math.cos(p.yaw)*p.speed;
   const steps = Math.max(1, Math.ceil(Math.hypot(p.vx, p.vz) * dt / 0.15));
   const oldX = p.x, oldZ = p.z;
   for (let i = 0; i < steps; i++) {
     const nextX = p.x + p.vx * dt / steps;
-    if (canOccupy(nextX, p.z, obstacles)) p.x = nextX; else p.vx = 0;
+    if (canOccupy(nextX, p.z, obstacles, walking ? .35 : .95)) p.x = nextX; else p.vx = 0;
     const nextZ = p.z + p.vz * dt / steps;
-    if (canOccupy(p.x, nextZ, obstacles)) p.z = nextZ; else p.vz = 0;
+    if (canOccupy(p.x, nextZ, obstacles, walking ? .35 : .95)) p.z = nextZ; else p.vz = 0;
   }
   const distance = Math.hypot(p.x - oldX, p.z - oldZ);
   p.walked += distance * Math.sign(p.speed);
@@ -54,4 +55,22 @@ export function validateSavedPosition(value, obstacles) {
   if (!value || !['x', 'z', 'yaw', 'pitch'].every(k => Number.isFinite(value[k]))) return null;
   if (!canOccupy(value.x, value.z, obstacles)) return null;
   return { x: value.x, z: value.z, yaw: value.yaw % (Math.PI * 2), pitch: Math.max(0.05, Math.min(.85, value.pitch)) };
+}
+
+// Keep the parked bicycle in world space, and only remount within reach.
+export function toggleTravelMode(p, obstacles) {
+  if (p.mode === 'walking') {
+    if (!p.bike || Math.hypot(p.x-p.bike.x,p.z-p.bike.z)>2.8) return 'Return to your bicycle to ride again.';
+    Object.assign(p,{...p.bike,mode:'cycling',bike:null,speed:0,vx:0,vz:0,moving:false});
+    return null;
+  }
+  if (Math.abs(p.speed)>.6) return 'Brake to a stop before getting off.';
+  for (const offset of [Math.PI/2,-Math.PI/2,Math.PI,0]) {
+    const x=p.x+Math.sin(p.yaw+offset)*1.3,z=p.z-Math.cos(p.yaw+offset)*1.3;
+    if (!canOccupy(x,z,obstacles,.35)) continue;
+    p.bike={x:p.x,z:p.z,yaw:p.yaw,walked:p.walked};
+    Object.assign(p,{x,z,mode:'walking',speed:0,vx:0,vz:0,moving:false});
+    return null;
+  }
+  return 'Move to a clearer spot to get off.';
 }

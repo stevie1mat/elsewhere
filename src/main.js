@@ -1,11 +1,13 @@
 import * as THREE from 'three';
 import { World } from './world.js';
+import { ATTACK_KEYS } from './rider-combat.js';
 import { MumbaiWorld } from './mumbai-world.js';
 import { ChaiWorld } from './chai-world.js';
 import { CHAI_SPAWN,CHAI_LANDMARKS,CHAI_ROADS,createChai,chaiTarget,canServe,serveChai,stepChai } from './chai.js';
 import { MUMBAI_SPAWN, MUMBAI_LANDMARKS, MUMBAI_ROADS } from './mumbai-layout.js';
-import { SPAWN as PORTO_SPAWN, LANDMARKS as PORTO_LANDMARKS, createPlayer as createPortoPlayer, stepPlayer, validateSavedPosition } from './movement.js';
+import { SPAWN as PORTO_SPAWN, LANDMARKS as PORTO_LANDMARKS, createPlayer as createPortoPlayer, stepPlayer, toggleTravelMode, validateSavedPosition } from './movement.js';
 import './style.css';
+import { normalizeLook } from './explorer.js';
 import { mapProjection,panMap,zoomMap } from './map-view.js';
 import { CoopClient,coopEndpoint } from './coop.js';
 import { restoreQuest, activeStop, canInteract, advanceQuest } from './quest.js';
@@ -48,6 +50,17 @@ document.querySelector('#app').innerHTML = `
       <div class="loading-line" id="loading-line"><div id="progress"></div></div><div class="loading-status" id="loading-status">Unpacking the neighborhood…</div>
       <div class="intro-note">A parcel. A faded postcard. Someone waiting at the pier.</div>
     </section>
+    <aside class="character-tools" aria-label="Character controls">
+      <button class="text-button" id="wardrobe-toggle" aria-expanded="false" aria-controls="wardrobe-panel">♧ &nbsp; Wardrobe</button>
+      <button class="text-button" id="travel-toggle">Get off bicycle · X</button>
+      <section id="wardrobe-panel" hidden aria-label="Wardrobe">
+        <div class="wardrobe-title"><div><small>YOUR CHARACTER</small><h2>Coastal essentials</h2></div><button id="wardrobe-close" class="icon-button" aria-label="Close wardrobe">${icon('close')}</button></div>
+        <p>Make the neighborhood your own.</p>
+        <fieldset><legend>Outfit color</legend><div class="outfit-colors">${[['original','Linen','#e2d8c2'],['ocean','Ocean','#79afd1'],['terracotta','Clay','#d79976'],['sage','Sage','#9ab889'],['midnight','Midnight','#66748b']].map(([value,label,color])=>`<button type="button" data-outfit="${value}" aria-label="${label} outfit" title="${label}" style="--swatch:${color}"></button>`).join('')}</div></fieldset>
+        <fieldset><legend>Accessories</legend><label><input type="checkbox" data-gear="helmet"> Cycling helmet</label><label><input type="checkbox" data-gear="backpack"> Canvas backpack</label><label><input type="checkbox" data-gear="sunglasses"> Sunglasses</label></fieldset>
+        <small class="wardrobe-note">Saved on this browser · Changes appear instantly</small>
+      </section>
+    </aside>
     <section class="journey" aria-label="Places to discover"><div class="journey-head"><span>Around the neighborhood</span><strong id="discovered-count">0 / 3</strong></div>
       ${LANDMARKS.map(l=>`<button class="destination" data-destination="${l.id}"><span class="destination-number">${l.number}</span><span>${l.name}</span><span class="distance" id="distance-${l.id}"></span></button>`).join('')}
       <p class="journey-hint" id="journey-hint">Choose a place to mark it on your map.</p>
@@ -58,8 +71,8 @@ document.querySelector('#app').innerHTML = `
     <div class="crosshair"></div><div class="look-hint">Click the scene to look around · Esc releases your cursor</div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <div class="discovery" id="discovery"><small>A little discovery</small><h2 id="discovery-name"></h2><p id="discovery-description"></p></div>
-    <footer class="bottom-bar"><div class="world-tag">An open-world sketch <span>v0.1</span></div><div class="controls"><div class="control"><kbd>W / S</kbd><span>Pedal / reverse</span></div><div class="control"><kbd>A / D</kbd><span>Steer</span></div><div class="control"><kbd>⇧</kbd><span>Pedal faster</span></div><div class="control"><kbd>Space</kbd><span>Brake</span></div><div class="control"><kbd>Mouse</kbd><span>Orbit</span></div><div class="control"><kbd>P</kbd><span>Hide UI</span></div><div class="control"><button class="icon-button" id="help-button" aria-label="Cycling controls" style="width:26px;height:26px">${icon('help')}</button></div></div><div class="bottom-note">BUILT FOR RIDING</div></footer>
-    <div class="touch-controls"><div class="dpad"><button data-key="KeyW" aria-label="Pedal forward">↑</button><button data-key="KeyA" aria-label="Steer left">←</button><button data-key="KeyS" aria-label="Reverse">↓</button><button data-key="KeyD" aria-label="Steer right">→</button></div><div class="touch-actions"><button data-key="ShiftLeft" aria-label="Pedal faster">Fast</button><button data-key="Space" aria-label="Brake">Brake</button></div></div>
+    <footer class="bottom-bar"><div class="world-tag">An open-world sketch <span>v0.1</span></div><div class="controls"><div class="control"><kbd>W / S</kbd><span>Pedal / reverse</span></div><div class="control"><kbd>A / D</kbd><span>Steer</span></div><div class="control"><kbd>⇧</kbd><span>Pedal faster</span></div><div class="control"><kbd>Space</kbd><span>Brake</span></div><div class="control"><kbd>J / L</kbd><span>Kick</span></div><div class="control"><kbd>U / O</kbd><span>Punch</span></div><div class="control"><kbd>Mouse</kbd><span>Orbit</span></div><div class="control"><kbd>P</kbd><span>Hide UI</span></div><div class="control"><button class="icon-button" id="help-button" aria-label="Cycling controls" style="width:26px;height:26px">${icon('help')}</button></div></div><div class="bottom-note">BUILT FOR RIDING</div></footer>
+    <div class="touch-controls"><div class="dpad"><button data-key="KeyW" aria-label="Pedal forward">↑</button><button data-key="KeyA" aria-label="Steer left">←</button><button data-key="KeyS" aria-label="Reverse">↓</button><button data-key="KeyD" aria-label="Steer right">→</button></div><div class="touch-actions"><button data-attack="kick,1" aria-label="Kick left">Kick ←</button><button data-attack="kick,-1" aria-label="Kick right">Kick →</button><button data-attack="punch,1" aria-label="Punch left">Punch ←</button><button data-attack="punch,-1" aria-label="Punch right">Punch →</button><button data-key="ShiftLeft" aria-label="Pedal faster">Fast</button><button data-key="Space" aria-label="Brake">Brake</button></div></div>
   </div>
   <button class="photo-exit" id="photo-exit">Show interface · P</button>
   <dialog id="map-dialog" aria-label="Expanded neighborhood map"></dialog>
@@ -71,11 +84,11 @@ document.querySelector('#app').innerHTML = `
     <div class="settings-row"><div>Camera smoothing<small>A smooth camera following your bicycle.</small></div><button class="text-button" id="bob-toggle" aria-pressed="true">On</button></div>
     <div class="settings-row"><div>Your favorite spot<small>Saved only on this browser.</small></div><button class="text-button" id="save-spot">Save spot</button></div>
     <div class="settings-row"><div>Back to the waterfront</div><button class="text-button" id="reset">Return to start</button></div>
-    <h3>About this little world</h3><p>Ride your bicycle through Porto Sol in third person. Explore the café, pier, and garden. Buildings are exterior scenery.</p>
-    <p class="credits">Local assets reused from the original game.<br>Scenery textures & tree: <a href="https://polyhaven.com/license" target="_blank" rel="noopener">Poly Haven · CC0</a><br>Animated pedestrians: <a href="https://github.com/microsoft/Microsoft-Rocketbox" target="_blank" rel="noopener">Microsoft Rocketbox · MIT</a></p>
+    <h3>About this little world</h3><p>Ride or get off your bicycle with X to explore Porto Sol on foot. Open Wardrobe on the left to change your outfit and accessories. Explore the café, pier, and garden. Buildings are exterior scenery.</p>
+    <p class="credits">Scanned stone, plaster &amp; timber surfaces bundled locally.<br>Scenery textures & tree: <a href="https://polyhaven.com/license" target="_blank" rel="noopener">Poly Haven · CC0</a><br>Animated pedestrians: <a href="https://github.com/microsoft/Microsoft-Rocketbox" target="_blank" rel="noopener">Microsoft Rocketbox · MIT</a></p>
   </dialog>
   <dialog id="help"><div class="dialog-title"><h2>A little room to roam.</h2><button class="icon-button" data-close aria-label="Close controls">${icon('close')}</button></div><div class="keys">
-    <div class="key-row"><span>Pedal / reverse</span><kbd>W S / ↑ ↓</kbd></div><div class="key-row"><span>Orbit camera</span><kbd>Mouse / drag</kbd></div><div class="key-row"><span>Steer</span><kbd>A D / Q E / ← →</kbd></div><div class="key-row"><span>Pedal faster</span><kbd>Shift</kbd></div><div class="key-row"><span>Brake</span><kbd>Space</kbd></div><div class="key-row"><span>Release cursor</span><kbd>Esc</kbd></div><div class="key-row"><span>Hide interface</span><kbd>P</kbd></div><div class="key-row"><span>Return to start</span><kbd>R</kbd></div><div class="key-row"><span>Talk / inspect nearby clue</span><kbd>F</kbd></div><div class="key-row"><span>Center camera behind bike</span><kbd>C</kbd></div><div class="key-row"><span>Expand / close map</span><kbd>M</kbd></div><div class="key-row"><span>Map zoom / reset</span><kbd>+ − / 0</kbd></div>
+    <div class="key-row"><span>Kick left / right (Porto Sol)</span><kbd>J / L</kbd></div><div class="key-row"><span>Punch left / right (Porto Sol)</span><kbd>U / O</kbd></div><div class="key-row"><span>Get off / on bicycle (Porto Sol)</span><kbd>X</kbd></div><div class="key-row"><span>Wardrobe (Porto Sol)</span><kbd>V</kbd></div><div class="key-row"><span>Pedal / walk / reverse</span><kbd>W S / ↑ ↓</kbd></div><div class="key-row"><span>Orbit camera</span><kbd>Mouse / drag</kbd></div><div class="key-row"><span>Steer</span><kbd>A D / Q E / ← →</kbd></div><div class="key-row"><span>Pedal faster</span><kbd>Shift</kbd></div><div class="key-row"><span>Brake</span><kbd>Space</kbd></div><div class="key-row"><span>Release cursor</span><kbd>Esc</kbd></div><div class="key-row"><span>Hide interface</span><kbd>P</kbd></div><div class="key-row"><span>Return to start</span><kbd>R</kbd></div><div class="key-row"><span>Talk / inspect nearby clue</span><kbd>F</kbd></div><div class="key-row"><span>Center camera behind bike</span><kbd>C</kbd></div><div class="key-row"><span>Expand / close map</span><kbd>M</kbd></div><div class="key-row"><span>Map zoom / reset</span><kbd>+ − / 0</kbd></div>
     </div><p>On a touch screen, use the arrows to pedal and steer, and drag to orbit the camera. Ride near a landmark to discover it.</p></dialog>`;
 
 const $ = s => document.querySelector(s);
@@ -100,6 +113,7 @@ if(isChai){
   $('#settings h3 + p').textContent='An original neighborhood built for chai deliveries. Collect a fresh cup at Asha’s stall, then stop at the gold marker to serve it. Sharp turns, hard braking, collisions, and potholes spill tea. Traffic yields, but give people and animals room. Solo play; R restarts your delivery.';
 }
 const viewport = $('#viewport');
+$('.character-tools').hidden=isUrban;
 const player = createPlayer();
 let started=false, ready=false, selected=null, elapsed=0, night=false, bob=!matchMedia('(prefers-reduced-motion: reduce)').matches, soundOn=false, quality='high';
 let orbitYaw=0;
@@ -109,13 +123,14 @@ const cameraRay=new THREE.Raycaster(), cameraAim=new THREE.Vector3(), cameraDesi
 let renderer, scene, camera, world, audioContext, audioGain, toastTimer, discoveryTimer;
 const keys=new Set(), discovered=new Set();
 const storage={get(key){try{return JSON.parse(localStorage.getItem(`elsewhere:${isChai?'chai:':isMumbai?'mumbai:':''}${key}`));}catch{return null;}},set(key,value){try{localStorage.setItem(`elsewhere:${isChai?'chai:':isMumbai?'mumbai:':''}${key}`,JSON.stringify(value));return true;}catch{return false;}}};
+let characterLook=normalizeLook(storage.get('character'));
 let quest=restoreQuest(storage.get('quest'));
 let chai=createChai();
 let chaiBest=Number(storage.get('best'))||0;
 let dialogueStop=null;
 let pendingInvite=false, entryRoom=null, returningRoom=false;
 const coop=new CoopClient({
-  onWelcome(message){Object.assign(player,message.position);releaseKeys();$('#coop-code').value=message.room;const link=new URL(location.href);link.search='';link.searchParams.set('room',message.room);link.hash='';$('#coop-link').value=link.href;$('#coop-invite').hidden=false;history.replaceState(null,'',link);entryRoom=message.room;returningRoom=true;if(pendingInvite&&ready){pendingInvite=false;if($('#coop-dialog').open)$('#coop-dialog').close();startRide();}refreshEntry();},
+  onWelcome(message){Object.assign(player,createPlayer(),message.position);refreshTravel();releaseKeys();$('#coop-code').value=message.room;const link=new URL(location.href);link.search='';link.searchParams.set('room',message.room);link.hash='';$('#coop-link').value=link.href;$('#coop-invite').hidden=false;history.replaceState(null,'',link);entryRoom=message.room;returningRoom=true;if(pendingInvite&&ready){pendingInvite=false;if($('#coop-dialog').open)$('#coop-dialog').close();startRide();}refreshEntry();},
   onState(state){
     const previous=quest.stage;quest={version:1,stage:state.stage};
     if(world){world.coopMode=true;world.carryParcel=state.carrier===coop.id;world.setRemote(state.players.find(p=>p.id!==coop.id),state.carrier);}
@@ -161,19 +176,53 @@ function resumeRoom(){
   if(!entryRoom||coop.active)return;
   try{if(sessionStorage.getItem(`elsewhere:room:${entryRoom}`)){pendingInvite=true;coop.join(entryRoom);}}catch{}
 }
+function refreshTravel(){
+  $('#travel-toggle').textContent=player.mode==='walking'?`Get on bicycle · ${Math.round(Math.hypot(player.x-player.bike.x,player.z-player.bike.z))}m · X`:'Get off bicycle · X';
+}
+function changeTravel(){
+  if(!started||modalOpen()||!world?.cyclist)return;
+  const error=toggleTravelMode(player,world.obstacles);
+  if(error){toast(error);return;}
+  releaseKeys();refreshTravel();
+  toast(player.mode==='walking'?'On foot · W / S to walk, A / D to turn. X near your bike to ride.':'Back in the saddle.');
+}
+function toggleWardrobe(force){
+  const open=force??$('#wardrobe-panel').hidden;
+  $('#wardrobe-panel').hidden=!open;$('#wardrobe-toggle').setAttribute('aria-expanded',String(open));
+  $('#ui').classList.toggle('wardrobe-open',open);
+  if(open){if(document.pointerLockElement)document.exitPointerLock();releaseKeys();}
+}
+function updateWardrobe(){
+  document.querySelectorAll('[data-outfit]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.outfit===characterLook.outfit)));
+  document.querySelectorAll('[data-gear]').forEach(input=>input.checked=characterLook[input.dataset.gear]);
+  world?.cyclist?.applyLook?.(characterLook);
+  if(world?.cyclist?.look)characterLook=world.cyclist.look;
+}
+$('#wardrobe-toggle').onclick=()=>toggleWardrobe();
+$('#wardrobe-close').onclick=()=>toggleWardrobe(false);
+$('#travel-toggle').onclick=changeTravel;
+for(const button of document.querySelectorAll('[data-outfit]'))button.onclick=()=>{characterLook={...characterLook,outfit:button.dataset.outfit};storage.set('character',characterLook);updateWardrobe();};
+for(const input of document.querySelectorAll('[data-gear]'))input.onchange=()=>{characterLook={...characterLook,[input.dataset.gear]:input.checked};storage.set('character',characterLook);updateWardrobe();};
+updateWardrobe();
 function startRide(){
   if(!ready)return;
   started=true;$('#intro').classList.add('hidden');$('#intro').inert=true;$('#ui').classList.add('playing','unlocked');renderer.domElement.focus();
 }
 function savePrefs(){storage.set('preferences',{night,quality,bob});}
 function toast(message){$('#toast').textContent=message;$('#toast').classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').classList.remove('visible'),3500);}
+function strike(type,side){
+  if(!started||modalOpen())return;
+  if(!world?.combat){toast('Rider combat is available on the Porto Sol promenade.');return;}
+  if(player.mode==='walking'||Math.abs(player.speed)<.65){toast('Start riding to kick or punch.');return;}
+  world.combat.start(type,side,player);
+}
 function releaseKeys(){keys.clear();player.vx=player.vz=player.speed=0;}
 function modalOpen(){return !!document.querySelector('dialog[open]');}
 function updateDiscoveries(){
   $('#discovered-count').textContent=`${discovered.size} / 3`;
   document.querySelectorAll('.destination').forEach(button=>{const id=button.dataset.destination;button.classList.toggle('visited',discovered.has(id));button.classList.toggle('active',id===selected);button.setAttribute('aria-pressed',String(id===selected));button.querySelector('.destination-number').textContent=discovered.has(id)?'✓':LANDMARKS.find(l=>l.id===id).number;});
 }
-function reset(){Object.assign(player,createPlayer());if(isChai){chai=createChai();if(world)world.delivery=chai;}orbitYaw=0;releaseKeys();toast(isChai?'Fresh start at Asha’s chai stall.':isMumbai?'Back outside the church.':'Back where the sea meets the street.');}
+function reset(){world?.combat?.reset();player.attack=null;Object.assign(player,createPlayer());refreshTravel();if(isChai){chai=createChai();if(world)world.delivery=chai;}orbitYaw=0;releaseKeys();toast(isChai?'Fresh start at Asha’s chai stall.':isMumbai?'Back outside the church.':'Back where the sea meets the street.');}
 function setNight(value){night=value;world?.setNight(night);$('#time-label').textContent=night?'Blue hour':'Golden hour';$('#time-toggle').querySelector('svg').outerHTML=icon(night?'moon':'sun');$('#time-toggle').setAttribute('aria-label',night?'Switch to golden hour':'Switch to blue hour');document.querySelectorAll('[data-time]').forEach(b=>b.classList.toggle('active',(b.dataset.time==='night')===night));savePrefs();}
 function setQuality(value){quality=value;if(renderer){renderer.setPixelRatio(Math.min(devicePixelRatio,quality==='high'?1.25:1));renderer.shadowMap.enabled=quality==='high';renderer.setSize(innerWidth,innerHeight);}document.querySelectorAll('[data-quality]').forEach(b=>b.classList.toggle('active',b.dataset.quality===quality));savePrefs();}
 function setBob(){ $('#bob-toggle').textContent=bob?'On':'Off';$('#bob-toggle').setAttribute('aria-pressed',String(bob)); }
@@ -271,10 +320,12 @@ function initialize(){
         if(isChai)stepChai(chai,player,dt);
 
       }
-      world.cyclist?.update(player);
+      if(world.cyclist?.applyLook&&world.cyclist.look!==characterLook){world.cyclist.applyLook(characterLook);characterLook=world.cyclist.look;}
+      if(world.updateCombat(player,active?dt:0))toast(`Hit! Rival staggered · ${world.combat.hits} hits`);
+      world.cyclist?.update(player,active?dt:0);
       world.updateRemote(dt);
       // Orbit around the visible rider; the bike's heading is independent of the mouse.
-      const viewYaw=player.yaw+orbitYaw, distance=5.8;
+      const viewYaw=player.yaw+orbitYaw, distance=player.mode==='walking'?4.4:5.8;
       cameraAim.set(player.x,1.15,player.z);
       cameraDesired.set(player.x-Math.sin(viewYaw)*distance*Math.cos(player.pitch),1.15+Math.sin(player.pitch)*distance,player.z+Math.cos(viewYaw)*distance*Math.cos(player.pitch));
       if(!started||!bob)camera.position.copy(cameraDesired);
@@ -286,7 +337,7 @@ function initialize(){
       camera.lookAt(cameraAim);
       world.update(elapsed,modalOpen()?0:dt,camera);renderer.render(scene,camera);
       uiClock+=dt;frameClock+=dt;frames++;
-      if(frameClock>1){$('#performance').textContent=`${Math.round(Math.abs(player.speed)*3.6)} km/h · ${Math.round(frames/frameClock)} fps`;frameClock=0;frames=0;}
+      if(frameClock>1){$('#performance').textContent=`${player.mode==='walking'?'Walking · ':''}${Math.round(Math.abs(player.speed)*3.6)} km/h · ${Math.round(frames/frameClock)} fps`;frameClock=0;frames=0;}
       if(uiClock>.12){updateHUD();uiClock=0;}
     }
     requestAnimationFrame(frame);
@@ -299,6 +350,7 @@ function initialize(){
 }
 
 function updateHUD(){
+  refreshTravel();
   updateQuest();
   for(const landmark of LANDMARKS){const distance=Math.hypot(player.x-landmark.x,player.z-landmark.z);$(`#distance-${landmark.id}`).textContent=`${Math.round(distance)}m`;
     if(started&&distance<landmark.radius&&!discovered.has(landmark.id)){
@@ -388,6 +440,14 @@ function drawMap(){
     ctx.beginPath();ctx.setLineDash([3,4]);ctx.strokeStyle='#f1ce7e';ctx.moveTo(px(player.x),pz(player.z));ctx.lineTo(px(questStop.x),pz(questStop.z));ctx.stroke();ctx.setLineDash([]);
     ctx.save();ctx.translate(px(questStop.x),pz(questStop.z));ctx.rotate(Math.PI/4);ctx.fillStyle='#f1ce7e';ctx.fillRect(-5,-5,10,10);ctx.restore();
   }
+  if(player.mode==='walking'&&player.bike){
+    const bx=px(player.bike.x),bz=pz(player.bike.z);
+    ctx.save();ctx.strokeStyle='#b9e7e9';ctx.fillStyle='#183a3b';ctx.lineWidth=2;
+    for(const dx of [-6,6]){ctx.beginPath();ctx.arc(bx+dx,bz,4,0,Math.PI*2);ctx.fill();ctx.stroke();}
+    ctx.beginPath();ctx.moveTo(bx-6,bz);ctx.lineTo(bx,bz-8);ctx.lineTo(bx+6,bz);ctx.stroke();
+    if(mapExpanded){ctx.font='18px sans-serif';ctx.textAlign='left';ctx.fillStyle='#d5f2f0';ctx.fillText('Your bicycle',bx+16,bz);}
+    ctx.restore();
+  }
   const friend=coop.connected?coop.state?.players.find(p=>p.id!==coop.id):null;
   if(friend){ctx.beginPath();ctx.arc(px(friend.x),pz(friend.z),5,0,Math.PI*2);ctx.fillStyle='#a5b8ff';ctx.fill();ctx.strokeStyle='#eef0ff';ctx.stroke();}
   ctx.save();ctx.translate(px(player.x),pz(player.z));ctx.rotate(player.yaw);ctx.beginPath();ctx.moveTo(0,-14);ctx.lineTo(-10,-29);ctx.quadraticCurveTo(0,-34,10,-29);ctx.closePath();ctx.fillStyle='#f3f4d42b';ctx.fill();ctx.beginPath();ctx.moveTo(0,-8);ctx.lineTo(5,6);ctx.lineTo(0,3);ctx.lineTo(-5,6);ctx.closePath();ctx.fillStyle='#f7f7e4';ctx.shadowColor='#f5ffd4';ctx.shadowBlur=8;ctx.fill();ctx.restore();
@@ -411,6 +471,9 @@ function addControls(){
     if(event.code==='KeyP'&&!event.repeat){document.body.classList.toggle('photo-hidden');event.preventDefault();return;}
     if(event.code==='Escape'){document.body.classList.remove('photo-hidden');releaseKeys();return;}
     if(!started)return;
+    if(ATTACK_KEYS[event.code]&&!event.repeat){event.preventDefault();strike(...ATTACK_KEYS[event.code]);return;}
+    if(event.code==='KeyX'&&!event.repeat&&!isUrban){event.preventDefault();changeTravel();return;}
+    if(event.code==='KeyV'&&!event.repeat&&!isUrban){event.preventDefault();toggleWardrobe();return;}
     if(event.code==='KeyF'&&!event.repeat){event.preventDefault();talk();return;}
     if(event.code==='KeyC'&&!event.repeat){orbitYaw=0;return;}
     if(event.code==='KeyR'&&!event.repeat){reset();return;}
@@ -418,6 +481,7 @@ function addControls(){
   });
   window.addEventListener('keyup',event=>keys.delete(event.code));window.addEventListener('blur',()=>{releaseKeys();dragging=false;audioContext?.suspend();});window.addEventListener('focus',()=>{if(soundOn)audioContext?.resume();});
   document.addEventListener('visibilitychange',()=>{releaseKeys();if(document.hidden)audioContext?.suspend();else if(soundOn)audioContext?.resume();});
+  document.querySelectorAll('[data-attack]').forEach(button=>button.addEventListener('pointerdown',e=>{e.preventDefault();const [type,side]=button.dataset.attack.split(',');strike(type,Number(side));}));
   document.querySelectorAll('[data-key]').forEach(button=>{button.addEventListener('pointerdown',e=>{e.preventDefault();button.setPointerCapture(e.pointerId);keys.add(button.dataset.key);});for(const type of ['pointerup','pointercancel','lostpointercapture'])button.addEventListener(type,()=>keys.delete(button.dataset.key));});
   window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
 }
