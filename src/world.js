@@ -1,3 +1,4 @@
+import { detailedCarGeometry } from './detailed-car.js';
 import { flowerPlanterGeometry } from './flower-planter.js';
 import { RoadPickups, PickupDisplay } from './road-pickups.js';
 import { expandPorto } from './porto-expansion.js';
@@ -329,18 +330,24 @@ export class World {
     this.cylinder(.3, .55, 1.8, -80, 1, 83, this.m.trim, 16); this.cylinder(1.5, .2, .35, -80, 1.8, 83, this.m.trim, 24); this.obstacle(-80, 83, 7.4, 7.4);
   }
   car(x, z, color, rotation = 0) {
-    const paint = this.mat(color, .28, .4);
-    const add = (w, h, d, xx, y, zz, mat) => { const geo = new T.BoxGeometry(w, h, d); geo.translate(xx, y, zz); geo.rotateY(rotation); this.mesh(geo, mat, x, 0, z); };
-    add(1.8, .55, 4, 0, .64, 0, paint); add(1.64, .65, 2.05, 0, 1.19, -.2, this.m.glass); add(1.76, .12, 2.1, 0, 1.55, -.2, paint);
-    for (const xx of [-.83, .83]) { add(.08, .75, .13, xx, 1.13, -1.2, paint); add(.08, .75, .13, xx, 1.13, .75, paint); add(.09, .65, .12, xx, 1.16, -.1, paint); }
-    add(1.72, .13, .15, 0, .47, 2.06, this.m.chrome); add(1.72, .13, .15, 0, .47, -2.06, this.m.chrome);
-    for (const xx of [-.62, .62]) { add(.4, .18, .08, xx, .78, -2.02, this.m.lamp); add(.35, .13, .08, xx, .77, 2.03, this.m.tile); }
-    for (const xx of [-.9, .9]) for (const zz of [-1.3, 1.3]) {
-      const geo = new T.CylinderGeometry(.39, .39, .22, 16); geo.rotateZ(Math.PI / 2); geo.translate(xx, .39, zz); geo.rotateY(rotation); this.mesh(geo, this.m.tire, x, 0, z);
-      const hub = new T.CylinderGeometry(.21, .21, .24, 12); hub.rotateZ(Math.PI / 2); hub.translate(xx, .39, zz); hub.rotateY(rotation); this.mesh(hub, this.m.chrome, x, 0, z);
+    if(!this.detailedCarMaterials){
+      this.detailedCarMaterials={
+        glass:new T.MeshPhysicalMaterial({color:0x182b36,metalness:.25,roughness:.075,clearcoat:1,clearcoatRoughness:.04,envMapIntensity:1.6,side:T.DoubleSide}),
+        rubber:new T.MeshStandardMaterial({color:0x15181a,roughness:.88,side:T.DoubleSide}),alloy:this.mat(0xb7bdc1,.25,.86),trim:this.mat(0x454c50,.5,.4),
+        headlight:new T.MeshStandardMaterial({color:0xe6edf0,metalness:.3,roughness:.2}),
+        taillight:new T.MeshStandardMaterial({color:0x9d1720,roughness:.25,metalness:.15}),plate:this.mat(0xe2ded1,.55),accent:this.mat(0xe58948,.27,.5),
+      };
+      this.detailedCarTemplate=detailedCarGeometry();
     }
-    this.obstacle(x, z, rotation ? 4.3 : 2, rotation ? 2 : 4.3);
+    const paintColor=new T.Color(color).lerp(new T.Color(0x101b24),.83);
+    const materials={...this.detailedCarMaterials,paint:new T.MeshPhysicalMaterial({color:paintColor,metalness:.72,roughness:.2,clearcoat:1,clearcoatRoughness:.075,envMapIntensity:1.8,side:T.DoubleSide})};
+    for(const [name,template] of Object.entries(this.detailedCarTemplate)){
+      this.mesh(template.clone(),materials[name],x,0,z,rotation);
+    }
+    const c=Math.abs(Math.cos(rotation)),s=Math.abs(Math.sin(rotation));
+    this.obstacle(x,z,2.2*c+4.4*s,4.4*c+2.2*s);
   }
+
   details() {
     this.car(-29, 13, 0xb6c9c0); this.car(-29, -5, 0xd9b889); this.car(-19, -54, 0x849ba8); this.car(-19, 82, 0xcc795a, Math.PI); this.car(-80, 35, 0xeee6d3, Math.PI / 2);
     for (const [x, z] of [[-13, 15], [-13, -49], [-36, -70], [-36, 89]]) this.lamp(x, z);
