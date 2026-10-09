@@ -7,16 +7,16 @@ export class RiderCombat {
     this.attack = null; this.cooldown = 0; this.hits = 0;
     // Separate encounters: northern seafront and the western neighborhood road.
     this.rivals = [ { x:48,z:-185,yaw:Math.PI,walked:0,speed:2.8 }, { x:-142,z:90,yaw:0,walked:0,speed:2.8 } ]
-      .map((p,i)=>({...p,lane:p.x,stagger:0,knock:0,id:i}));
+      .map((p,i)=>({...p,lane:p.x,stagger:0,knock:0,attackCooldown:2+i,attackTime:0,id:i}));
   }
   start(type, side, player) {
     if (!['kick','punch'].includes(type) || ![1,-1].includes(side) || this.cooldown>0 || player.mode==='walking' || Math.abs(player.speed)<.65) return false;
     this.attack={type,side,time:0,resolved:false}; this.cooldown=type==='kick'?.7:.5; return true;
   }
-  update(dt, player, obstacles) {
+  update(dt, player, obstacles, pickups) {
     dt=Math.max(0,Math.min(dt,.05));
     this.cooldown=Math.max(0,this.cooldown-dt);
-    let hit=false;
+    let hit=false;this.incoming=null;
     for (const rival of this.rivals) {
       const nearby=Math.hypot(player.x-rival.x,player.z-rival.z)<16;
       // Patrol separate lanes across the expanded town, joining nearby riders.
@@ -31,6 +31,17 @@ export class RiderCombat {
       if(canOccupy(nextX,nextZ,obstacles,.65))rival.x=nextX;
       rival.walked+=Math.abs(nextZ-rival.z);rival.z=nextZ;
       rival.knock*=Math.exp(-5*dt);
+      rival.attackCooldown=Math.max(0,(rival.attackCooldown??2)-dt);
+      rival.attackTime=Math.max(0,(rival.attackTime??0)-dt);
+      const dx=player.x-rival.x,dz=player.z-rival.z;
+      if(dt>0&&player.mode!=='walking'&&Math.abs(player.speed)>.65&&rival.stagger===0&&rival.attackCooldown===0&&Math.abs(dx)>.4&&Math.abs(dx)<1.8&&Math.abs(dz)<.85){
+        rival.attackCooldown=4;rival.attackTime=.44;
+        rival.attackSide=(-dx*Math.cos(rival.yaw)-dz*Math.sin(rival.yaw))>0?1:-1;
+        if(pickups?.absorbHit())this.incoming='Shield blocked a rival kick!';
+        else {player.speed*=.6;this.incoming='Rival kick! Grab a blue shield for protection.';}
+      }
+      rival.attack=rival.attackTime>0?{type:'kick',side:rival.attackSide,weight:Math.sin(Math.PI*rival.attackTime/.44)}:null;
+
     }
     const attack=this.attack;
     if (player.mode==='walking') this.attack=null;

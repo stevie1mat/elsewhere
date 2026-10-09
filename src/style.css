@@ -25,3 +25,5 @@
 /* Keep combat buttons reachable alongside steering on narrow touch screens. */
 .touch-actions{display:grid;grid-template-columns:repeat(2,50px);gap:6px}
 @media(min-width:651px){.controls{flex-wrap:wrap;justify-content:center}.bottom-bar{gap:12px}}
+.pickup-hud{position:absolute;top:142px;right:32px;width:220px;padding:14px;border:1px solid #b4ded940;border-radius:12px;background:#163432e8;backdrop-filter:blur(12px);font-size:11px}.pickup-hud[hidden]{display:none}.pickup-hud>div{display:flex;align-items:center;justify-content:space-between;gap:8px}.pickup-hud label{display:flex;justify-content:space-between;margin-top:12px}.pickup-hud progress{width:100%;height:10px;accent-color:#60e0e8;margin:7px 0 12px}.pickup-hud button{font-size:10px;border-radius:5px;background:#315c58;padding:6px}.pickup-hud.boosting{border-color:#60e0e8;box-shadow:0 0 24px #60e0e840}.pickup-hud strong{color:#ffe094}@media(max-width:650px){.pickup-hud{top:auto;bottom:265px;right:12px;width:164px;padding:10px;font-size:10px}}
+.pickup-hud.collected{border-color:#ffe094;box-shadow:0 0 18px #ffe09450}

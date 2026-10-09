@@ -4,7 +4,7 @@ import { SPAWN,onLand } from './shared/movement.js';
 
 const token=()=>randomBytes(16).toString('hex');
 export function validPosition(p){
-  return p && ['x','z','yaw','walked','speed'].every(k=>Number.isFinite(p[k])) && onLand(p.x,p.z,p.mode==='walking'?.35:.95) && Math.abs(p.speed)<=10.1 && Math.abs(p.yaw)<1e8 && Math.abs(p.walked)<1e9;
+  return p && ['x','z','yaw','walked','speed'].every(k=>Number.isFinite(p[k])) && onLand(p.x,p.z,p.mode==='walking'?.35:.95) && Math.abs(p.speed)<=15.1 && Math.abs(p.yaw)<1e8 && Math.abs(p.walked)<1e9;
 }
 export class Rooms {
   constructor(now=Date.now){this.rooms=new Map();this.now=now;}

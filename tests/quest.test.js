@@ -1,3 +1,4 @@
+import { RoadPickups } from '../src/road-pickups.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as T from 'three';
@@ -36,5 +37,5 @@ test('all quest stops are reachable with bicycle clearance in the real neighborh
      if(!seen.has(key)&&canOccupy(nx,nz,w.obstacles)&&canOccupy(x+dx*.5,z+dz*.5,w.obstacles)){seen.add(key);queue.push([nx,nz]);}
    }
  }
- for(const stop of [...QUEST_STOPS,...LANDMARKS])assert.ok(seen.has(`${stop.x},${stop.z}`),`${stop.id} has a rideable approach`);
+ for(const stop of [...QUEST_STOPS,...LANDMARKS,...new RoadPickups(w.obstacles).items])assert.ok(seen.has(`${stop.x},${stop.z}`),`${stop.id} has a rideable approach`);
 });

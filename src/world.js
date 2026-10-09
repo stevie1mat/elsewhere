@@ -1,3 +1,5 @@
+import { flowerPlanterGeometry } from './flower-planter.js';
+import { RoadPickups, PickupDisplay } from './road-pickups.js';
 import { expandPorto } from './porto-expansion.js';
 import * as T from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -19,6 +21,7 @@ export class World {
     this.night = false; this.treePositions = []; this.seed = 427;
     this.loader = new T.TextureLoader(manager);
     this.materials(); this.environment(); this.ground(); this.neighborhood(); this.waterfront(); this.garden(); this.details(); if (location === 'porto') expandPorto(this); this.bake();
+    if(location==='porto'){this.pickups=new RoadPickups(this.obstacles);this.pickupDisplay=new PickupDisplay(scene,this.pickups);}
     this.questWorld = location !== 'porto' ? { addCharacter() { }, update() { } } : new QuestWorld(scene); this.questStage = 0; this.coopMode = false; this.carryParcel = true; this.remoteState = null;
     this.loadTrees(); this.loadPeople();
   }
@@ -260,9 +263,13 @@ export class World {
     this.cylinder(.07, .07, .16, x, 3.2, z, this.m.teak, 8);
   }
   planter(x, z) {
-    this.cylinder(.65, .5, .75, x, .375, z, this.m.terra, 12);
-    this.mesh(new T.SphereGeometry(.7, 10, 7), this.m.leaves, x, 1.15, z);
-    for (let i = 0; i < 9; i++) { const angle = i * 2.4; this.mesh(new T.IcosahedronGeometry(.16, 0), this.m.flower, x + Math.cos(angle) * .55, 1.4 + Math.sin(i) * .2, z + Math.sin(angle) * .55); }
+    if(!this.planterMaterials){
+      this.planterMaterials=Object.fromEntries(['pot','soil','wood','leaves','flowers'].map(name=>[name,
+        new T.MeshStandardMaterial({vertexColors:true,roughness:name==='leaves'?.72:.92,
+          side:name==='leaves'||name==='flowers'?T.DoubleSide:T.FrontSide})]));
+    }
+    const parts=flowerPlanterGeometry(Math.round((x+300)*7381+(z+300)*1931));
+    for(const [name,geometry] of Object.entries(parts))this.mesh(geometry,this.planterMaterials[name],x,0,z);
     this.obstacle(x, z, 1.15, 1.15);
   }
   bench(x, z, rotation = 0) {
@@ -386,7 +393,7 @@ export class World {
   }
   updateCombat(player, dt) {
     if (!this.combat) return false;
-    const hit = this.combat.update(dt, player, this.obstacles);
+    const hit = this.combat.update(dt, player, this.obstacles, this.pickups);
     this.combat.rivals.forEach((p, i) => {
       const rider = this.rivalCyclists[i]; rider.update(p, dt);
       rider.cycle.group.rotation.z = Math.sin(p.stagger * 18) * Math.min(.16, p.stagger * .2);

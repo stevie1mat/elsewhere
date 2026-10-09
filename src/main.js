@@ -45,6 +45,7 @@ document.querySelector('#app').innerHTML = `
       <button class="text-button" id="coop-button">Ride together</button>
       <button class="icon-button" id="settings-button" aria-label="Open settings" title="Settings">${icon('settings')}</button></div>
     </header>
+    <aside id="pickup-hud" class="pickup-hud" hidden aria-label="Road pickups"><div><strong id="coin-count">0 coins</strong><span id="shield-status">No shield</span></div><label for="nitro-meter">Nitro <span id="nitro-label">0%</span></label><progress id="nitro-meter" max="100" value="0"></progress><div><span>Hold B to boost</span><button id="buy-nitro">10 coins → +50%</button></div></aside>
     <div class="place-label"><i class="dot"></i><span>${worldName}</span><span> / &nbsp; ${isChai?'THE CHAI RUN':isMumbai?'Mukund Nagar lanes':'The southern coast'}</span></div>
     <section class="intro" id="intro"><div class="eyebrow"><span class="rule"></span>A place to just be</div><h1>${isChai?'Every drop<br><em>counts.</em>':'Take the<br><em>scenic route.</em>'}</h1><p>${isChai?'Hot chai. Busy streets. A delicate delivery.<br>Ride gently. Bring the neighborhood its tea.':isMumbai?'Start by the church. Follow the shade.<br>A little corner of Mumbai, yours to ride.':'Salt in the air. Sun on the pavement.<br>A little coastal world, yours to ride.'}</p>
       <button class="enter" id="enter" disabled><span>Preparing your world</span>${icon('arrow')}</button>
@@ -73,7 +74,7 @@ document.querySelector('#app').innerHTML = `
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <div class="discovery" id="discovery"><small>A little discovery</small><h2 id="discovery-name"></h2><p id="discovery-description"></p></div>
     <footer class="bottom-bar"><div class="world-tag">An open-world sketch <span>v0.1</span></div><div class="controls"><div class="control"><kbd>W / S</kbd><span>Pedal / reverse</span></div><div class="control"><kbd>A / D</kbd><span>Steer</span></div><div class="control"><kbd>⇧</kbd><span>Pedal faster</span></div><div class="control"><kbd>Space</kbd><span>Brake</span></div><div class="control"><kbd>J / L</kbd><span>Kick</span></div><div class="control"><kbd>U / O</kbd><span>Punch</span></div><div class="control"><kbd>Mouse</kbd><span>Orbit</span></div><div class="control"><kbd>P</kbd><span>Hide UI</span></div><div class="control"><button class="icon-button" id="help-button" aria-label="Cycling controls" style="width:26px;height:26px">${icon('help')}</button></div></div><div class="bottom-note">BUILT FOR RIDING</div></footer>
-    <div class="touch-controls"><div class="dpad"><button data-key="KeyW" aria-label="Pedal forward">↑</button><button data-key="KeyA" aria-label="Steer left">←</button><button data-key="KeyS" aria-label="Reverse">↓</button><button data-key="KeyD" aria-label="Steer right">→</button></div><div class="touch-actions"><button data-attack="kick,1" aria-label="Kick left">Kick ←</button><button data-attack="kick,-1" aria-label="Kick right">Kick →</button><button data-attack="punch,1" aria-label="Punch left">Punch ←</button><button data-attack="punch,-1" aria-label="Punch right">Punch →</button><button data-key="ShiftLeft" aria-label="Pedal faster">Fast</button><button data-key="Space" aria-label="Brake">Brake</button></div></div>
+    <div class="touch-controls"><div class="dpad"><button data-key="KeyW" aria-label="Pedal forward">↑</button><button data-key="KeyA" aria-label="Steer left">←</button><button data-key="KeyS" aria-label="Reverse">↓</button><button data-key="KeyD" aria-label="Steer right">→</button></div><div class="touch-actions"><button data-attack="kick,1" aria-label="Kick left">Kick ←</button><button data-attack="kick,-1" aria-label="Kick right">Kick →</button><button data-attack="punch,1" aria-label="Punch left">Punch ←</button><button data-attack="punch,-1" aria-label="Punch right">Punch →</button><button data-key="KeyB" aria-label="Use nitro boost">Nitro</button><button data-key="ShiftLeft" aria-label="Pedal faster">Fast</button><button data-key="Space" aria-label="Brake">Brake</button></div></div>
   </div>
   <button class="photo-exit" id="photo-exit">Show interface · P</button>
   <dialog id="map-dialog" aria-label="Expanded neighborhood map"></dialog>
@@ -89,7 +90,7 @@ document.querySelector('#app').innerHTML = `
     <p class="credits">Scanned stone, plaster &amp; timber surfaces bundled locally.<br>Scenery textures & tree: <a href="https://polyhaven.com/license" target="_blank" rel="noopener">Poly Haven · CC0</a><br>Animated pedestrians: <a href="https://github.com/microsoft/Microsoft-Rocketbox" target="_blank" rel="noopener">Microsoft Rocketbox · MIT</a></p>
   </dialog>
   <dialog id="help"><div class="dialog-title"><h2>A little room to roam.</h2><button class="icon-button" data-close aria-label="Close controls">${icon('close')}</button></div><div class="keys">
-    <div class="key-row"><span>Kick left / right (Porto Sol)</span><kbd>J / L</kbd></div><div class="key-row"><span>Punch left / right (Porto Sol)</span><kbd>U / O</kbd></div><div class="key-row"><span>Get off / on bicycle (Porto Sol)</span><kbd>X</kbd></div><div class="key-row"><span>Wardrobe (Porto Sol)</span><kbd>V</kbd></div><div class="key-row"><span>Pedal / walk / reverse</span><kbd>W S / ↑ ↓</kbd></div><div class="key-row"><span>Orbit camera</span><kbd>Mouse / drag</kbd></div><div class="key-row"><span>Steer</span><kbd>A D / Q E / ← →</kbd></div><div class="key-row"><span>Pedal faster</span><kbd>Shift</kbd></div><div class="key-row"><span>Brake</span><kbd>Space</kbd></div><div class="key-row"><span>Release cursor</span><kbd>Esc</kbd></div><div class="key-row"><span>Hide interface</span><kbd>P</kbd></div><div class="key-row"><span>Return to start</span><kbd>R</kbd></div><div class="key-row"><span>Talk / inspect nearby clue</span><kbd>F</kbd></div><div class="key-row"><span>Center camera behind bike</span><kbd>C</kbd></div><div class="key-row"><span>Expand / close map</span><kbd>M</kbd></div><div class="key-row"><span>Map zoom / reset</span><kbd>+ − / 0</kbd></div>
+    <div class="key-row"><span>Use collected nitro while pedaling</span><kbd>Hold B</kbd></div><div class="key-row"><span>Kick left / right (Porto Sol)</span><kbd>J / L</kbd></div><div class="key-row"><span>Punch left / right (Porto Sol)</span><kbd>U / O</kbd></div><div class="key-row"><span>Get off / on bicycle (Porto Sol)</span><kbd>X</kbd></div><div class="key-row"><span>Wardrobe (Porto Sol)</span><kbd>V</kbd></div><div class="key-row"><span>Pedal / walk / reverse</span><kbd>W S / ↑ ↓</kbd></div><div class="key-row"><span>Orbit camera</span><kbd>Mouse / drag</kbd></div><div class="key-row"><span>Steer</span><kbd>A D / Q E / ← →</kbd></div><div class="key-row"><span>Pedal faster</span><kbd>Shift</kbd></div><div class="key-row"><span>Brake</span><kbd>Space</kbd></div><div class="key-row"><span>Release cursor</span><kbd>Esc</kbd></div><div class="key-row"><span>Hide interface</span><kbd>P</kbd></div><div class="key-row"><span>Return to start</span><kbd>R</kbd></div><div class="key-row"><span>Talk / inspect nearby clue</span><kbd>F</kbd></div><div class="key-row"><span>Center camera behind bike</span><kbd>C</kbd></div><div class="key-row"><span>Expand / close map</span><kbd>M</kbd></div><div class="key-row"><span>Map zoom / reset</span><kbd>+ − / 0</kbd></div>
     </div><p>On a touch screen, use the arrows to pedal and steer, and drag to orbit the camera. Ride near a landmark to discover it.</p></dialog>`;
 
 const $ = s => document.querySelector(s);
@@ -217,13 +218,21 @@ function strike(type,side){
   if(player.mode==='walking'||Math.abs(player.speed)<.65){toast('Start riding to kick or punch.');return;}
   world.combat.start(type,side,player);
 }
+$('#buy-nitro').onclick=()=>{if(started&&!modalOpen()&&world?.pickups?.buyNitro()){toast('Nitro +50% · Hold B while pedaling');pickupSound();updateHUD();}};
+function pickupSound(){
+  if(!soundOn||!audioContext||audioContext.state!=='running')return;
+  const tone=audioContext.createOscillator(),gain=audioContext.createGain(),t=audioContext.currentTime;
+  tone.frequency.setValueAtTime(660,t);tone.frequency.exponentialRampToValueAtTime(1100,t+.1);
+  gain.gain.setValueAtTime(.045,t);gain.gain.exponentialRampToValueAtTime(.001,t+.18);
+  tone.connect(gain);gain.connect(audioContext.destination);tone.start(t);tone.stop(t+.2);
+}
 function releaseKeys(){keys.clear();player.vx=player.vz=player.speed=0;}
 function modalOpen(){return !!document.querySelector('dialog[open]');}
 function updateDiscoveries(){
   $('#discovered-count').textContent=`${discovered.size} / ${LANDMARKS.length}`;
   document.querySelectorAll('.destination').forEach(button=>{const id=button.dataset.destination;button.classList.toggle('visited',discovered.has(id));button.classList.toggle('active',id===selected);button.setAttribute('aria-pressed',String(id===selected));button.querySelector('.destination-number').textContent=discovered.has(id)?'✓':LANDMARKS.find(l=>l.id===id).number;});
 }
-function reset(){world?.combat?.reset();player.attack=null;Object.assign(player,createPlayer());refreshTravel();if(isChai){chai=createChai();if(world)world.delivery=chai;}orbitYaw=0;releaseKeys();toast(isChai?'Fresh start at Asha’s chai stall.':isMumbai?'Back outside the church.':'Back where the sea meets the street.');}
+function reset(){world?.pickups?.reset();world?.combat?.reset();player.attack=null;Object.assign(player,createPlayer());refreshTravel();if(isChai){chai=createChai();if(world)world.delivery=chai;}orbitYaw=0;releaseKeys();toast(isChai?'Fresh start at Asha’s chai stall.':isMumbai?'Back outside the church.':'Back where the sea meets the street.');}
 function setNight(value){night=value;world?.setNight(night);$('#time-label').textContent=night?'Blue hour':'Golden hour';$('#time-toggle').querySelector('svg').outerHTML=icon(night?'moon':'sun');$('#time-toggle').setAttribute('aria-label',night?'Switch to golden hour':'Switch to blue hour');document.querySelectorAll('[data-time]').forEach(b=>b.classList.toggle('active',(b.dataset.time==='night')===night));savePrefs();}
 function setQuality(value){quality=value;if(renderer){renderer.setPixelRatio(Math.min(devicePixelRatio,quality==='high'?1.25:1));renderer.shadowMap.enabled=quality==='high';renderer.setSize(innerWidth,innerHeight);}document.querySelectorAll('[data-quality]').forEach(b=>b.classList.toggle('active',b.dataset.quality===quality));savePrefs();}
 function setBob(){ $('#bob-toggle').textContent=bob?'On':'Off';$('#bob-toggle').setAttribute('aria-pressed',String(bob)); }
@@ -317,12 +326,16 @@ function initialize(){
       elapsed+=dt;const active=started&&!modalOpen();
       if(isChai)world.updateStreet(active?dt:0,player);
       if(active){
-        stepPlayer(player,{forward:(keys.has('KeyW')||keys.has('ArrowUp')?1:0)-(keys.has('KeyS')||keys.has('ArrowDown')?1:0),right:(keys.has('KeyD')||keys.has('KeyE')||keys.has('ArrowRight')?1:0)-(keys.has('KeyA')||keys.has('KeyQ')||keys.has('ArrowLeft')?1:0),sprint:keys.has('ShiftLeft')||keys.has('ShiftRight'),brake:keys.has('Space')},dt,isChai?world.obstacles.concat(world.dynamicObstacles):world.obstacles,isUrban?URBAN_BOUNDS:PORTO_BOUNDS);
+        stepPlayer(player,{forward:(keys.has('KeyW')||keys.has('ArrowUp')?1:0)-(keys.has('KeyS')||keys.has('ArrowDown')?1:0),right:(keys.has('KeyD')||keys.has('KeyE')||keys.has('ArrowRight')?1:0)-(keys.has('KeyA')||keys.has('KeyQ')||keys.has('ArrowLeft')?1:0),sprint:keys.has('ShiftLeft')||keys.has('ShiftRight'),brake:keys.has('Space'),boost:world.pickups?.boost(dt,player,keys.has('KeyB')&&(keys.has('KeyW')||keys.has('ArrowUp')),keys.has('Space'))},dt,isChai?world.obstacles.concat(world.dynamicObstacles):world.obstacles,isUrban?URBAN_BOUNDS:PORTO_BOUNDS);
         if(isChai)stepChai(chai,player,dt);
+        const collected=world.pickups?.update(dt,player)??[];
+        if(collected.length){toast(collected.at(-1));pickupSound();}
 
       }
       if(world.cyclist?.applyLook&&world.cyclist.look!==characterLook){world.cyclist.applyLook(characterLook);characterLook=world.cyclist.look;}
       if(world.updateCombat(player,active?dt:0))toast(`Hit! Rival staggered · ${world.combat.hits} hits`);
+      if(world.combat?.incoming)toast(world.combat.incoming);
+      world.pickupDisplay?.update(player);
       world.cyclist?.update(player,active?dt:0);
       world.updateRemote(dt);
       // Orbit around the visible rider; the bike's heading is independent of the mouse.
@@ -351,6 +364,16 @@ function initialize(){
 }
 
 function updateHUD(){
+  const pickups=world?.pickups;
+  $('#pickup-hud').hidden=!started||!pickups;
+  if(pickups){
+    $('#coin-count').textContent=`${pickups.coins} coins`;
+    $('#shield-status').textContent=pickups.shield?'Shield ready':'No shield';
+    $('#nitro-meter').value=pickups.nitro;$('#nitro-label').textContent=`${Math.ceil(pickups.nitro)}%`;
+    $('#pickup-hud').classList.toggle('boosting',pickups.boosting&&player.speed>10);
+    $('#pickup-hud').classList.toggle('collected',pickups.flash>0);
+    $('#buy-nitro').disabled=pickups.coins<10||pickups.nitro>=100;
+  }
   refreshTravel();
   updateQuest();
   for(const landmark of LANDMARKS){const distance=Math.hypot(player.x-landmark.x,player.z-landmark.z);$(`#distance-${landmark.id}`).textContent=`${Math.round(distance)}m`;
@@ -478,7 +501,7 @@ function addControls(){
     if(event.code==='KeyF'&&!event.repeat){event.preventDefault();talk();return;}
     if(event.code==='KeyC'&&!event.repeat){orbitYaw=0;return;}
     if(event.code==='KeyR'&&!event.repeat){reset();return;}
-    if(['KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE','ShiftLeft','ShiftRight','Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(event.code)){event.preventDefault();if(event.code!=='Space'||!event.repeat)keys.add(event.code);}
+    if(['KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE','KeyB','ShiftLeft','ShiftRight','Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(event.code)){event.preventDefault();if(event.code!=='Space'||!event.repeat)keys.add(event.code);}
   });
   window.addEventListener('keyup',event=>keys.delete(event.code));window.addEventListener('blur',()=>{releaseKeys();dragging=false;audioContext?.suspend();});window.addEventListener('focus',()=>{if(soundOn)audioContext?.resume();});
   document.addEventListener('visibilitychange',()=>{releaseKeys();if(document.hidden)audioContext?.suspend();else if(soundOn)audioContext?.resume();});

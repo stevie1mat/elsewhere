@@ -30,9 +30,10 @@ export function stepPlayer(p, input, delta, obstacles, bounds = PORTO_BOUNDS) {
   const forward = Math.max(-1, Math.min(1, input.forward || 0));
   const steering = Math.max(-1, Math.min(1, input.right || 0));
   const walking = p.mode === 'walking';
-  const maxSpeed = walking ? (input.sprint ? 4.2 : 2.2) : (input.sprint ? 10 : 6);
+  const boosted = !walking && input.boost && forward > 0 && !input.brake;
+  const maxSpeed = boosted ? 15 : walking ? (input.sprint ? 4.2 : 2.2) : (input.sprint ? 10 : 6);
   const targetSpeed = forward > 0 ? maxSpeed : forward < 0 ? (walking ? -1.5 : -2.5) : 0;
-  const acceleration = input.brake ? 18 : forward ? (walking ? 12 : 4) : (walking ? 14 : 1.8);
+  const acceleration = input.brake ? 18 : forward ? (walking ? 12 : boosted ? 11 : 4) : (walking ? 14 : 1.8);
   const target = input.brake ? 0 : targetSpeed;
   p.speed += Math.sign(target-p.speed)*Math.min(Math.abs(target-p.speed), acceleration*dt);
   p.steering += (steering-p.steering)*(1-Math.exp(-10*dt));
