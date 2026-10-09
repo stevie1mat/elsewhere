@@ -5,7 +5,8 @@ export class RiderCombat {
   constructor() { this.reset(); }
   reset() {
     this.attack = null; this.cooldown = 0; this.hits = 0;
-    this.rivals = [ { x:45.6,z:65,yaw:0,walked:0,speed:0 }, { x:48.4,z:67,yaw:0,walked:0,speed:0 } ]
+    // Separate encounters: northern seafront and the western neighborhood road.
+    this.rivals = [ { x:48,z:-185,yaw:Math.PI,walked:0,speed:2.8 }, { x:-142,z:90,yaw:0,walked:0,speed:2.8 } ]
       .map((p,i)=>({...p,lane:p.x,stagger:0,knock:0,id:i}));
   }
   start(type, side, player) {
@@ -18,14 +19,14 @@ export class RiderCombat {
     let hit=false;
     for (const rival of this.rivals) {
       const nearby=Math.hypot(player.x-rival.x,player.z-rival.z)<16;
-      // Ride beside the player along the promenade; turn around at either end.
+      // Patrol separate lanes across the expanded town, joining nearby riders.
       const heading=nearby&&Math.abs(Math.cos(player.yaw))>.65 ? (Math.cos(player.yaw)>0?0:Math.PI) : rival.yaw;
       rival.yaw=heading;
       rival.stagger=Math.max(0,rival.stagger-dt);
       const target=rival.stagger>0?.7:nearby?Math.max(0,Math.abs(player.speed)) : 2.8;
       rival.speed+=(target-rival.speed)*(1-Math.exp(-4*dt));
       let nextZ=rival.z-Math.cos(rival.yaw)*rival.speed*dt;
-      if (nextZ < -106 || nextZ > 105 || !canOccupy(rival.x,nextZ,obstacles,.65)) {rival.yaw+=Math.PI;nextZ=rival.z;}
+      if (nextZ < -246 || nextZ > 186 || !canOccupy(rival.x,nextZ,obstacles,.65)) {rival.yaw+=Math.PI;nextZ=rival.z;}
       const nextX=rival.x+(rival.knock+(rival.lane-rival.x)*.6)*dt;
       if(canOccupy(nextX,nextZ,obstacles,.65))rival.x=nextX;
       rival.walked+=Math.abs(nextZ-rival.z);rival.z=nextZ;

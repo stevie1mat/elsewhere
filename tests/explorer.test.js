@@ -55,3 +55,30 @@ test('co-op snapshots preserve parked bikes and reject malformed walking positio
   assert.equal(rooms.position(room,remote,{...p,bike:{...p.bike,x:NaN}}),false);
   assert.equal(rooms.position(room,remote,{...p,bike:null}),false);
 });
+
+test('wardrobe tints shirt fabric without recoloring skin, shorts, shoes, or another rider',async()=>{
+  const data=await readFile(new URL('../public/assets/people/traveler-man.glb',import.meta.url));
+  const gltf=await new GLTFLoader().parseAsync(data.buffer.slice(data.byteOffset,data.byteOffset+data.byteLength),'');
+  gltf.scene.traverse(o=>{if(o.isMesh)o.material.name=o.material.name.includes('body')?'body':o.material.name.includes('head')?'head':'opacity';});
+  const explorer=new Explorer(gltf.scene),friend=new Explorer(gltf.scene);
+  for(const outfit of ['ocean','terracotta','sage','midnight']){
+    explorer.applyLook({outfit});
+    for(const model of [explorer.cycle.rider,explorer.walker]){
+      const mesh=model.getObjectByName('mesh_0'),uv=mesh.geometry.attributes.uv,color=mesh.geometry.attributes.color;
+      let shirt=0,protectedVertices=0,sleeves=0;
+      for(const i of mesh.geometry.index.array){
+        const u=uv.getX(i),y=1-uv.getY(i);
+        if((u<.3||u>.7)&&(y<.42||y>.64)){
+          assert.equal(color.getX(i),1);assert.equal(color.getY(i),1);assert.equal(color.getZ(i),1);protectedVertices++;
+        }
+        if(color.getX(i)<.99){shirt++;if(u<.3||u>.7)sleeves++;}
+      }
+      assert.ok(shirt>100&&sleeves>20&&protectedVertices>100,'both shirt and sleeves are tinted while other atlas regions stay neutral');
+      assert.equal(mesh.material.color.getHex(),0xffffff);
+    }
+  }
+  assert.ok(friend.cycle.rider.getObjectByName('mesh_0').geometry.attributes.color.array.every(x=>x===1));
+  explorer.applyLook({outfit:'original'});
+  assert.ok(explorer.cycle.rider.getObjectByName('mesh_0').geometry.attributes.color.array.every(x=>x===1));
+  assert.equal(gltf.scene.getObjectByName('mesh_0').geometry.attributes.color,undefined);
+});

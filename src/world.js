@@ -1,3 +1,4 @@
+import { expandPorto } from './porto-expansion.js';
 import * as T from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -17,7 +18,7 @@ export class World {
     this.obstacles = []; this.cameraColliders = []; this.batches = new Map(); this.walkers = []; this.birds = []; this.lights = [];
     this.night = false; this.treePositions = []; this.seed = 427;
     this.loader = new T.TextureLoader(manager);
-    this.materials(); this.environment(); this.ground(); this.neighborhood(); this.waterfront(); this.garden(); this.details(); this.bake();
+    this.materials(); this.environment(); this.ground(); this.neighborhood(); this.waterfront(); this.garden(); this.details(); if (location === 'porto') expandPorto(this); this.bake();
     this.questWorld = location !== 'porto' ? { addCharacter() { }, update() { } } : new QuestWorld(scene); this.questStage = 0; this.coopMode = false; this.carryParcel = true; this.remoteState = null;
     this.loadTrees(); this.loadPeople();
   }
@@ -163,19 +164,19 @@ export class World {
     this.cylinder(3.4, 3.4, .3, 188, 25, -161, this.m.trim, 16);
   }
   ground() {
-    this.box(184, 3, 260, -28, -1.53, -10, this.m.sand);
-    this.box(184, .06, 260, -28, -.03, -10, this.m.pavement);
-    this.box(15, .04, 258, -24, .008, -10, this.m.road);
-    this.box(181, .04, 14, -28, .01, 40, this.m.road);
-    for (let z = -134; z < 116; z += 9) { if (Math.abs(z - 40) > 12) this.box(.13, .01, 4, -24, .035, z, this.m.stripe); }
-    for (let x = -115; x < 63; x += 9) { if (Math.abs(x + 24) > 10) this.box(4, .01, .13, x, .04, 40, this.m.stripe); }
+    this.box(304, 3, 460, -88, -1.53, -30, this.m.sand);
+    this.box(304, .06, 460, -88, -.03, -30, this.m.pavement);
+    this.box(15, .04, 458, -24, .008, -30, this.m.road);
+    this.box(301, .04, 14, -88, .01, 40, this.m.road);
+    for (let z = -254; z < 196; z += 9) { if (Math.abs(z - 40) > 12) this.box(.13, .01, 4, -24, .035, z, this.m.stripe); }
+    for (let x = -235; x < 63; x += 9) { if (Math.abs(x + 24) > 10) this.box(4, .01, .13, x, .04, 40, this.m.stripe); }
     for (const z of [28, 51]) for (let x = -30; x < -17; x += 1.6)this.box(.8, .012, 3.4, x, .04, z, this.m.stripe);
     for (const x of [-36, -12]) for (let z = 35; z < 46; z += 1.6)this.box(3.4, .012, .8, x, .04, z, this.m.stripe);
     for (const x of [-32.2, -15.8]) { this.box(.25, .18, 166, x, .05, -56, this.m.trim); this.box(.25, .18, 67, x, .05, 85, this.m.trim); }
-    this.box(.4, 1.25, 260, 64, -.6, -10, this.m.cream);
+    this.box(.4, 1.25, 460, 64, -.6, -30, this.m.cream);
     // Fine paving joints along the pedestrian waterfront.
-    for (let x = 38; x <= 63; x += 3.5)this.box(.018, .006, 259, x, .009, -10, this.m.sand);
-    for (let z = -139; z < 120; z += 3.5)this.box(26, .006, .018, 51, .01, z, this.m.sand);
+    for (let x = 38; x <= 63; x += 3.5)this.box(.018, .006, 459, x, .009, -30, this.m.sand);
+    for (let z = -259; z < 200; z += 3.5)this.box(26, .006, .018, 51, .01, z, this.m.sand);
   }
   sign(text, x, y, z, w = 5, h = .85, rotation = 0, background = '#254544', color = '#f4e8cf') {
     const tex = this.canvasTexture((c, cw, ch) => { c.fillStyle = background; c.fillRect(0, 0, cw, ch); c.fillStyle = color; c.textAlign = 'center'; c.textBaseline = 'middle'; c.font = `500 ${Math.min(ch * .46, cw / (text.length * .72))}px Georgia`; c.fillText(text, cw / 2, ch / 2); }, 1024, 192);

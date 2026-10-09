@@ -1,12 +1,14 @@
 export function mapProjection(view,player,width,height){
-  const scale=1.13*view.zoom*Math.min(width/356,height/344);
+  const bounds=view.bounds;
+  const scale=bounds?Math.min(width/(bounds.maxX-bounds.minX+36),height/(bounds.maxZ-bounds.minZ+36))*view.zoom:1.13*view.zoom*Math.min(width/356,height/344);
   const follow=Math.min(1,(view.zoom-1)*2);
-  const center=view.center??{x:(26/1.13)*(1-follow)+player.x*follow,z:(-1/1.13)*(1-follow)+player.z*follow};
+  const overview=bounds?{x:(bounds.minX+bounds.maxX)/2,z:(bounds.minZ+bounds.maxZ)/2}:{x:26/1.13,z:-1/1.13};
+  const center=view.center??{x:overview.x*(1-follow)+player.x*follow,z:overview.z*(1-follow)+player.z*follow};
   return {scale,center,ox:width/2-center.x*scale,oz:height/2-center.z*scale};
 }
 export function panMap(view,player,width,height,dx,dy){
   const {scale,center}=mapProjection(view,player,width,height);
-  view.center={x:Math.max(-180,Math.min(180,center.x-dx/scale)),z:Math.max(-200,Math.min(180,center.z-dy/scale))};
+  view.center={x:Math.max(view.bounds?view.bounds.minX-30:-180,Math.min(view.bounds?view.bounds.maxX+30:180,center.x-dx/scale)),z:Math.max(view.bounds?view.bounds.minZ-30:-200,Math.min(view.bounds?view.bounds.maxZ+30:180,center.z-dy/scale))};
 }
 export function zoomMap(view,player,width,height,zoom,anchor){
   const before=mapProjection(view,player,width,height);

@@ -12,9 +12,33 @@ export function normalizeLook(value) {
 // Accessories are authored at human scale then attached to the animated rig.
 function dress(model) {
   const clothing=[];
+  model.updateWorldMatrix(true,true);
   model.traverse(o=>{
     if(!o.isMesh)return;
-    const prepare=m=>{ const own=m.clone(); if(m.name==='body')clothing.push(own); return own; };
+    const materials=Array.isArray(o.material)?o.material:[o.material];
+    const hasShirt=materials.some(m=>m.name==='body');
+    if(hasShirt){
+      // The body atlas also contains bare arms, legs, shorts and shoes. Mask the
+      // shirt islands in the neutral rig, before cycling or walking bends it.
+      o.geometry=o.geometry.clone();
+      const uv=o.geometry.attributes.uv, mask=new Uint8Array(uv.count);
+      const joints=o.geometry.attributes.skinIndex, weights=o.geometry.attributes.skinWeight;
+      for(let i=0;i<uv.count;i++){
+        const u=uv.getX(i), imageY=1-uv.getY(i);
+        let armWeight=0;
+        for(let j=0;j<4;j++){
+          const bone=o.skeleton?.bones[joints?.getComponent(i,j)];
+          if(bone&&/UpperArm|Forearm|Clavicle/.test(bone.name))armWeight+=weights.getComponent(i,j);
+        }
+        const torso=u>.325&&u<.675&&imageY<.86;
+        const sleeve=(u<.31||u>.69)&&imageY>.433&&imageY<.615&&armWeight>.5;
+        mask[i]=torso||sleeve?1:0;
+      }
+      const colors=new T.Float32BufferAttribute(new Float32Array(uv.count*3).fill(1),3);
+      o.geometry.setAttribute('color',colors);
+      clothing.push({colors,mask});
+    }
+    const prepare=m=>{const own=m.clone();if(m.name==='body'){own.color.set(0xffffff);own.vertexColors=true;}return own;};
     o.material=Array.isArray(o.material)?o.material.map(prepare):prepare(o.material);
   });
   const gear={};
@@ -47,7 +71,11 @@ function dress(model) {
     for(const x of [-.09,.09])add(g,new T.BoxGeometry(.008,.008,.105),dark,x,.01,-.045);
   });
   return look=>{
-    clothing.forEach(m=>m.color.set(OUTFITS[look.outfit]));
+    const tint=new T.Color(OUTFITS[look.outfit]);
+    clothing.forEach(({colors,mask})=>{
+      for(let i=0;i<mask.length;i++)colors.setXYZ(i,mask[i]?tint.r:1,mask[i]?tint.g:1,mask[i]?tint.b:1);
+      colors.needsUpdate=true;
+    });
     for(const key of ['helmet','backpack','sunglasses'])gear[key].visible=look[key];
   };
 }

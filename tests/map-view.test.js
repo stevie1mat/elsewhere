@@ -26,3 +26,9 @@ test('wheel zoom keeps the world point beneath the cursor stationary',()=>{
  assert.ok(Math.abs(point.x*b.scale+b.ox-anchor.x)<1e-8);
  assert.ok(Math.abs(point.z*b.scale+b.oz-anchor.y)<1e-8);
 });
+test('expanded overview includes the whole town and pier',()=>{
+ const view={zoom:1,center:null,bounds:{minX:-239,maxX:117,minZ:-259,maxZ:199}};
+ const p=mapProjection(view,player,356,344);
+ for(const x of [-239,117])assert.ok(x*p.scale+p.ox>0&&x*p.scale+p.ox<356);
+ for(const z of [-259,199])assert.ok(z*p.scale+p.oz>0&&z*p.scale+p.oz<344);
+});

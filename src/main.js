@@ -1,3 +1,4 @@
+import { PORTO_ROADS } from './porto-expansion.js';
 import * as THREE from 'three';
 import { World } from './world.js';
 import { ATTACK_KEYS } from './rider-combat.js';
@@ -5,7 +6,7 @@ import { MumbaiWorld } from './mumbai-world.js';
 import { ChaiWorld } from './chai-world.js';
 import { CHAI_SPAWN,CHAI_LANDMARKS,CHAI_ROADS,createChai,chaiTarget,canServe,serveChai,stepChai } from './chai.js';
 import { MUMBAI_SPAWN, MUMBAI_LANDMARKS, MUMBAI_ROADS } from './mumbai-layout.js';
-import { SPAWN as PORTO_SPAWN, LANDMARKS as PORTO_LANDMARKS, createPlayer as createPortoPlayer, stepPlayer, toggleTravelMode, validateSavedPosition } from './movement.js';
+import { SPAWN as PORTO_SPAWN, LANDMARKS as PORTO_LANDMARKS, PORTO_BOUNDS, URBAN_BOUNDS, createPlayer as createPortoPlayer, stepPlayer, toggleTravelMode, validateSavedPosition } from './movement.js';
 import './style.css';
 import { normalizeLook } from './explorer.js';
 import { mapProjection,panMap,zoomMap } from './map-view.js';
@@ -61,7 +62,7 @@ document.querySelector('#app').innerHTML = `
         <small class="wardrobe-note">Saved on this browser · Changes appear instantly</small>
       </section>
     </aside>
-    <section class="journey" aria-label="Places to discover"><div class="journey-head"><span>Around the neighborhood</span><strong id="discovered-count">0 / 3</strong></div>
+    <section class="journey" aria-label="Places to discover"><div class="journey-head"><span>Around the neighborhood</span><strong id="discovered-count">0 / ${LANDMARKS.length}</strong></div>
       ${LANDMARKS.map(l=>`<button class="destination" data-destination="${l.id}"><span class="destination-number">${l.number}</span><span>${l.name}</span><span class="distance" id="distance-${l.id}"></span></button>`).join('')}
       <p class="journey-hint" id="journey-hint">Choose a place to mark it on your map.</p>
     </section>
@@ -117,7 +118,7 @@ $('.character-tools').hidden=isUrban;
 const player = createPlayer();
 let started=false, ready=false, selected=null, elapsed=0, night=false, bob=!matchMedia('(prefers-reduced-motion: reduce)').matches, soundOn=false, quality='high';
 let orbitYaw=0;
-const mapView={zoom:1,center:null};
+const mapView={zoom:1,center:null,bounds:isUrban?null:{...PORTO_BOUNDS,maxX:117}};
 let mapExpanded=false;
 const cameraRay=new THREE.Raycaster(), cameraAim=new THREE.Vector3(), cameraDesired=new THREE.Vector3();
 let renderer, scene, camera, world, audioContext, audioGain, toastTimer, discoveryTimer;
@@ -219,7 +220,7 @@ function strike(type,side){
 function releaseKeys(){keys.clear();player.vx=player.vz=player.speed=0;}
 function modalOpen(){return !!document.querySelector('dialog[open]');}
 function updateDiscoveries(){
-  $('#discovered-count').textContent=`${discovered.size} / 3`;
+  $('#discovered-count').textContent=`${discovered.size} / ${LANDMARKS.length}`;
   document.querySelectorAll('.destination').forEach(button=>{const id=button.dataset.destination;button.classList.toggle('visited',discovered.has(id));button.classList.toggle('active',id===selected);button.setAttribute('aria-pressed',String(id===selected));button.querySelector('.destination-number').textContent=discovered.has(id)?'✓':LANDMARKS.find(l=>l.id===id).number;});
 }
 function reset(){world?.combat?.reset();player.attack=null;Object.assign(player,createPlayer());refreshTravel();if(isChai){chai=createChai();if(world)world.delivery=chai;}orbitYaw=0;releaseKeys();toast(isChai?'Fresh start at Asha’s chai stall.':isMumbai?'Back outside the church.':'Back where the sea meets the street.');}
@@ -306,7 +307,7 @@ function initialize(){
   manager.onLoad=finish;
   world=isChai?new ChaiWorld(scene,renderer,manager):isMumbai?new MumbaiWorld(scene,renderer,manager):new World(scene,renderer,manager);
   if(isChai)world.delivery=chai;
-  const saved=isChai?null:validateSavedPosition(storage.get('spot'),world.obstacles);if(saved)Object.assign(player,saved);
+  const saved=isChai?null:validateSavedPosition(storage.get('spot'),world.obstacles,isUrban?URBAN_BOUNDS:PORTO_BOUNDS);if(saved)Object.assign(player,saved);
   setNight(night);setQuality(quality);setBob();updateDiscoveries();updateQuest();
   setTimeout(()=>{if(!ready){finish();$('#loading-status').textContent='You can explore while the remaining details load.';}},25000);
   let previous=performance.now(),frames=0,frameClock=0,uiClock=0;
@@ -316,7 +317,7 @@ function initialize(){
       elapsed+=dt;const active=started&&!modalOpen();
       if(isChai)world.updateStreet(active?dt:0,player);
       if(active){
-        stepPlayer(player,{forward:(keys.has('KeyW')||keys.has('ArrowUp')?1:0)-(keys.has('KeyS')||keys.has('ArrowDown')?1:0),right:(keys.has('KeyD')||keys.has('KeyE')||keys.has('ArrowRight')?1:0)-(keys.has('KeyA')||keys.has('KeyQ')||keys.has('ArrowLeft')?1:0),sprint:keys.has('ShiftLeft')||keys.has('ShiftRight'),brake:keys.has('Space')},dt,isChai?world.obstacles.concat(world.dynamicObstacles):world.obstacles);
+        stepPlayer(player,{forward:(keys.has('KeyW')||keys.has('ArrowUp')?1:0)-(keys.has('KeyS')||keys.has('ArrowDown')?1:0),right:(keys.has('KeyD')||keys.has('KeyE')||keys.has('ArrowRight')?1:0)-(keys.has('KeyA')||keys.has('KeyQ')||keys.has('ArrowLeft')?1:0),sprint:keys.has('ShiftLeft')||keys.has('ShiftRight'),brake:keys.has('Space')},dt,isChai?world.obstacles.concat(world.dynamicObstacles):world.obstacles,isUrban?URBAN_BOUNDS:PORTO_BOUNDS);
         if(isChai)stepChai(chai,player,dt);
 
       }
@@ -360,7 +361,7 @@ function updateHUD(){
       if(discovered.size===LANDMARKS.length)$('#journey-hint').textContent='Every corner found. Stay a little longer.';
     }
   }
-  $('#zone').textContent=isChai?(player.z>50?'Chai bazaar':player.x<-60?'Flower market':'Motor works'):isMumbai?(player.x<-58&&Math.abs(player.z-20)<15?'Shrinagar Complex Road':player.z>30&&player.x>-10?'Church headquarters':Math.abs(player.z-20)<9?'Marigold lane':'Mukund Nagar lanes'):player.x>64?'The old pier':player.x<-36&&player.z>50?'Jardim do Sol':player.x>35?'Seafront promenade':'Old town';
+  $('#zone').textContent=isChai?(player.z>50?'Chai bazaar':player.x<-60?'Flower market':'Motor works'):isMumbai?(player.x<-58&&Math.abs(player.z-20)<15?'Shrinagar Complex Road':player.z>30&&player.x>-10?'Church headquarters':Math.abs(player.z-20)<9?'Marigold lane':'Mukund Nagar lanes'):player.x>64?'The old pier':player.z< -145?'Bairro do Mar':player.z>125?'Mercado Sul':player.x< -130?'Parque das Palmeiras':player.x<-36&&player.z>50?'Jardim do Sol':player.x>35?'Seafront promenade':'Old town';
   drawMap();
 }
 const mapCard=$('.map-card'),mapCanvas=$('#map'),mapHome=document.createComment('Map position');
@@ -429,7 +430,7 @@ function drawMap(){
     rect(-120,-140,184,260,'#737763');
     for(const r of (isChai?CHAI_ROADS:MUMBAI_ROADS))rect(r.x-r.w/2,r.z-r.d/2,r.w,r.d,'#c5bca2');
   }else{
-  rect(-120,-140,184,260,'#68786c');rect(-120,-140,156,260,'#526457');rect(-31.5,-140,15,260,'#a4ad92');rect(-120,33,184,14,'#a4ad92');rect(64,-42,53,12,'#b4b294');rect(-101.5,53,65,60,'#415c44');rect(-59.5,53,5,60,'#9aa784');rect(-101.5,67.5,65,5,'#9aa784');
+  rect(-240,-260,304,460,'#68786c');rect(-240,-260,276,460,'#526457');for(const road of PORTO_ROADS)rect(road.x-road.w/2,road.z-road.d/2,road.w,road.d,'#a4ad92');rect(-217,54.5,76,67,'#415c44');rect(64,-42,53,12,'#b4b294');rect(-101.5,53,65,60,'#415c44');rect(-59.5,53,5,60,'#9aa784');rect(-101.5,67.5,65,5,'#9aa784');
   }
   for(const b of world.obstacles){if(b.maxX-b.minX>10&&b.maxZ-b.minZ>10)rect(b.minX,b.minZ,b.maxX-b.minX,b.maxZ-b.minZ,'#c2baa0');}
   ctx.strokeStyle='#a0b9aa25';ctx.lineWidth=1;for(let x=0;x<w;x+=24){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke();}for(let y=0;y<h;y+=24){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}
