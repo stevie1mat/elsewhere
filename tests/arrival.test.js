@@ -41,8 +41,8 @@ test('arrival waits for an explicit drop after ten seconds and lands by parachut
   stepArrival(a,9.9);assert.equal(dropArrival(a),false);
   stepArrival(a,.1);assert.equal(a.phase,'balloon');assert.equal(arrivalPose(a,p).x,20);
   assert.equal(dropArrival(a,p),true);
-  stepArrival(a,3.5);assert.equal(arrivalPose(a,p).y,21);assert.equal(dropArrival(a),false);
-  stepArrival(a,3.5);assert.equal(a.phase,'landed');assert.deepEqual(arrivalPose(a,p),{x:20,y:0,z:10});
+  stepArrival(a,3.5,{player:p});assert.ok(arrivalPose(a,p).y>20&&arrivalPose(a,p).y<30);assert.equal(dropArrival(a),false);
+  stepArrival(a,10,{player:p});assert.equal(a.phase,'landed');assert.equal(arrivalPose(a,p).y,0);assert.ok(p.x>20,'wind drifts the canopy');
 });
 test('waiting keeps touring, and jumping preserves the chosen location through touchdown',()=>{
   const a=createArrival(),p={x:47,z:66};stepArrival(a,10);
@@ -50,12 +50,21 @@ test('waiting keeps touring, and jumping preserves the chosen location through t
   assert.ok(Math.hypot(chosen.x-first.x,chosen.z-first.z)>50);
   assert.equal(dropArrival(a,p),true);assert.deepEqual(arrivalPose(a,p),chosen);
   assert.equal(p.x,chosen.x);assert.equal(p.z,chosen.z);
-  stepArrival(a,7);assert.deepEqual(arrivalPose(a,p),{x:chosen.x,y:0,z:chosen.z});
+  stepArrival(a,15,{player:p});assert.equal(a.phase,'landed');assert.equal(arrivalPose(a,p).y,0);assert.ok(Math.hypot(p.x-chosen.x,p.z-chosen.z)<30);
 });
 test('a blocked drop drifts to nearby clear ground and refuses a fully blocked area',()=>{
   const a=createArrival(),p={x:47,z:66};stepArrival(a,10);
   assert.equal(dropArrival(a,p,()=>false),false);assert.equal(a.phase,'balloon');
   assert.equal(dropArrival(a,p,(x,z)=>x>=49),true);
   assert.ok(p.x>=49);assert.deepEqual(arrivalPose(a,p),{x:47,y:42,z:66});
-  stepArrival(a,7);assert.equal(arrivalPose(a,p).x,p.x);
+  stepArrival(a,15,{player:p,canLand:(x,z)=>x>=49});assert.equal(a.phase,'landed');assert.equal(arrivalPose(a,p).x,p.x);assert.ok(p.x>=49);
+});
+test('parachute drag limits descent speed and steering/flare have physical effects',()=>{
+  const run=(hz,flare=false)=>{const a=createArrival(),p={x:0,z:0};stepArrival(a,10);dropArrival(a,p);let impact=0;
+    for(let i=0;i<hz*20&&a.phase!=='landed';i++){impact=a.canopy.vy;stepArrival(a,1/hz,{player:p,input:{right:.4,forward:flare?-1:1}});assert.ok(Math.abs(a.canopy.vy)<6);}
+    assert.equal(a.phase,'landed');return {a,p,impact};};
+  const a=run(30),b=run(120),f=run(60,true);
+  assert.ok(Math.hypot(a.p.x-b.p.x,a.p.z-b.p.z)<.2);
+  assert.ok(Math.abs(f.impact)<3);assert.ok(Math.abs(a.impact)>5);
+  assert.ok(Math.abs(a.a.heading)>.1);assert.ok(a.a.canopy.y===0);
 });

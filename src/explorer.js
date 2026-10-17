@@ -3,6 +3,7 @@ import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import { Cyclist, limb } from './cyclist.js';
 import {createParachutePack} from './flight-models.js';
 import {PoseOverride} from './pose-override.js';
+import {Locomotion} from './locomotion.js';
 import runData from '../public/assets/people/run-neutral.json' with {type:'json'};
 const RUN_CLIP=T.AnimationClip.parse(runData);
 
@@ -102,7 +103,7 @@ export class Explorer {
     this.idleLegs=[];
     this.walker.traverse(b=>{if(b.isBone&&/_(Thigh|Calf|Foot|Toe\d*)$/.test(b.name))this.idleLegs.push({bone:b,rotation:b.quaternion.clone()});});
     this.strideDuration=walkClip?.duration||1;this.lastWalked=null;
-    this.runWeight=0;this.gaitPhase=0;
+    this.locomotion=new Locomotion();
     this.mixer=new T.AnimationMixer(this.walker);
     this.walkAction=walkClip?this.mixer.clipAction(walkClip).play():null;
     this.runAction=this.mixer.clipAction(RUN_CLIP).setEffectiveWeight(0).play();
@@ -145,21 +146,15 @@ export class Explorer {
   update(p,dt=0) {
     this.flightPose.restore();
     const walking=p.mode==='walking';
+    const gait=this.locomotion.update(p,dt);
     if(!walking||p.bike)this.cycle.update(walking?{...p.bike,speed:0}:p,dt);
     this.cycle.rider.visible=!walking;
     this.cycle.group.visible=!walking||!!p.bike;
     this.walker.visible=!!walking;
     if(walking) {
       // Distance-driven strides avoid skating; restore overrides before evaluating tracks.
-      const distance=this.lastWalked===null?0:p.walked-this.lastWalked;
-      this.lastWalked=p.walked;
-      const running=p.speed>2.6&&p.grounded!==false&&(!p.arrival||p.arrival.phase==='landed');
-      this.runWeight+=(Number(running)-this.runWeight)*(1-Math.exp(-12*dt));
-      if(this.runWeight<.001)this.runWeight=0;
-      this.gaitPhase+=distance/(1.5+(3.25-1.5)*this.runWeight);
-      const phase=((this.gaitPhase%1)+1)%1;
-      if(this.walkAction){this.walkAction.time=phase*this.strideDuration;this.walkAction.setEffectiveWeight(1-this.runWeight);}
-      this.runAction.time=phase*RUN_CLIP.duration;this.runAction.setEffectiveWeight(this.runWeight);
+      if(this.walkAction){this.walkAction.time=gait.phase*this.strideDuration;this.walkAction.setEffectiveWeight(1-gait.runWeight);}
+      this.runAction.time=gait.phase*RUN_CLIP.duration;this.runAction.setEffectiveWeight(gait.runWeight);
       this.mixer.update(0);
       this.flightPose.capture();
       const idle=1-Math.min(1,Math.abs(p.speed)/.5);

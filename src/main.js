@@ -360,12 +360,12 @@ function initialize(){
     if(!document.hidden){
       elapsed+=dt;
       if(ready&&world.cyclist&&airborne()){
-        stepArrival(arrival,dt);document.body.classList.toggle('arriving',airborne());
+        stepArrival(arrival,dt,{player,input:movementInput(keys,'cycling'),canLand:(x,z)=>canOccupy(x,z,world.obstacles)});document.body.classList.toggle('arriving',airborne());
         const canDrop=arrival.phase==='balloon'&&arrival.elapsed>=JOURNEY_SECONDS;
         steerArrival(arrival,player,{forward:Number(keys.has('KeyW')||keys.has('ArrowUp'))-Number(keys.has('KeyS')||keys.has('ArrowDown')),right:Number(keys.has('KeyD')||keys.has('ArrowRight'))-Number(keys.has('KeyA')||keys.has('ArrowLeft')),orbitYaw},dt);
         $('#arrival-drop').hidden=!canDrop;
         $('#arrival-title').textContent=arrival.phase==='parachute'?'Welcome to the island.':canDrop?'Porto Sol, beneath your feet.':'Your island is on the horizon.';
-        $('#arrival-detail').textContent=arrival.phase==='parachute'?'Parachute open · Drag to look around':canDrop?'A / D turn · W cruise · S slow · Wind carries you · Drag to look':`Drag to look around · ${Math.max(0,Math.ceil(JOURNEY_SECONDS-arrival.elapsed))}s until you can fly`;
+        $('#arrival-detail').textContent=arrival.phase==='parachute'?'A/D steer · W glide · S flare near ground · Drag to look':canDrop?'A / D turn · W cruise · S slow · Wind carries you · Drag to look':`Drag to look around · ${Math.max(0,Math.ceil(JOURNEY_SECONDS-arrival.elapsed))}s until you can fly`;
         if(!airborne()){player.mode='walking';player.bike=null;selected='bikes';updateDiscoveries();refreshTravel();player.pitch=Math.max(.05,Math.min(.85,player.pitch));releaseKeys();toast('Landed on foot · Cycle House is marked on your map.');coop.position(player);}
       }
       const active=started&&!modalOpen()&&!airborne();
@@ -565,7 +565,7 @@ function addControls(){
     }
     if(airborne()){
       if(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(event.code)){
-        event.preventDefault();if(arrival.phase==='balloon'&&arrival.elapsed>=JOURNEY_SECONDS)keys.add(event.code);
+        event.preventDefault();if(arrival.phase==='parachute'||arrival.phase==='balloon'&&arrival.elapsed>=JOURNEY_SECONDS)keys.add(event.code);
       }
       return;
     }

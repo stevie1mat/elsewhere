@@ -34,6 +34,7 @@ export class Rooms {
       &&onLand(bike.x,bike.z)&&Math.abs(bike.yaw)<1e8&&Math.abs(bike.walked)<1e9));
     if(value.mode==='walking'&&!walking)return false;
     const arrival=value.arrival;
+    if(arrival?.canopy&&(!['x','y','z','vx','vy','vz'].every(k=>Number.isFinite(arrival.canopy[k]))||Math.abs(arrival.canopy.x)>600||Math.abs(arrival.canopy.z)>600||arrival.canopy.y<0||arrival.canopy.y>65||['vx','vy','vz'].some(k=>Math.abs(arrival.canopy[k])>25)))return false;
     for(const [key,limit] of [['heading',Math.PI+.001],['vx',20],['vz',20],['turnRate',1]])if(arrival?.[key]!=null&&(!Number.isFinite(arrival[key])||Math.abs(arrival[key])>limit))return false;
     if(arrival?.steering!=null&&(!Number.isFinite(arrival.steering)||Math.abs(arrival.steering)>1))return false;
     if(arrival?.pilot&&(!Number.isFinite(arrival.pilot.x)||!Number.isFinite(arrival.pilot.z)||!onLand(arrival.pilot.x,arrival.pilot.z)))return false;
@@ -43,6 +44,7 @@ export class Rooms {
     p.position={x:value.x,z:value.z,yaw:value.yaw,walked:value.walked,speed:value.speed,arrival:arrival?{phase:arrival.phase,elapsed:arrival.elapsed,...(arrival.from?{from:{x:arrival.from.x,y:arrival.from.y,z:arrival.from.z}}:{}),...(arrival.landing?{landing:{x:arrival.landing.x,z:arrival.landing.z}}:{})}:null,
       mode:walking?'walking':'cycling',bike:walking&&bike?{x:bike.x,z:bike.z,yaw:bike.yaw,walked:bike.walked}:null};
     if(arrival?.pilot)p.position.arrival.pilot={x:arrival.pilot.x,z:arrival.pilot.z};
+    if(arrival?.canopy)p.position.arrival.canopy=Object.fromEntries(['x','y','z','vx','vy','vz'].map(k=>[k,arrival.canopy[k]]));
     p.position.y=value.y??0;p.position.vy=value.vy??0;p.position.grounded=p.position.y<=.001;
     if(arrival?.steering!=null)p.position.arrival.steering=arrival.steering;
     for(const key of ['heading','vx','vz','turnRate'])if(arrival?.[key]!=null)p.position.arrival[key]=arrival[key];

@@ -4,6 +4,7 @@ import { RoadPickups, PickupDisplay } from './road-pickups.js';
 import { expandPorto } from './porto-expansion.js';
 import * as T from 'three';
 import {buildingDetails,drawRoofTiles,drawWindow} from './building-details.js';
+import {createShopBicycles,SHOP_BIKES} from './cycle-shop.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
@@ -24,6 +25,12 @@ function showArrival(scene,entry,rider,a,p){
   const pose=arrivalPose(a,p),phase=a?.phase??'landed';
   if(entry.flightPhase!==phase){removeFlight(scene,entry);entry.flightPhase=phase;if(phase!=='landed'){entry.flight=phase==='balloon'?createBalloon():createParachute();scene.add(entry.flight);}}
   if(entry.flight){entry.flight.position.set(pose.x,pose.y,pose.z);entry.flight.rotation.y=-(a.heading||0);animateBurner(entry.flight,a.elapsed);animateHelm(entry.flight,a.steering);}
+  if(phase==='parachute'&&entry.flight&&a.canopy){
+    const deployed=Math.min(1,a.elapsed/.9),nearGround=Math.min(1,pose.y/3);
+    entry.flight.scale.set(.7+.3*deployed,.9+.1*deployed,.7+.3*deployed);
+    entry.flight.rotation.z=((a.steering||0)*-.12+Math.sin(a.elapsed*1.9)*.025)*nearGround;
+    entry.flight.rotation.x=Math.sin(a.elapsed*1.5)*.035*nearGround;
+  }
   if(phase!=='landed'&&rider?.walker){rider.group.position.y=0;rider.cycle.group.visible=false;rider.walker.visible=true;rider.mixer.setTime(0);rider.walker.position.set(pose.x,pose.y,pose.z);rider.walker.rotation.y=Math.PI-p.yaw;}
   else if(rider?.cycle){rider.cycle.group.visible=p.mode!=='walking'||!!p.bike;rider.group.position.y=0;}
   if(phase==='balloon'&&rider?.walker){rider.walker.rotation.y=Math.PI-(a.heading||0);rider.walker.position.x+=Math.sin(a.heading||0)*.18;rider.walker.position.z-=Math.cos(a.heading||0)*.18;rider.holdBalloonWheel(entry.flight);}
@@ -295,11 +302,16 @@ export class World {
     this.building(14, 14, 20, 19, 10.7, this.m.cream, 'CAFÉ LUMA');
     this.building(13, -15, 22, 21, 14, this.m.peach, 'PORTO CYCLE HOUSE');
     this.sign('COLLECT A BICYCLE · F',25.5,1.8,-15,5,.5,Math.PI/2);
-    // Display bicycles beside the entrance, leaving the collection area clear.
-    for(const z of [-22,-19]){
-      for(const dz of [-.65,.65]){const wheel=new T.TorusGeometry(.34,.035,8,20);wheel.rotateY(Math.PI/2);this.mesh(wheel,this.m.tire,27,.37,z+dz);}
-      this.box(.07,.07,1.25,27,.7,z,this.m.sage);this.box(.07,.65,.07,27,.7,z-.45,this.m.chrome);this.box(.48,.05,.05,27,1.03,z-.45,this.m.dark);this.box(.22,.06,.3,27,.98,z+.25,this.m.dark);
-      this.obstacle(27,z,.6,2);
+    // A dedicated storefront and display plinth; the collection area stays clear.
+    for(const z of [-17,-13])this.box(.4,3.1,.22,24.35,1.55,z,this.m.wood);
+    this.box(.4,.22,4.2,24.35,3.05,-15,this.m.wood);
+    this.box(2.2,.12,6,27,.06,-20.5,this.m.trim);
+    this.sign('CITY BICYCLES · READY TO RIDE',28.15,.55,-20.5,5,.35,Math.PI/2);
+    this.scene.add(createShopBicycles());
+    for(const {x,z} of SHOP_BIKES){
+      this.obstacle(x,z,.7,2.1);
+      this.box(.6,.08,.45,x,.16,z-.62,this.m.dark);
+      this.box(.08,.42,.12,x+.19,.32,z-.62,this.m.chrome);
     }
     this.building(14, -48, 20, 23, 10.7, this.m.sage, 'LIVRARIA');
     this.building(11, -83, 25, 22, 17.3, this.m.cream, 'PORTO SOL');

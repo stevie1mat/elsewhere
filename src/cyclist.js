@@ -137,6 +137,8 @@ export class Cyclist {
       }
       for (const [material, geometries] of batches) { add(mergeGeometries(geometries), material, v(0, 0, 0), parent); geometries.forEach(g => g.dispose()); }
     }
+    // The shop uses this exact bicycle builder, without a rider or quest cargo.
+    if(!template)return;
     this.parcel = new T.Group(); this.parcel.name = 'Delivery parcel'; this.parcel.visible = false;
     const paper = new T.MeshStandardMaterial({ color: 0xbc9364, roughness: 1 });
     add(new T.BoxGeometry(.32, .025, .34), metal, v(0, .915, -.62), this.parcel);
