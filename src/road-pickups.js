@@ -29,6 +29,7 @@ export class RoadPickups {
   }
   reset(){
     this.nitro=0;this.coins=0;this.shield=false;this.boosting=false;this.flash=0;this.time=0;
+    this.collected={coin:0,nitro:0,shield:0,mystery:0};
     const positions=pickupLocations(this.obstacles,this.random,this.items.length||64);
     if(!this.items.length)this.items=positions.map(p=>({...p,cooldown:0}));
     else this.items.forEach((p,i)=>{
@@ -48,7 +49,8 @@ export class RoadPickups {
     const messages=[];this.time+=dt;this.flash=Math.max(0,this.flash-dt);
     for(const item of this.items){
       item.cooldown=Math.max(0,item.cooldown-dt);
-      if(dt<=0||item.cooldown>0||p.mode==='walking'||Math.abs(p.speed)<.1||Math.hypot(item.x-p.x,item.z-p.z)>1.15)continue;
+      if(dt<=0||item.cooldown>0||(p.y||0)>1.6||Math.hypot(item.x-p.x,item.z-p.z)>1.15)continue;
+      this.collected[item.type]++;
       const type=item.type==='mystery'?['nitro','coin','shield'][Math.min(2,Math.floor(this.random()*3))]:item.type;
       if(type==='nitro'){this.nitro=Math.min(100,this.nitro+50);messages.push('Nitro +50% · Hold B while pedaling');}
       if(type==='coin'){this.coins+=item.type==='mystery'?10:1;messages.push(item.type==='mystery'?'Mystery reward · 10 coins':'+1 coin');}

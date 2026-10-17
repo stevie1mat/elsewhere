@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CoopClient } from '../src/coop.js';
+import { CoopClient,PUBLIC_ROOM } from '../src/coop.js';
 
 function setup(t){
-  const saved=new Map([['elsewhere:last-room','0123456789abcdef'],['elsewhere:room:0123456789abcdef','copied-token']]);
+  const saved=new Map([['elsewhere:last-room',PUBLIC_ROOM],[`elsewhere:room:${PUBLIC_ROOM}`,'copied-token']]);
   const sockets=[],errors=[],statuses=[];let exits=0;
   class Socket {
     static OPEN=1;
@@ -24,32 +24,32 @@ function setup(t){
 
 test('a copied active rider session retries once as a new rider',t=>{
   const {client,sockets,saved,errors}=setup(t);
-  client.join('0123456789abcdef');sockets[0].onopen();
+  client.join();sockets[0].onopen();
   assert.equal(sockets[0].sent.token,'copied-token');
   sockets[0].message({type:'error',code:'RIDER_CONNECTED',message:'This rider is already connected in another tab.'});
   sockets[0].close();
   assert.equal(sockets.length,2);sockets[1].onopen();
   assert.equal(sockets[1].sent.token,null);
-  assert.equal(sockets[1].sent.room,'0123456789abcdef');
+  assert.equal(sockets[1].sent.room,PUBLIC_ROOM);
   assert.deepEqual(errors,[]);
-  sockets[1].message({type:'welcome',room:'0123456789abcdef',token:'new-token',id:'new-rider'});
+  sockets[1].message({type:'welcome',room:PUBLIC_ROOM,token:'new-token',id:'new-rider'});
   assert.equal(client.connected,true);
-  assert.equal(saved.get('elsewhere:room:0123456789abcdef'),'new-token');
+  assert.equal(saved.get(`elsewhere:room:${PUBLIC_ROOM}`),'new-token');
 });
 
-test('a full room after a duplicate session clears saved entry and stops retrying',t=>{
+test('a rejected replacement session clears saved entry and stops retrying',t=>{
   const state=setup(t),{client,sockets,saved,errors,statuses}=state;
-  client.join('0123456789abcdef');
+  client.join();
   sockets[0].message({type:'error',code:'RIDER_CONNECTED',message:'Already connected'});sockets[0].close();
-  sockets[1].message({type:'error',message:'This room already has two riders.'});sockets[1].close();
+  sockets[1].message({type:'error',message:'The shared world is unavailable.'});sockets[1].close();
   assert.equal(sockets.length,2);assert.equal(client.active,false);assert.equal(state.exits,1);
-  assert.equal(saved.size,0);assert.deepEqual(errors,['This room already has two riders.']);
-  assert.equal(statuses.at(-1),'This room already has two riders.');
+  assert.equal(saved.size,0);assert.deepEqual(errors,['The shared world is unavailable.']);
+  assert.equal(statuses.at(-1),'The shared world is unavailable.');
 });
 
 test('expired saved rooms are cleared and normal reconnects keep the rider identity',t=>{
   const {client,sockets,saved}=setup(t);
-  client.join('0123456789abcdef');sockets[0].onopen();
+  client.join();sockets[0].onopen();
   assert.equal(sockets[0].sent.token,'copied-token');
   sockets[0].message({type:'error',message:'Room not found or expired.'});sockets[0].close();
   assert.equal(saved.size,0);assert.equal(client.active,false);

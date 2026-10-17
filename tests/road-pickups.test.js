@@ -5,15 +5,32 @@ import { stepPlayer,createPlayer } from '../src/movement.js';
 import { RiderCombat } from '../src/rider-combat.js';
 import * as T from 'three';
 
-test('ride-over pickups grant rewards once, respawn, and reject walking or paused collection',()=>{
+test('pickups grant rewards once, respawn, and reject paused collection',()=>{
  const s=new RoadPickups([],()=>0),p={...createPlayer(),speed:3};
  s.items=[{x:p.x,z:p.z,type:'nitro',cooldown:0}];
- assert.equal(s.update(0,p).length,0);p.mode='walking';assert.equal(s.update(.05,p).length,0);
+ assert.equal(s.update(0,p).length,0);
  p.mode='cycling';assert.equal(s.update(.05,p).length,1);assert.equal(s.nitro,50);assert.equal(s.update(.05,p).length,0);
  p.x+=10;s.update(40,p);assert.equal(s.items[0].cooldown,0);p.x-=10;s.update(.05,p);assert.equal(s.nitro,100);
  s.items=[{x:p.x,z:p.z,type:'mystery',cooldown:0}];s.random=()=>.5;s.update(.05,p);assert.equal(s.coins,10);
  s.nitro=0;assert.equal(s.buyNitro(),true);assert.equal(s.coins,0);assert.equal(s.nitro,50);assert.equal(s.buyNitro(),false);
  s.items=[{x:p.x,z:p.z,type:'shield',cooldown:0}];s.update(.05,p);assert.equal(s.absorbHit(),true);assert.equal(s.absorbHit(),false);
+});
+test('walking, running and stationary contact collect every article exactly once',()=>{
+ for(const speed of [0,2.1,4.8]){
+  const s=new RoadPickups([],()=>.5),p={...createPlayer(),mode:'walking',speed};
+  s.items=['coin','nitro','shield','mystery'].map(type=>({type,x:p.x,z:p.z,cooldown:0}));
+  assert.equal(s.update(.05,p).length,4);
+  assert.deepEqual(s.collected,{coin:1,nitro:1,shield:1,mystery:1});
+  assert.equal(s.coins,11);assert.equal(s.nitro,50);assert.equal(s.shield,true);
+  assert.equal(s.update(.05,p).length,0);
+  s.absorbHit();s.buyNitro();assert.deepEqual(s.collected,{coin:1,nitro:1,shield:1,mystery:1});
+  s.reset();assert.deepEqual(s.collected,{coin:0,nitro:0,shield:0,mystery:0});
+ }
+});
+test('pickups cannot be collected from above the street or outside reach',()=>{
+ const s=new RoadPickups(),p={...createPlayer(),mode:'walking',speed:4.8,y:20};
+ s.items=[{type:'coin',x:p.x,z:p.z,cooldown:0}];assert.equal(s.update(.05,p).length,0);
+ p.y=0;p.x+=2;assert.equal(s.update(.05,p).length,0);p.x-=2;assert.equal(s.update(.05,p).length,1);
 });
 test('nitro drains only while boosting and high speed respects obstacles',()=>{
  const s=new RoadPickups(),p={...createPlayer(),speed:6,yaw:0};s.nitro=100;

@@ -16,7 +16,7 @@ function aim(bone, child, target) {
   bone.updateWorldMatrix(false, true);
 }
 
-function limb(root, middle, tip, target, pole) {
+export function limb(root, middle, tip, target, pole) {
   const a = root.getWorldPosition(new T.Vector3());
   const b = middle.getWorldPosition(new T.Vector3());
   const c = tip.getWorldPosition(new T.Vector3());

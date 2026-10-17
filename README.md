@@ -25,11 +25,24 @@ PATH=/opt/homebrew/opt/node@22/bin:$PATH npm run dev -- --port 5174
 
 ## Explore
 
+### Skyway Ride
+
+Map marker **11**, on the northern shoreline at `(55, -380)`, starts an endless cycling challenge. Approach the stone gateway and press **F** (or Start ride). A challenge bicycle is provided; your previous position and bicycle are restored on exit.
+
+- Automatic forward movement; **A/D** or arrows switch among three lanes; **Space** jumps; **Esc** exits; **R** retries. On-screen buttons support touch.
+- The elevated circuit crosses the sea and climbs over the mountain landscape, looping continuously with newly generated obstacle rows. Each row has a clear lane; speed gradually increases to a cap.
+- Distance gives 3 points/m, coins 25, gems 200. Green shields absorb one collision. Three lives, brief collision protection, and a best score saved in this browser.
+- This is a local challenge within the shared island, not synchronized competitive multiplayer. While riding, your room presence remains at the gate. Rewards are challenge-only.
+- Geometry is static and pickups/obstacles use four fixed instanced pools; old rows are discarded. `tests/skyway.test.js` checks bounded long-run state, pickups, jumps, lives, and circuit continuity.
+
+Design reference: [Imangi's Temple Run 2](https://imangistudios.com/thegames/temple-run-2/) for the obstacle-avoidance/collection loop; the route, art, cycling controls, and implementation here are original.
+
 **The Last Light — Chapter 01:** Follow the gold marker to Inês outside Café Luma. Stop your bicycle and press **F** (or tap the interaction button) to collect a parcel. Find the postcard beside the garden path, then deliver the parcel to Tomás on the pier. Completing the story equips Sunset Gold bike paint. The parcel is visible on your bike while carrying it; quest progress and the reward save automatically in this browser. Closing a conversation leaves the objective available. The map’s gold line points toward the objective, rather than providing street-by-street navigation.
 
 - **X** (or the left-side button): stop and get off your bicycle. Walk back within 2.8m to remount; your bicycle is marked on the map. **W/S** walks forward/back, **A/D** turns, and **Shift** runs.
 - **Wardrobe** on the left, or **V**: choose an outfit color, helmet, canvas backpack, and sunglasses. Your look saves in this browser and appears in cycling and walking modes. These controls apply to Porto Sol.
-- **W/S**: pedal / reverse; **A/D**: steer; **Shift**: pedal faster; **Space**: brake.
+- **W/S**: move / reverse; **A/D**: turn; hold either **Shift** to run forward on foot (W optional), release to stop. On a bicycle Shift still speeds up pedaling with W. **Space**: jump on foot, brake on a bicycle.
+- Walking uses acceleration, momentum, ground friction, reduced airborne steering, gravity and grounded jumping. Collision substeps prevent tunneling and allow sliding along walls; jumps synchronize to other players. Ground remains a flat collision plane (no rooftop climbing, swimming or rigid-body ragdolls).
 - Click the scene to capture the mouse. **Esc** releases it.
 - **Q/E** or **left/right arrows** also steer. Up/down arrows pedal/reverse.
 - Drag the scene to orbit the camera when mouse capture is unavailable. **C** centers the camera behind the bike.
@@ -84,13 +97,19 @@ Tests cover cycling across frame rates, steering, braking, reverse, bike clearan
 Three.js is MIT licensed. Vite is MIT licensed. This is an original environment; no GTA assets are used.
 
 
-## Two-player co-op
+## Shared online world
 
-Run the game with `npm run dev` and, in a second terminal, run `npm run multiplayer`. On this Mac, prefix each command with `PATH=/opt/homebrew/opt/node@22/bin:$PATH` if needed. The local client connects to `ws://127.0.0.1:8787/coop` automatically. Open the game in two tabs, choose **Ride together**, create a room in one, and join with its 16-character room code in the other. A copied invite link shows **Join your friend & ride** on the opening screen. That button connects to the invited room and enters the world. The address bar updates to the actual connected room; leaving removes the room parameter.
+Run the game with `npm run dev` and, in a second terminal, run `npm run multiplayer`. On this Mac, prefix each command with `PATH=/opt/homebrew/opt/node@22/bin:$PATH` if needed. The local client connects to `ws://127.0.0.1:8787/coop` automatically. Porto Sol has one public room: every visitor joins it automatically, with no room code, invite link, or **Ride together** action.
 
-Each player rides their own bicycle. The other rider appears in blue, with a blue dot on the map. Both riders must stop within four metres of the current objective; either can confirm its dialogue. Quest progress is shared, the first rider to accept carries the parcel, and both earn Sunset Gold. Co-op uses a fresh room quest and never overwrites the browser's solo quest. Riders do not collide with each other.
+Players land on foot with no bicycle. Porto Cycle House (map marker 10, beside the café) provides a bicycle when the player presses F at its entrance. X dismounts or remounts an already-collected bicycle; it cannot summon a new one. Resetting or reloading starts on foot again. Other online players appear in the world and as blue dots on the map. Any player at the current objective can advance the shared quest for everyone. Riders do not collide with each other.
 
-A dropped connection retries automatically. Disconnected riders keep their slot for one minute while their friend remains online. Empty rooms last 15 minutes. Rejoin the same room in the same tab to resume; the code and reconnect token are stored in session storage. Leave room to return to solo play. Room state is held in memory, so a server restart loses room progress. This first version is intended for private invitations, not competitive play: it validates room membership, finite positions, quest order and both riders' proximity, but does not simulate movement authoritatively.
+The normal HUD shows the map and a small top-right menu button. World settings, wardrobe, quest details, destinations, pickups and controls are inside that menu. Brief contextual interaction prompts still appear near objectives.
+
+Every Porto Sol page load opens directly into a third-person balloon journey with the normal interface hidden. After ten seconds, **Drop to island** and piloting become available. A/D turn with angular inertia, W adds game-assisted forward thrust, and S slows relative to the wind rather than reversing. Wind and drag continue carrying the balloon when controls are released. Drag to orbit the camera. The seven-second parachute descent lands at the selected location, drifting to nearby clear ground if necessary. The balloon has a paneled fabric envelope, woven basket, steering wheel and twin flickering burner flames; the rider holds the wheel. The parachute has raised fabric panels, reinforced cords and a wearable pack/harness. Flight stages and landing locations are visible to other connected players. The entrance also runs offline; multiplayer connection failures do not block it. Reloading replays the journey; a network reconnection keeps the current flight stage.
+
+Porto Sol now spans 543 × 758 world units, approximately 2.97 times its previous playable area. Vila Poente, Parque das Oliveiras and Costa Dourada add connected roads, 26 buildings, pitched roofs, planted park paths and a coastal promenade. Shared movement bounds, balloon limits, server validation and map framing use the enlarged island. AI-generated olive, cypress, oleander and grass cutouts are rendered as instanced crossed-plane vegetation; nearby architecture remains 3D. The original generated atlas and complete prompt are in `public/assets/generated/`.
+
+A dropped connection retries automatically. Disconnected riders keep their identity for one minute. A reconnect token is stored in session storage. Shared world state is held in memory, so a server restart resets its progress. The server validates finite positions, quest order, and the acting rider's proximity, but does not simulate movement authoritatively.
 
 ### Hosting alongside Vercel
 
@@ -108,9 +127,9 @@ Set these **server** variables:
 
 The service provides `/health` for health checks and `/coop` for WebSocket connections. Terminate TLS at the hosting platform. Run **one instance**: rooms currently live in one process, without shared storage or multi-instance routing.
 
-Set **Vercel's** public build variable `VITE_COOP_URL=wss://your-server-domain/coop`, then redeploy the frontend. This is a public endpoint, not a secret. `.env.example` documents it. A production site without this setting remains solo-only and explains that co-op is not configured; it does not simulate an online connection. Localhost invite links work only on the same computer. Two different computers require a reachable hosted server and frontend URL.
+Set **Vercel's** public build variable `VITE_COOP_URL=wss://your-server-domain/coop`, then redeploy the frontend. This is a public endpoint, not a secret. `.env.example` documents it. A production site without this setting remains solo-only and explains that the shared world is not configured. Players on different computers need the same reachable hosted server and frontend URL.
 
-`npm test` includes a real two-WebSocket-client test that shares positions, completes all quest steps, rejects a third rider, and reconnects with the completed quest intact.
+`npm test` includes a real multi-client WebSocket test that shares positions, admits additional riders, completes all quest steps, and reconnects with the completed quest intact.
 
 
 ## Mumbai lanes (world 002)

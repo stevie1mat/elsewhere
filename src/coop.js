@@ -3,15 +3,16 @@ export function coopEndpoint(){
   if(configured){try{const url=new URL(configured);if(!['ws:','wss:'].includes(url.protocol)||location.protocol==='https:'&&url.protocol!=='wss:')return '';return url.href;}catch{return '';}}
   return ['localhost','127.0.0.1'].includes(location.hostname)?`ws://${location.hostname}:8787/coop`:'';
 }
+export const PUBLIC_ROOM='0000000000000000';
 export class CoopClient {
   constructor({onState,onWelcome,onStatus,onExit,onError}){
     Object.assign(this,{onState,onWelcome,onStatus,onExit,onError});this.active=false;this.connected=false;this.room=null;this.id=null;this.token=null;this.attempt=0;this.state=null;this.socket=null;this.generation=0;
   }
-  join(room){
+  join(room=PUBLIC_ROOM){
     if(this.active)return;
     this.endpoint=coopEndpoint();if(!this.endpoint){this.onError('Online co-op is not configured on this site yet.');return;}
-    this.active=true;this.room=room||null;this.token=null;this.attempt=0;
-    try{if(room)this.token=sessionStorage.getItem(`elsewhere:room:${room}`);}catch{}
+    this.active=true;this.room=PUBLIC_ROOM;this.token=null;this.attempt=0;
+    try{this.token=sessionStorage.getItem(`elsewhere:room:${PUBLIC_ROOM}`);}catch{}
     this.connect();
   }
   connect(){
@@ -29,7 +30,7 @@ export class CoopClient {
         this.onWelcome(m);this.onStatus('Connected');
       }else if(m.type==='state'){
         if(!Number.isInteger(m.stage)||m.stage<0||m.stage>3||!Array.isArray(m.players))return;
-        this.state=m;this.onState(m);this.onStatus(m.players.length===2?'Two riders connected':'Waiting for your friend…');
+        this.state=m;this.onState(m);this.onStatus(`${m.players.length} ${m.players.length===1?'rider':'riders'} online`);
       }else if(m.type==='error'){
         if(!this.connected){
           rejected=true;rejectionMessage=m.message;
@@ -51,7 +52,7 @@ export class CoopClient {
     };
   }
   send(message){if(this.connected&&this.socket.readyState===WebSocket.OPEN)this.socket.send(JSON.stringify(message));}
-  position(p){this.send({type:'position',position:{x:p.x,z:p.z,yaw:p.yaw,walked:p.walked,speed:p.speed,mode:p.mode,bike:p.bike}});}
+  position(p){this.send({type:'position',position:{x:p.x,y:p.y,z:p.z,vy:p.vy,grounded:p.grounded,yaw:p.yaw,walked:p.walked,speed:p.speed,mode:p.mode,bike:p.bike,arrival:p.arrival}});}
   advance(stage,stop){this.send({type:'advance',stage,stop});}
   forgetRoom(){
     try{if(this.room)sessionStorage.removeItem(`elsewhere:room:${this.room}`);if(sessionStorage.getItem('elsewhere:last-room')===this.room)sessionStorage.removeItem('elsewhere:last-room');}catch{}

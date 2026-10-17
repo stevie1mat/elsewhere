@@ -3,6 +3,7 @@ import { flowerPlanterGeometry } from './flower-planter.js';
 import { RoadPickups, PickupDisplay } from './road-pickups.js';
 import { expandPorto } from './porto-expansion.js';
 import * as T from 'three';
+import {buildingDetails,drawRoofTiles,drawWindow} from './building-details.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
@@ -12,8 +13,24 @@ import { Cyclist } from './cyclist.js';
 import { RiderCombat } from './rider-combat.js';
 import { coconutPalmGeometry } from './coconut-palm.js';
 import { QuestWorld } from './quest-world.js';
+import {arrivalPose,stepArrival} from './arrival.js';
+import {createBalloon,createParachute,animateBurner,animateHelm} from './flight-models.js';
 
 const ROOT = '/assets/';
+function removeFlight(scene,entry){
+  if(!entry.flight)return;scene.remove(entry.flight);const geometries=new Set(),materials=new Set(),textures=new Set();entry.flight.traverse(o=>{if(o.geometry)geometries.add(o.geometry);if(o.material)materials.add(o.material);});geometries.forEach(g=>g.dispose());materials.forEach(m=>{if(m.bumpMap)textures.add(m.bumpMap);m.dispose();});textures.forEach(t=>t.dispose());entry.flight=null;
+}
+function showArrival(scene,entry,rider,a,p){
+  const pose=arrivalPose(a,p),phase=a?.phase??'landed';
+  if(entry.flightPhase!==phase){removeFlight(scene,entry);entry.flightPhase=phase;if(phase!=='landed'){entry.flight=phase==='balloon'?createBalloon():createParachute();scene.add(entry.flight);}}
+  if(entry.flight){entry.flight.position.set(pose.x,pose.y,pose.z);entry.flight.rotation.y=-(a.heading||0);animateBurner(entry.flight,a.elapsed);animateHelm(entry.flight,a.steering);}
+  if(phase!=='landed'&&rider?.walker){rider.group.position.y=0;rider.cycle.group.visible=false;rider.walker.visible=true;rider.mixer.setTime(0);rider.walker.position.set(pose.x,pose.y,pose.z);rider.walker.rotation.y=Math.PI-p.yaw;}
+  else if(rider?.cycle){rider.cycle.group.visible=p.mode!=='walking'||!!p.bike;rider.group.position.y=0;}
+  if(phase==='balloon'&&rider?.walker){rider.walker.rotation.y=Math.PI-(a.heading||0);rider.walker.position.x+=Math.sin(a.heading||0)*.18;rider.walker.position.z-=Math.cos(a.heading||0)*.18;rider.holdBalloonWheel(entry.flight);}
+  if(phase==='parachute'&&rider?.walker)rider.walker.rotation.y=Math.PI-(a.heading||0);
+  rider?.parachutePose?.(entry.flight,phase==='parachute');
+  return pose;
+}
 export class World {
   constructor(scene, renderer, manager, location = 'porto') {
     this.location = location;
@@ -23,7 +40,7 @@ export class World {
     this.loader = new T.TextureLoader(manager);
     this.materials(); this.environment(); this.ground(); this.neighborhood(); this.waterfront(); this.garden(); this.details(); if (location === 'porto') expandPorto(this); this.bake();
     if(location==='porto'){this.pickups=new RoadPickups(this.obstacles);this.pickupDisplay=new PickupDisplay(scene,this.pickups);}
-    this.questWorld = location !== 'porto' ? { addCharacter() { }, update() { } } : new QuestWorld(scene); this.questStage = 0; this.coopMode = false; this.carryParcel = true; this.remoteState = null;
+    this.questWorld = location !== 'porto' ? { addCharacter() { }, update() { } } : new QuestWorld(scene); this.questStage = 0; this.coopMode = false; this.carryParcel = true; this.remoteStates = []; this.remoteRiders = new Map();
     this.loadTrees(); this.loadPeople();
   }
   random() { this.seed = (this.seed * 1664525 + 1013904223) >>> 0; return this.seed / 4294967296; }
@@ -63,6 +80,9 @@ export class World {
       car: this.mat(0x728b86, .3, .35), tire: this.mat(0x202629), chrome: this.mat(0xabb5b2, .22, .85),
     };
     if (this.location === 'porto') {
+      const roof=this.canvasTexture(drawRoofTiles,512,512);roof.wrapS=roof.wrapT=T.RepeatWrapping;roof.anisotropy=4;
+      this.m.tile.map=roof;this.m.tile.color.set(0xffffff);this.m.tile.roughness=.94;
+      this.m.glass.map=this.canvasTexture(drawWindow,128,256);this.m.glass.color.set(0xffffff);this.m.glass.roughness=.3;
       const surface = (name, repeats) => {
         const maps = {};
         for (const [slot, suffix] of [['map','color'],['normalMap','normal'],['roughnessMap','roughness']]) {
@@ -106,12 +126,12 @@ export class World {
     for (const [material, geometries] of this.batches) {
       const merged = mergeGeometries(geometries, false); const mesh = new T.Mesh(merged, material);
       mesh.castShadow = material !== this.m.pavement && material !== this.m.road && material !== this.m.grass;
-      mesh.receiveShadow = true; this.scene.add(mesh); this.cameraColliders.push(mesh); geometries.forEach(g => g.dispose());
+      mesh.receiveShadow = true; this.scene.add(mesh);if(this.location!=='porto')this.cameraColliders.push(mesh);geometries.forEach(g => g.dispose());
     }
     this.batches.clear();
   }
   environment() {
-    this.scene.fog = new T.FogExp2(0xd3bca0, .0026);
+    this.scene.fog = new T.FogExp2(0xd3bca0, .0019);
     this.sun = new T.DirectionalLight(0xffdeb0, 3.2); this.sun.position.set(95, 80, -65);
     this.sun.castShadow = true; this.sun.shadow.mapSize.set(2048, 2048);
     Object.assign(this.sun.shadow.camera, { left: -72, right: 72, top: 72, bottom: -72, near: 1, far: 290 });
@@ -134,15 +154,38 @@ export class World {
     this.sky = new T.Mesh(new T.SphereGeometry(1900, 40, 24), this.skyMaterial); this.scene.add(this.sky);
     new HDRLoader(this.manager).load(ROOT + 'hd/lighting.hdr', texture => { texture.mapping = T.EquirectangularReflectionMapping; this.scene.environment = texture; this.scene.environmentIntensity = .38; });
     this.oceanMaterial = new T.ShaderMaterial({
-      uniforms: { time: { value: 0 }, night: { value: 0 } },
+      uniforms: { time: { value: 0 }, night: { value: 0 }, panorama: {value:this.skyTexture} },
       vertexShader: `varying vec3 vWorld;void main(){vec4 p=modelMatrix*vec4(position,1.);vWorld=p.xyz;gl_Position=projectionMatrix*viewMatrix*p;}`,
-      fragmentShader: `uniform float time;uniform float night;varying vec3 vWorld;
-      float wave(vec2 p){return sin(p.x*.72+time*.65)*.28+sin(p.y*.43-time*.42)*.24+sin((p.x+p.y)*1.8+time*.8)*.075;}
-      void main(){vec2 p=vWorld.xz;float w=wave(p);vec3 n=normalize(vec3((w-wave(p+vec2(.12,0.)))/.12,1.,(w-wave(p+vec2(0.,.12)))/.12));
+      fragmentShader: `uniform float time;uniform float night;uniform sampler2D panorama;varying vec3 vWorld;
+      float wave(vec2 p){
+        float h=0.;float frequency=.19,amplitude=.20;
+        for(int i=0;i<7;i++){
+          float angle=float(i)*2.39996;vec2 dir=vec2(cos(angle),sin(angle));
+          h+=sin(dot(p,dir)*frequency+time*(.5+float(i)*.17)+sin(dot(p,dir.yx)*.07)*.7)*amplitude;
+          frequency*=1.87;amplitude*=.47;
+        }return h;
+      }
+      vec3 waterNormal(vec2 p){
+        vec2 gradient=vec2(0.);float frequency=.19,amplitude=.20;
+        for(int i=0;i<7;i++){
+          float angle=float(i)*2.39996;vec2 dir=vec2(cos(angle),sin(angle));float bend=dot(p,dir.yx)*.07;
+          float phase=dot(p,dir)*frequency+time*(.5+float(i)*.17)+sin(bend)*.7;
+          gradient+=cos(phase)*amplitude*(dir*frequency+cos(bend)*.049*dir.yx);
+          frequency*=1.87;amplitude*=.47;
+        }return normalize(vec3(-gradient.x,1.,-gradient.y));
+      }
+      void main(){vec2 p=vWorld.xz;vec3 n=waterNormal(p);
       vec3 view=normalize(cameraPosition-vWorld);float f=pow(1.-max(dot(n,view),0.),3.);
-      vec3 col=mix(vec3(.035,.27,.29),vec3(.50,.62,.59),f);
-      vec3 halfV=normalize(view+normalize(vec3(.85,.32,-.55)));float spec=pow(max(dot(n,halfV),0.),190.);
-      col+=vec3(1.,.77,.45)*spec*1.6;col+=sin(p.y*2.5+time*.7)*.008;
+      vec3 reflected=reflect(-view,n);reflected.y=abs(reflected.y);
+      vec2 skyUV=vec2(atan(reflected.z,reflected.x)/6.283185+.5,asin(clamp(reflected.y,-1.,1.))/3.141593+.5);
+      vec3 sky=texture2D(panorama,skyUV).rgb;
+      vec2 shore=max(abs(p-vec2(-208.,-20.))-vec2(272.,380.),0.);float coast=length(shore);
+      vec3 depthColor=mix(vec3(.025,.28,.27),vec3(.008,.075,.13),smoothstep(0.,100.,coast));
+      vec3 col=mix(depthColor,sky,.06+.82*f);
+      vec3 halfV=normalize(view+normalize(vec3(95.,80.,-65.)));float spec=pow(max(dot(n,halfV),0.),220.);
+      col+=vec3(1.,.81,.54)*spec*2.;
+      float foam=(1.-smoothstep(.3,2.8,coast))*smoothstep(.45,.85,sin(coast*2.8-time*1.5+wave(p*.4)*4.));
+      col=mix(col,vec3(.63,.78,.72),foam*.42);
       float fog=1.-exp(-length(cameraPosition-vWorld)*.0018);col=mix(col,vec3(.60,.65,.63),fog);
       col=mix(col,col*vec3(.15,.23,.35),night);gl_FragColor=vec4(col,1.);
       #include <tonemapping_fragment>
@@ -151,17 +194,30 @@ export class World {
     if (this.location !== 'porto') return;
     const ocean = new T.Mesh(new T.PlaneGeometry(3600, 3600), this.oceanMaterial); ocean.rotation.x = -Math.PI / 2; ocean.position.y = -1.15; this.scene.add(ocean);
     // A layered headland and a small lighthouse across the water.
-    const rock = this.mat(0x7c8980); const hill = this.mat(0x657661);
-    const terrain = new T.PlaneGeometry(1100, 460, 100, 45); terrain.rotateX(-Math.PI / 2);
+    const rock = this.mat(0x7c8980); const hill = new T.MeshStandardMaterial({vertexColors:true,roughness:.94});
+    const terrain = new T.PlaneGeometry(1100, 460, 220, 100); terrain.rotateX(-Math.PI / 2);
     const vertices = terrain.attributes.position;
+    const hash=(x,z)=>{const v=Math.sin(x*127.1+z*311.7)*43758.5453;return v-Math.floor(v);};
+    const noise=(x,z)=>{const ix=Math.floor(x),iz=Math.floor(z),fx=x-ix,fz=z-iz,u=fx*fx*(3-2*fx),v=fz*fz*(3-2*fz);return T.MathUtils.lerp(T.MathUtils.lerp(hash(ix,iz),hash(ix+1,iz),u),T.MathUtils.lerp(hash(ix,iz+1),hash(ix+1,iz+1),u),v);};
     for (let i = 0; i < vertices.count; i++) {
       const x = vertices.getX(i), z = vertices.getZ(i), ridge = Math.exp(-Math.pow((z + 20) / 140, 2));
-      const peaks = 48 + 35 * Math.sin(x * .012 + .9) + 25 * Math.sin(x * .025 + 1.3) + 17 * Math.cos(x * .044);
+      const peaks = 65 + 40 * Math.sin(x * .012 + .9) + 28 * Math.sin(x * .025 + 1.3) + 17 * Math.cos(x * .044);
       const edge = Math.max(0, 1 - Math.pow(Math.abs(x) / 570, 6));
-      const h = peaks * ridge * edge + (Math.sin(x * .07 + z * .021) * Math.cos(z * .057) * 7 + Math.sin(x * .15 - z * .04) * 3) * ridge;
+      let detail=0,amplitude=24,frequency=.018;
+      for(let octave=0;octave<5;octave++){detail+=(1-Math.abs(noise(x*frequency,z*frequency)*2-1)) * amplitude;amplitude*=.48;frequency*=2.1;}
+      const h = (peaks+detail-18) * ridge * edge;
       vertices.setY(i, Math.max(-5, h - 8));
     }
-    terrain.computeVertexNormals(); this.mesh(terrain, hill, -140, 0, -485);
+    terrain.computeVertexNormals();
+    const colors=[],normals=terrain.attributes.normal;
+    for(let i=0;i<vertices.count;i++){
+      const h=vertices.getY(i),slope=1-normals.getY(i),patch=noise(vertices.getX(i)*.035,vertices.getZ(i)*.035);
+      const color=new T.Color(0x435b3c).lerp(new T.Color(0x7a8060),patch);
+      color.lerp(new T.Color(0x79766b),T.MathUtils.smoothstep(slope,.12,.5));
+      color.lerp(new T.Color(0xb2a18a),1-T.MathUtils.smoothstep(h,0,12));
+      color.multiplyScalar(.83+noise(vertices.getX(i)*.3,vertices.getZ(i)*.3)*.24);colors.push(color.r,color.g,color.b);
+    }
+    terrain.setAttribute('color',new T.Float32BufferAttribute(colors,3));this.mesh(terrain, hill, -240, 0, -730);
     this.mesh(new T.SphereGeometry(30, 14, 8), rock, 188, -15, -161);
     this.cylinder(2, 3.8, 23, 188, 12, -161, this.m.trim, 16); this.cylinder(3, 3, 2, 188, 25, -161, this.m.dark, 16);
     this.cylinder(1.8, 1.8, 3, 188, 27, -161, this.m.glass, 16); this.cylinder(0, 3.3, 3, 188, 30, -161, this.m.tile, 16);
@@ -188,6 +244,11 @@ export class World {
     this.box(w, h, .08, x, y, z, mat, rotation);
   }
   building(x, z, w, d, h, material, shop, front = 'east') {
+    if(this.location==='porto'){
+      // Camera occlusion needs the building shell, not every balcony and window.
+      const proxy=new T.Mesh(new T.BoxGeometry(w+.5,h+1,d+.5));
+      proxy.position.set(x,(h+1)/2,z);proxy.updateMatrixWorld(true);this.cameraColliders.push(proxy);
+    }
     this.box(w, h, d, x, h / 2, z, material); this.obstacle(x, z, w + .05, d + .05);
     this.box(w + .4, .35, d + .4, x, h - .2, z, this.m.trim);
     this.box(w + .1, .65, d + .1, x, .33, z, this.m.cream);
@@ -203,7 +264,7 @@ export class World {
         this.box(.58, .15, 2.1, east + .18, level - 1.1, zz, this.m.trim);
         if (level < 8) {
           this.box(1.4, .16, 2.25, east + .6, level - 1.15, zz, this.m.cream); this.box(.08, .08, 2.2, east + 1.25, level - .35, zz, this.m.dark);
-          for (let j = -1; j <= 1; j += .25)this.box(.05, .8, .035, east + 1.25, level - .77, zz + j, this.m.dark);
+          for (let j = -1; j <= 1; j += .5)this.box(.05, .8, .035, east + 1.25, level - .77, zz + j, this.m.dark);
         }
       }
       for (let xx = x - w / 2 + 2; xx < x + w / 2 - 1; xx += 3.6) {
@@ -218,6 +279,8 @@ export class World {
       for (let xx = x - w / 2 + 2; xx < x + w / 2; xx += 3.8) { this.box(2.6, 2.75, .12, xx, 1.5, south + .12, this.m.dark); this.box(2.3, 2.45, .14, xx, 1.5, south + .22, this.m.glass); }
       if (shop) this.sign(shop, x, 3, south + .3, Math.min(w - 1, 9), .64);
     }
+    const roofVariant=this.location==='porto'?buildingDetails(this,x,z,w,d,h):0;
+    if(roofVariant!==0)return;
     this.box(2.8, 1.2, 2.4, x - 2, h + .85, z - 2, this.m.cream);
     for (let i = 0; i < 3; i++)this.box(2.5, .05, .12, x - 2, h + .7 + i * .2, z - .76, this.m.dark);
     this.cylinder(.08, .08, 3, x + 2, h + 1.6, z + 1, this.m.dark);
@@ -230,7 +293,14 @@ export class World {
   }
   neighborhood() {
     this.building(14, 14, 20, 19, 10.7, this.m.cream, 'CAFÉ LUMA');
-    this.building(13, -15, 22, 21, 14, this.m.peach, 'CASA AZUL');
+    this.building(13, -15, 22, 21, 14, this.m.peach, 'PORTO CYCLE HOUSE');
+    this.sign('COLLECT A BICYCLE · F',25.5,1.8,-15,5,.5,Math.PI/2);
+    // Display bicycles beside the entrance, leaving the collection area clear.
+    for(const z of [-22,-19]){
+      for(const dz of [-.65,.65]){const wheel=new T.TorusGeometry(.34,.035,8,20);wheel.rotateY(Math.PI/2);this.mesh(wheel,this.m.tire,27,.37,z+dz);}
+      this.box(.07,.07,1.25,27,.7,z,this.m.sage);this.box(.07,.65,.07,27,.7,z-.45,this.m.chrome);this.box(.48,.05,.05,27,1.03,z-.45,this.m.dark);this.box(.22,.06,.3,27,.98,z+.25,this.m.dark);
+      this.obstacle(27,z,.6,2);
+    }
     this.building(14, -48, 20, 23, 10.7, this.m.sage, 'LIVRARIA');
     this.building(11, -83, 25, 22, 17.3, this.m.cream, 'PORTO SOL');
     this.building(9, -118, 27, 18, 14, this.m.blue, 'ATELIER');
@@ -381,7 +451,7 @@ export class World {
         gltf.scene.traverse(o => { if (!o.isMesh) return; const prep = old => { const part = old.name.includes('opacity') ? 'opacity' : old.name.includes('head') ? 'head' : 'body'; return new T.MeshStandardMaterial({ map: textures[part], name: part, roughness: .88, side: part === 'opacity' ? T.DoubleSide : T.FrontSide, alphaTest: part === 'opacity' ? .45 : 0 }); }; o.material = Array.isArray(o.material) ? o.material.map(prep) : prep(o.material); o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; });
         const clip = gltf.animations.find(a => a.name === 'Walk');
         this.questWorld.addCharacter(gltf.scene, clip, prefix);
-        if (prefix === 'm002') { const Avatar=this.location==='porto'?Explorer:Cyclist; this.cyclist = new Avatar(gltf.scene, clip); this.remoteCyclist = new Avatar(gltf.scene, clip); this.remoteCyclist.baseColor = 0x6e83bd; this.remoteCyclist.group.visible = false; this.scene.add(this.cyclist.group, this.remoteCyclist.group); }
+        if (prefix === 'm002') { const Avatar=this.location==='porto'?Explorer:Cyclist; this.avatarTemplate=gltf.scene;this.avatarClip=clip;this.Avatar=Avatar;this.cyclist = new Avatar(gltf.scene, clip);this.scene.add(this.cyclist.group);this.syncRemoteRiders(); }
         if (prefix === 'm002' && this.location === 'porto') {
           this.combat = new RiderCombat();
           this.rivalCyclists = this.combat.rivals.map((p, i) => {
@@ -407,17 +477,37 @@ export class World {
     });
     return hit;
   }
-  setRemote(state, carrier) {
+  setRemotes(states=[], carrier) {
     this.remoteCarrier = carrier;
-    if (!state) { this.remoteState = null; this.remotePose = null; if (this.remoteCyclist) this.remoteCyclist.group.visible = false; return; }
-    this.remoteState = state; if (!this.remotePose) this.remotePose = { ...state };
+    this.remoteStates = states;
+    this.syncRemoteRiders();
+  }
+  syncRemoteRiders() {
+    if(!this.Avatar||!this.avatarTemplate)return;
+    const active=new Set(this.remoteStates.map(state=>state.id));
+    for(const [id,entry] of this.remoteRiders)if(!active.has(id)){this.scene.remove(entry.rider.group);removeFlight(this.scene,entry);this.remoteRiders.delete(id);}
+    for(const state of this.remoteStates){
+      let entry=this.remoteRiders.get(state.id);
+      if(!entry){
+        const rider=new this.Avatar(this.avatarTemplate,this.avatarClip),hue=[0x6e83bd,0xc06f66,0x73a36b,0xb386c5,0xd09a55][this.remoteRiders.size%5];
+        rider.baseColor=hue;rider.group.name=`Online rider ${state.id}`;this.scene.add(rider.group);entry={rider,pose:{...state},state,arrival:null};this.remoteRiders.set(state.id,entry);
+      }
+      entry.state=state;entry.arrival=state.arrival?{...state.arrival}:null;
+    }
+  }
+  setLocalArrival(arrival,player){
+    this.localFlight??={};return showArrival(this.scene,this.localFlight,this.cyclist,arrival,player);
   }
   updateRemote(dt) {
-    if (!this.remoteCyclist || !this.remoteState) return;
-    const target = this.remoteState, p = this.remotePose, k = 1 - Math.exp(-14 * dt);
-    if (Math.hypot(p.x - target.x, p.z - target.z) > 15) Object.assign(p, target);
-    else { p.x += (target.x - p.x) * k; p.z += (target.z - p.z) * k; p.yaw += Math.atan2(Math.sin(target.yaw - p.yaw), Math.cos(target.yaw - p.yaw)) * k; p.walked += (target.walked - p.walked) * k; }
-    this.remoteCyclist.group.visible = true; p.mode=target.mode;p.bike=target.bike;p.speed=target.speed;this.remoteCyclist.update(p,dt); this.remoteCyclist.setQuestStage(this.questStage, this.remoteCarrier === target.id);
+    const k = 1 - Math.exp(-14 * dt);
+    for(const entry of this.remoteRiders.values()){
+      const {rider,state:target,pose:p}=entry;
+      if (Math.hypot(p.x - target.x, p.z - target.z) > 15) Object.assign(p, target);
+      else { p.x += (target.x - p.x) * k; p.z += (target.z - p.z) * k; p.yaw += Math.atan2(Math.sin(target.yaw - p.yaw), Math.cos(target.yaw - p.yaw)) * k; p.walked += (target.walked - p.walked) * k; }
+      p.y=(p.y||0)+((target.y||0)-(p.y||0))*k;p.vy=target.vy||0;p.grounded=target.grounded!==false;
+      p.mode=target.mode;p.bike=target.bike;p.speed=target.speed;rider.update(p,dt);rider.setQuestStage(this.questStage,this.remoteCarrier===target.id);
+      stepArrival(entry.arrival,dt);showArrival(this.scene,entry,rider,entry.arrival,p);
+    }
   }
   setNight(night) {
     this.night = night; this.skyMaterial.uniforms.night.value = night ? 1 : 0; this.oceanMaterial.uniforms.night.value = night ? 1 : 0;
@@ -437,7 +527,9 @@ export class World {
     if (this.night) { const nearest = this.lights.map(light => ({ light, d: light.position.distanceToSquared(camera.position) })).sort((a, b) => a.d - b.d).slice(0, 5); const active = new Set(nearest.map(item => item.light)); this.lights.forEach(light => { light.visible = active.has(light); }); }
     for (const w of this.walkers) {
       w.phase += dt * .016; const angle = w.phase; const x = w.lane + Math.cos(angle) * 1.5, z = -10 + Math.sin(angle) * w.range;
-      w.model.position.set(this.location === 'mumbai' ? 2.8 + Math.cos(angle) * .25 : x, 0, z); w.model.rotation.y = Math.atan2(-Math.sin(angle) * 1.5, Math.cos(angle) * w.range); w.mixer.update(dt * .85);
+      w.model.position.set(this.location === 'mumbai' ? 2.8 + Math.cos(angle) * .25 : x, 0, z); w.model.rotation.y = Math.atan2(-Math.sin(angle) * 1.5, Math.cos(angle) * w.range);
+      w.model.visible=w.model.position.distanceToSquared(camera.position)<220*220;
+      if(w.model.visible)w.mixer.update(dt*.85);
     }
     for (const { bird, phase, radius } of this.birds) {
       const a = time * .065 + phase; bird.position.set(95 + Math.cos(a) * radius, 16 + Math.sin(a * 2) * 3 + phase, Math.sin(a) * radius - 25); bird.rotation.y = -a;

@@ -1,0 +1,10 @@
+<!doctype html><html><head><title>Run animation check</title><style>body{margin:0;background:#b9c6ce}label{position:absolute;top:20px;left:20px;font:16px sans-serif}</style></head><body><label>Authored run preview · front and side</label><script type="module">
+import * as T from 'three';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {Explorer} from './src/explorer.js';
+const scene=new T.Scene(),camera=new T.PerspectiveCamera(40,innerWidth/innerHeight,.1,100),renderer=new T.WebGLRenderer({antialias:true});renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(1);document.body.append(renderer.domElement);scene.background=new T.Color('#b9c6ce');scene.add(new T.HemisphereLight(0xffffff,0x666666,3));const sun=new T.DirectionalLight(0xffffff,3);sun.position.set(2,5,3);scene.add(sun);camera.position.set(0,1.3,6);camera.lookAt(0,.9,0);
+const g=await new GLTFLoader().loadAsync('/assets/people/traveler-man.glb');
+const loader=new T.TextureLoader();const maps={};for(const part of ['body','head','opacity']){const t=loader.load(`/assets/people/m002_${part}_color.webp`);t.flipY=true;t.colorSpace=T.SRGBColorSpace;maps[part]=t;}
+g.scene.traverse(o=>{if(o.isMesh){const prep=m=>{const part=m.name.includes('opacity')?'opacity':m.name.includes('head')?'head':'body';return new T.MeshStandardMaterial({name:part,map:maps[part],alphaTest:.45,side:T.DoubleSide});};o.material=Array.isArray(o.material)?o.material.map(prep):prep(o.material);}});
+const riders=[new Explorer(g.scene,g.animations[0]),new Explorer(g.scene,g.animations[0])];riders.forEach(r=>scene.add(r.group));const clock=new T.Clock();let walked=0;function frame(){requestAnimationFrame(frame);const dt=Math.min(clock.getDelta(),.05);walked+=4.8*dt;riders.forEach((r,i)=>r.update({mode:'walking',bike:null,x:i?1:-1,z:0,y:0,yaw:i?Math.PI/2:Math.PI,speed:4.8,walked,grounded:true},dt));renderer.render(scene,camera);}frame();
+</script></body></html>

@@ -6,6 +6,7 @@ Source repository: https://github.com/microsoft/Microsoft-Rocketbox
 License: https://github.com/microsoft/Microsoft-Rocketbox/blob/master/LICENSE.md
 
 Source assets:
+- `Assets/Animations/all_animations_max_motextr_xy/m_run_neutral_01.max.fbx` (authored neutral run, MIT). Converted to `run-neutral.json` by `scripts/prepare-run.mjs`: compatible joint rotations, in-place horizontal root, original vertical hip motion, constant floor-height correction. Replaces the procedural running IK.
 - `Assets/Avatars/Adults/Male_Adult_01/Export/Male_Adult_01.fbx`
 - `Assets/Avatars/Adults/Female_Adult_01/Export/Female_Adult_01.fbx`
 - The corresponding `Textures/m002_*` and `Textures/f001_*` body/head color and normal maps and opacity color maps.

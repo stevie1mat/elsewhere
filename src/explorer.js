@@ -1,6 +1,10 @@
 import * as T from 'three';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
-import { Cyclist } from './cyclist.js';
+import { Cyclist, limb } from './cyclist.js';
+import {createParachutePack} from './flight-models.js';
+import {PoseOverride} from './pose-override.js';
+import runData from '../public/assets/people/run-neutral.json' with {type:'json'};
+const RUN_CLIP=T.AnimationClip.parse(runData);
 
 export const OUTFITS = { original: 0xffffff, ocean: 0x79afd1, terracotta: 0xd79976, sage: 0x9ab889, midnight: 0x66748b };
 export const DEFAULT_LOOK = { outfit: 'original', helmet: true, backpack: false, sunglasses: false };
@@ -90,22 +94,77 @@ export class Explorer {
     // SkeletonUtils clones meshes but shares materials, so the wardrobe controls this rider only.
     this.walker=clone(template);this.walker.scale.setScalar(.01);
     this.applyWalkingLook=dress(this.walker);
+    this.walker.updateWorldMatrix(true,true);
+    const spine=this.walker.getObjectByName('Bip01_Spine1');
+    this.parachutePack=createParachutePack();
+    this.parachutePack.position.copy(spine.getWorldPosition(new T.Vector3()));
+    this.parachutePack.updateMatrixWorld(true);spine.attach(this.parachutePack);this.parachutePack.visible=false;
+    this.idleLegs=[];
+    this.walker.traverse(b=>{if(b.isBone&&/_(Thigh|Calf|Foot|Toe\d*)$/.test(b.name))this.idleLegs.push({bone:b,rotation:b.quaternion.clone()});});
+    this.strideDuration=walkClip?.duration||1;this.lastWalked=null;
+    this.runWeight=0;this.gaitPhase=0;
     this.mixer=new T.AnimationMixer(this.walker);
-    if(walkClip)this.mixer.clipAction(walkClip).play();
+    this.walkAction=walkClip?this.mixer.clipAction(walkClip).play():null;
+    this.runAction=this.mixer.clipAction(RUN_CLIP).setEffectiveWeight(0).play();
+    this.flightPose=new PoseOverride(this.walker);
     this.group.add(this.cycle.group,this.walker);this.walker.visible=false;
     this.applyLook(DEFAULT_LOOK);
   }
   applyLook(value) { this.look=normalizeLook(value);this.applyRidingLook(this.look);this.applyWalkingLook(this.look);for(const key of ['helmet','backpack','sunglasses'])this.cycle.rider.getObjectByName(key).visible=this.look[key]; }
   set baseColor(value) {this.cycle.baseColor=value;}
   setQuestStage(stage,carry=true) {this.cycle.setQuestStage(stage,carry);}
+  parachutePose(flight,active){
+    this.parachutePack.visible=active;
+    this.walker.getObjectByName('backpack').visible=active?false:this.look.backpack;
+    if(!active)return;
+    this.flightPose.capture();
+    this.walker.updateWorldMatrix(true,true);flight.updateWorldMatrix(true,true);
+    for(const side of ['L','R']){
+      const bone=name=>this.walker.getObjectByName(`Bip01_${side}_${name}`);
+      const x=Math.sign(flight.worldToLocal(bone('UpperArm').getWorldPosition(new T.Vector3())).x)*.27;
+      limb(bone('UpperArm'),bone('Forearm'),bone('Hand'),flight.localToWorld(new T.Vector3(x,1.72,-.06)),flight.localToWorld(new T.Vector3(x*2,1.4,.15)));
+    }
+  }
+  holdBalloonWheel(balloon){
+    const wheel=balloon.userData.helm;if(!wheel)return;
+    this.flightPose.capture();
+    this.walker.updateWorldMatrix(true,true);wheel.updateWorldMatrix(true,true);
+    for(const side of ['L','R']){
+      const bone=name=>this.walker.getObjectByName(`Bip01_${side}_${name}`);
+      const upper=bone('UpperArm'),lower=bone('Forearm'),hand=bone('Hand');
+      if(!upper||!lower||!hand)continue;
+      const x=Math.sign(balloon.worldToLocal(upper.getWorldPosition(new T.Vector3())).x)*.34;
+      const target=wheel.localToWorld(new T.Vector3(x,.12,.035));
+      const pole=balloon.localToWorld(new T.Vector3(x*2,.9,.1));
+      limb(upper,lower,hand,target,pole);
+      for(let finger=1;finger<=4;finger++)for(const joint of ['', '1','2']){
+        const b=bone(`Finger${finger}${joint}`);if(b)b.rotation.z=.65;
+      }
+    }
+  }
   update(p,dt=0) {
-    const walking=p.mode==='walking'&&p.bike;
-    this.cycle.update(walking?{...p.bike,speed:0}:p,dt);this.cycle.rider.visible=!walking;
+    this.flightPose.restore();
+    const walking=p.mode==='walking';
+    if(!walking||p.bike)this.cycle.update(walking?{...p.bike,speed:0}:p,dt);
+    this.cycle.rider.visible=!walking;
+    this.cycle.group.visible=!walking||!!p.bike;
     this.walker.visible=!!walking;
     if(walking) {
-      // Drive the walk cycle by distance, so feet stop when the controller stops.
-      this.mixer.setTime(Math.abs(p.walked)*.72);
-      this.walker.position.set(p.x,0,p.z);this.walker.rotation.y=Math.PI-p.yaw;
+      // Distance-driven strides avoid skating; restore overrides before evaluating tracks.
+      const distance=this.lastWalked===null?0:p.walked-this.lastWalked;
+      this.lastWalked=p.walked;
+      const running=p.speed>2.6&&p.grounded!==false&&(!p.arrival||p.arrival.phase==='landed');
+      this.runWeight+=(Number(running)-this.runWeight)*(1-Math.exp(-12*dt));
+      if(this.runWeight<.001)this.runWeight=0;
+      this.gaitPhase+=distance/(1.5+(3.25-1.5)*this.runWeight);
+      const phase=((this.gaitPhase%1)+1)%1;
+      if(this.walkAction){this.walkAction.time=phase*this.strideDuration;this.walkAction.setEffectiveWeight(1-this.runWeight);}
+      this.runAction.time=phase*RUN_CLIP.duration;this.runAction.setEffectiveWeight(this.runWeight);
+      this.mixer.update(0);
+      this.flightPose.capture();
+      const idle=1-Math.min(1,Math.abs(p.speed)/.5);
+      for(const {bone,rotation} of this.idleLegs)bone.quaternion.slerp(rotation,idle);
+      this.walker.position.set(p.x,p.y||0,p.z);this.walker.rotation.y=Math.PI-p.yaw;
     }
   }
 }

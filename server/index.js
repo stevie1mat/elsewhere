@@ -24,9 +24,8 @@ export function createCoopServer({origins=[],rooms=new Rooms()}={}){
         if(binary)throw Error('Text messages required.');
         const m=JSON.parse(data.toString());if(!m||typeof m!=='object')throw Error('Invalid message.');
         if(m.type==='join'&&!membership){
-          if(m.room!=null&&!/^[a-f0-9]{16}$/.test(m.room))throw Error('Enter the 16-character room code from your friend.');
           membership=rooms.join(m.room,m.token,ws);clearTimeout(joinTimeout);
-          send(ws,{type:'welcome',id:membership.player.id,token:membership.player.token,room:membership.room.code,position:membership.player.position});broadcast(membership.room);return;
+          send(ws,{type:'welcome',id:membership.player.id,token:membership.player.token,room:membership.room.code,position:membership.player.position,arrival:true});broadcast(membership.room);return;
         }
         if(!membership)throw Error('Join a room first.');
         const {room,player}=membership;

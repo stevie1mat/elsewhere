@@ -1,12 +1,14 @@
+import {expandOutskirts,OUTSKIRT_ROADS} from './porto-outskirts.js';
 export const PORTO_ROADS = [
   {x:-24,z:-30,w:15,d:458}, {x:-88,z:40,w:301,d:14},
   {x:-142,z:-30,w:14,d:458}, {x:-88,z:-158,w:301,d:14},
   {x:-88,z:136,w:301,d:14}, {x:-218,z:-30,w:12,d:458},
   {x:-88,z:-232,w:301,d:12},
+  ...OUTSKIRT_ROADS,
 ];
 
 export function expandPorto(w) {
-  for(const road of PORTO_ROADS.slice(2)){
+  for(const road of PORTO_ROADS.slice(2,7)){
     w.box(road.w,.04,road.d,road.x,.01,road.z,w.m.road);
     if(road.d>road.w){
       for(let z=-250;z<194;z+=10){if([-232,-158,40,136].every(c=>Math.abs(z-c)>11))w.box(.13,.01,4,road.x,.04,z,w.m.stripe);}
@@ -47,4 +49,5 @@ export function expandPorto(w) {
     if(z>-139&&z<121)continue;
     w.cylinder(.035,.035,.9,63.5,.45,z,w.m.dark,6);w.box(.035,.04,3.9,63.5,.9,z+1.95,w.m.dark);
   }
+  expandOutskirts(w);
 }
