@@ -1,4 +1,5 @@
 import { PORTO_ROADS } from './porto-expansion.js';
+import {mountOpeningStory,STORY_VERSION} from './opening-story.js';
 import {movementInput} from './movement-input.js';
 import {Skyway,SKYWAY_GATE,SKYWAY_ENTRY_BLOCK,keepOutsideRamp,createRide,rideInput,stepRide,rideRegion,rideDifficulty,CHECKPOINT_METERS} from './skyway.js';
 import {GOALS,createAdventure,advanceAdventure,adventureUpgrades} from './adventure.js';
@@ -139,6 +140,12 @@ const cameraRay=new THREE.Raycaster(), cameraAim=new THREE.Vector3(), cameraDesi
 let renderer, scene, camera, world, audioContext, audioGain, toastTimer, discoveryTimer;
 const keys=new Set(), discovered=new Set();
 const storage={get(key){try{return JSON.parse(localStorage.getItem(`elsewhere:${isChai?'chai:':isMumbai?'mumbai:':''}${key}`));}catch{return null;}},set(key,value){try{localStorage.setItem(`elsewhere:${isChai?'chai:':isMumbai?'mumbai:':''}${key}`,JSON.stringify(value));return true;}catch{return false;}}};
+const openingStory=isUrban?null:mountOpeningStory({onFinish(){storage.set('story-seen',STORY_VERSION);releaseKeys();startRide();}});
+if(openingStory){
+  const replay=document.createElement('button');replay.textContent='Replay opening story';replay.type='button';replay.className='story-replay';
+  replay.onclick=()=>{$('#game-menu').close();releaseKeys();openingStory.open();};$('#game-menu-content').append(replay);
+  if(storage.get('story-seen')!==STORY_VERSION)openingStory.open();
+}
 let characterLook=normalizeLook(storage.get('character'));
 let quest=restoreQuest(storage.get('quest'));
 let chai=createChai();
@@ -262,7 +269,7 @@ for(const button of document.querySelectorAll('[data-outfit]'))button.onclick=()
 for(const input of document.querySelectorAll('[data-gear]'))input.onchange=()=>{characterLook={...characterLook,[input.dataset.gear]:input.checked};storage.set('character',characterLook);updateWardrobe();};
 updateWardrobe();
 function startRide(){
-  if(!ready)return;
+  if(!ready||openingStory?.active)return;
   started=true;$('#intro').classList.add('hidden');$('#intro').inert=true;$('#ui').classList.add('playing','unlocked');renderer.domElement.focus();
 }
 function savePrefs(){storage.set('preferences',{night,quality,bob});}
@@ -396,7 +403,7 @@ function initialize(){
     const dt=Math.min((now-previous)/1000,.05);previous=now;
     if(!document.hidden){
       elapsed+=dt;
-      if(ready&&world.cyclist&&airborne()){
+      if(ready&&world.cyclist&&airborne()&&!openingStory?.active){
         stepArrival(arrival,dt,{player,input:movementInput(keys,'cycling'),canLand:(x,z)=>canOccupy(x,z,world.obstacles)});document.body.classList.toggle('arriving',airborne());
         const canDrop=arrival.phase==='balloon'&&arrival.elapsed>=JOURNEY_SECONDS;
         steerArrival(arrival,player,{forward:Number(keys.has('KeyW')||keys.has('ArrowUp'))-Number(keys.has('KeyS')||keys.has('ArrowDown')),right:Number(keys.has('KeyD')||keys.has('ArrowRight'))-Number(keys.has('KeyA')||keys.has('ArrowLeft')),orbitYaw},dt);
