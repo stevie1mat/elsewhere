@@ -1,21 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createPlayer,stepPlayer,toggleTravelMode,PORTO_BOUNDS,URBAN_BOUNDS} from '../src/movement.js';
+import {createPlayer,stepPlayer,toggleTravelMode,PORTO_BOUNDS,URBAN_BOUNDS,shorelineX} from '../src/movement.js';
 import {validPosition,Rooms} from '../server/rooms.js';
 import {createLighthouse} from '../src/lighthouse.js';
 test('walking enters sea, floats, and returns to walking on shore',()=>{
-  const p={...createPlayer(),mode:'walking',x:63.5,z:60,yaw:Math.PI/2};
+  const p={...createPlayer(),mode:'walking',x:shorelineX(60)-.5,z:60,yaw:Math.PI/2};
   for(let i=0;i<100;i++)stepPlayer(p,{forward:1},.05,[]);
-  assert.ok(p.swimming&&p.x>64&&p.y< -2&&p.y> -2.7);assert.ok(validPosition(p));
+  assert.ok(p.swimming&&p.x>shorelineX(60)&&p.y< -2&&p.y> -2.7);assert.ok(validPosition(p));
   assert.match(toggleTravelMode(p,[]),/Land/);
   p.yaw=-Math.PI/2;
   for(let i=0;i<140;i++)stepPlayer(p,{forward:1},.05,[]);
   assert.equal(p.swimming,false);assert.equal(p.y,0);assert.ok(p.grounded);
 });
 test('bicycles stay on shore and urban movement retains its boundary',()=>{
-  const p={...createPlayer(),x:63,z:60,yaw:Math.PI/2};for(let i=0;i<100;i++)stepPlayer(p,{forward:1},.05,[]);
-  assert.ok(p.x<=PORTO_BOUNDS.maxX-.95);assert.equal(p.swimming,false);
-  p.mode='walking';for(let i=0;i<100;i++)stepPlayer(p,{forward:1},.05,[],URBAN_BOUNDS);assert.ok(p.x<=URBAN_BOUNDS.maxX-.35);
+  const p={...createPlayer(),x:shorelineX(60)-1,z:60,yaw:Math.PI/2};for(let i=0;i<100;i++)stepPlayer(p,{forward:1},.05,[]);
+  assert.ok(p.x<=shorelineX(60)-.95);assert.equal(p.swimming,false);
+  p.x=63;p.mode='walking';for(let i=0;i<100;i++)stepPlayer(p,{forward:1},.05,[],URBAN_BOUNDS);assert.ok(p.x<=URBAN_BOUNDS.maxX-.35);
 });
 test('swimming has drag, frame-rate consistency, world bounds and obstacle collision',()=>{
   const run=hz=>{const p={...createPlayer(),mode:'walking',x:90,z:60,yaw:Math.PI/2};for(let i=0;i<hz*3;i++)stepPlayer(p,{forward:1},1/hz,[]);return p;};

@@ -1,18 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createArrival,stepArrival,steerArrival,dropArrival,arrivalPose} from '../src/arrival.js';
+import {JOURNEY_SECONDS,createArrival,stepArrival,steerArrival,dropArrival,arrivalPose} from '../src/arrival.js';
 import {PORTO_BOUNDS,SPAWN} from '../src/movement.js';
 test('fresh city arrival ignores a restored challenge position, but preserves a deliberate piloted drop',()=>{
   const a=createArrival(SPAWN),p={x:55,z:-380};
-  stepArrival(a,10);
+  stepArrival(a,JOURNEY_SECONDS);
   assert.equal(arrivalPose(a,p).x,SPAWN.x);assert.equal(arrivalPose(a,p).z,SPAWN.z);
   assert.equal(dropArrival(a,p),true);
   stepArrival(a,15,{player:p});assert.equal(a.phase,'landed');assert.ok(Math.hypot(p.x-SPAWN.x,p.z-SPAWN.z)<30);
-  const b=createArrival(SPAWN);stepArrival(b,10);b.pilot={x:-100,z:-100};
+  const b=createArrival(SPAWN);stepArrival(b,JOURNEY_SECONDS);b.pilot={x:-100,z:-100};
   assert.equal(dropArrival(b,p),true);assert.equal(b.from.x,-100);assert.equal(b.from.z,-100);
 });
 test('turning changes heading gradually, independent of the camera',()=>{
-  const p={x:0,z:0},a=createArrival(),b=createArrival();stepArrival(a,10);stepArrival(b,10);
+  const p={x:0,z:0},a=createArrival(),b=createArrival();stepArrival(a,JOURNEY_SECONDS);stepArrival(b,JOURNEY_SECONDS);
   steerArrival(a,p,{forward:1},.05);steerArrival(b,p,{forward:1,orbitYaw:Math.PI},.05);
   assert.deepEqual(a.pilot,b.pilot);
   const before=a.heading;steerArrival(a,p,{right:1},.05);
@@ -22,7 +22,7 @@ test('turning changes heading gradually, independent of the camera',()=>{
 test('piloting unlocks after the journey, retains momentum, and drops at the piloted location',()=>{
   const a=createArrival(),p={x:47,z:66};
   steerArrival(a,p,{forward:1},.05);assert.equal(a.pilot,undefined);
-  stepArrival(a,10);const start=arrivalPose(a,p);
+  stepArrival(a,JOURNEY_SECONDS);const start=arrivalPose(a,p);
   for(let i=0;i<100;i++)steerArrival(a,p,{forward:1,right:-1},.05);
   const flown=arrivalPose(a,p);assert.ok(Math.hypot(flown.x-start.x,flown.z-start.z)>5);
   stepArrival(a,5);steerArrival(a,p,{},.05);
@@ -32,7 +32,7 @@ test('piloting unlocks after the journey, retains momentum, and drops at the pil
   steerArrival(a,p,{forward:1},.05);assert.equal(p.x,chosen.x);
 });
 test('wind drifts an idle balloon and braking does not apply reverse thrust',()=>{
-  const a=createArrival(),p={x:0,z:0};stepArrival(a,10);
+  const a=createArrival(),p={x:0,z:0};stepArrival(a,JOURNEY_SECONDS);
   for(let i=0;i<100;i++)steerArrival(a,p,{},.05);
   assert.ok(Math.hypot(a.pilot.x,a.pilot.z)>1);
   for(let i=0;i<100;i++)steerArrival(a,p,{forward:1},.05);
@@ -40,21 +40,21 @@ test('wind drifts an idle balloon and braking does not apply reverse thrust',()=
   assert.ok(a.vz>speed&&a.vz<0);
 });
 test('piloting stays within the island boundaries',()=>{
-  const a=createArrival(),p={x:47,z:66};stepArrival(a,10);
+  const a=createArrival(),p={x:47,z:66};stepArrival(a,JOURNEY_SECONDS);
   for(let i=0;i<5000;i++)steerArrival(a,p,{forward:1},.05);
   const pose=arrivalPose(a,p);assert.ok(pose.x>=PORTO_BOUNDS.minX+2&&pose.z>=PORTO_BOUNDS.minZ+2);
 });
-test('arrival waits for an explicit drop after ten seconds and lands by parachute',()=>{
+test('arrival waits for an explicit drop after the ocean approach and lands by parachute',()=>{
   const a=createArrival(),p={x:20,z:10};
   assert.equal(dropArrival(a),false);assert.equal(arrivalPose(a,p).y,42);
-  stepArrival(a,9.9);assert.equal(dropArrival(a),false);
+  stepArrival(a,JOURNEY_SECONDS-.1);assert.equal(dropArrival(a),false);
   stepArrival(a,.1);assert.equal(a.phase,'balloon');assert.equal(arrivalPose(a,p).x,20);
   assert.equal(dropArrival(a,p),true);
   stepArrival(a,3.5,{player:p});assert.ok(arrivalPose(a,p).y>20&&arrivalPose(a,p).y<30);assert.equal(dropArrival(a),false);
   stepArrival(a,10,{player:p});assert.equal(a.phase,'landed');assert.equal(arrivalPose(a,p).y,0);assert.ok(p.x>20,'wind drifts the canopy');
 });
 test('waiting keeps touring, and jumping preserves the chosen location through touchdown',()=>{
-  const a=createArrival(),p={x:47,z:66};stepArrival(a,10);
+  const a=createArrival(),p={x:47,z:66};stepArrival(a,JOURNEY_SECONDS);
   const first=arrivalPose(a,p);stepArrival(a,30);const chosen=arrivalPose(a,p);
   assert.ok(Math.hypot(chosen.x-first.x,chosen.z-first.z)>50);
   assert.equal(dropArrival(a,p),true);assert.deepEqual(arrivalPose(a,p),chosen);
@@ -62,14 +62,14 @@ test('waiting keeps touring, and jumping preserves the chosen location through t
   stepArrival(a,15,{player:p});assert.equal(a.phase,'landed');assert.equal(arrivalPose(a,p).y,0);assert.ok(Math.hypot(p.x-chosen.x,p.z-chosen.z)<30);
 });
 test('a blocked drop drifts to nearby clear ground and refuses a fully blocked area',()=>{
-  const a=createArrival(),p={x:47,z:66};stepArrival(a,10);
+  const a=createArrival(),p={x:47,z:66};stepArrival(a,JOURNEY_SECONDS);
   assert.equal(dropArrival(a,p,()=>false),false);assert.equal(a.phase,'balloon');
   assert.equal(dropArrival(a,p,(x,z)=>x>=49),true);
   assert.ok(p.x>=49);assert.deepEqual(arrivalPose(a,p),{x:47,y:42,z:66});
   stepArrival(a,15,{player:p,canLand:(x,z)=>x>=49});assert.equal(a.phase,'landed');assert.equal(arrivalPose(a,p).x,p.x);assert.ok(p.x>=49);
 });
 test('parachute drag limits descent speed and steering/flare have physical effects',()=>{
-  const run=(hz,flare=false)=>{const a=createArrival(),p={x:0,z:0};stepArrival(a,10);dropArrival(a,p);let impact=0;
+  const run=(hz,flare=false)=>{const a=createArrival(),p={x:0,z:0};stepArrival(a,JOURNEY_SECONDS);dropArrival(a,p);let impact=0;
     for(let i=0;i<hz*20&&a.phase!=='landed';i++){impact=a.canopy.vy;stepArrival(a,1/hz,{player:p,input:{right:.4,forward:flare?-1:1}});assert.ok(Math.abs(a.canopy.vy)<6);}
     assert.equal(a.phase,'landed');return {a,p,impact};};
   const a=run(30),b=run(120),f=run(60,true);

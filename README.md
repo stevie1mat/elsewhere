@@ -220,3 +220,23 @@ longer unlock landmarks. New scenery uses shared instanced meshes and fixed item
 `src/chai.js` contains standalone delivery rules and the layout. `src/chai-world.js` builds and
 animates the district. `tests/chai.test.js` checks pickup/delivery/refill, spilling and cooling,
 frame-rate consistency, reachable customers, clear traffic paths, and scenery/animal geometry.
+
+## Porto Sol art-direction rebuild
+
+The visual target is saved in `docs/porto-sol-art-direction.png`. This is an aspirational concept illustration; the running world remains procedural 3D.
+
+The western village now climbs a 32 m hillside with stone lanes, smaller homes, planted balconies, roof terraces, a church tower and a lookout. The waterfront has a curved promenade with café seating, low stone parapets and rocky edges. Arcaded storefronts, flowering pergolas and additional small houses fill out the original center. The elevated Skyway is visible during its challenge; entering at its existing marker still works.
+
+`server/shared/landscape.js` defines ground elevation and the shore for both client and server. Walking, cycling, jumps, parachute landing, parked bicycles, pickup rendering and multiplayer validation use the new terrain. The map follows the curved shoreline. Restart the multiplayer service when deploying these shared-rule changes alongside the frontend.
+
+`tests/landscape.test.js` checks slope travel at multiple frame rates, hillside jumping and co-op validation, parachute landing, shoreline geometry and elevated pickups. The quest route test builds the updated obstacles and checks reachable approaches to all destinations and pickups.
+
+### First day in Porto Sol
+
+The opening balloon now approaches from open water over 24 seconds before flight controls unlock. After landing, Mara appears nearby with a gold marker. Press **F** (or **Meet Mara**) to begin the walk to Casa Aurora. She follows a collision-checked route, walks slower than the player, and waits when the player is more than seven metres away. At the furnished room, press **F** to leave the visible suitcase. Completion is saved locally as `elsewhere:first-home`, and Casa Aurora remains marked on the map. The welcome chapter takes visual priority over the collection HUD until the suitcase is stored.
+
+### Settling-in story campaign
+
+After storing the suitcase, an eleven-stop personal campaign takes priority over the optional parcel quest and collection HUD. Four chapters cover a message home and first meal, paid bakery work, furnishing the room, and a neighbourhood supper followed by an ending at home. Press F at the gold world/map marker, choose a response, and review memories, possessions, neighbours, and earnings in the Journal. The bread must be collected and delivered before Rui pays €18; the market offers a €6 plant, a €4 mug, or saving the money. Unpacking adds the photograph, recipe notebook, and chosen furnishing to the room. Supper changes the town to blue hour, and finishing the story returns it to morning and free exploration.
+
+Personal choices are persisted as `elsewhere:settling-story` and replayed on load to derive money, possessions, and milestones rather than trusting saved totals. This campaign is local to each player; the earlier co-op parcel quest remains optional after the ending.

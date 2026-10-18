@@ -1,3 +1,12 @@
+import {SettlingWorld} from './settling-world.js';
+import {WelcomeWorld,buildFirstHome} from './welcome-world.js';
+import {buildPortoBuilding} from './architecture.js';
+import {townFabric} from './town-fabric.js';
+import {groundElevation} from './movement.js';
+import {curvedHarbor,hillsideLandmarks} from './landscape-builders.js';
+import {enrichCity} from './city-details.js';
+import {addPainterlyGreens} from './painterly-greens.js';
+import { coastalVista } from './coastal-vista.js';
 import { detailedCarGeometry } from './detailed-car.js';
 import { flowerPlanterGeometry } from './flower-planter.js';
 import { RoadPickups, PickupDisplay } from './road-pickups.js';
@@ -41,14 +50,15 @@ function showArrival(scene,entry,rider,a,p){
 }
 export class World {
   constructor(scene, renderer, manager, location = 'porto') {
-    this.location = location;
+    this.location = location; this.cityBuildings = [];
     this.scene = scene; this.renderer = renderer; this.manager = manager;
     this.obstacles = []; this.cameraColliders = []; this.batches = new Map(); this.walkers = []; this.birds = []; this.lights = [];
     this.night = false; this.treePositions = []; this.seed = 427;
     this.loader = new T.TextureLoader(manager);
-    this.materials(); this.environment(); this.ground(); this.neighborhood(); this.waterfront(); this.garden(); this.details(); if (location === 'porto') expandPorto(this); this.bake();
+    this.materials(); this.environment(); this.ground(); this.neighborhood(); this.waterfront(); this.garden(); this.details(); if (location === 'porto') { expandPorto(this); hillsideLandmarks(this); curvedHarbor(this); townFabric(this); enrichCity(this); addPainterlyGreens(this); } this.bake();
     if(location==='porto'){this.pickups=new RoadPickups(this.obstacles);this.pickupDisplay=new PickupDisplay(scene,this.pickups);}
     this.questWorld = location !== 'porto' ? { addCharacter() { }, update() { } } : new QuestWorld(scene); this.questStage = 0; this.coopMode = false; this.carryParcel = true; this.remoteStates = []; this.remoteRiders = new Map();
+    if(location==='porto'){this.welcomeWorld=new WelcomeWorld(scene);this.lifeWorld=new SettlingWorld(scene);}
     this.loadTrees(); this.loadPeople();
   }
   random() { this.seed = (this.seed * 1664525 + 1013904223) >>> 0; return this.seed / 4294967296; }
@@ -101,21 +111,35 @@ export class World {
         }
         return maps;
       };
-      Object.assign(this.m.pavement, surface('cobbles', [76,108]), { color: new T.Color(0xf0e8dc), normalScale: new T.Vector2(.65,.65) });
+      Object.assign(this.m.pavement, surface('cobbles', [1,1]), { color: new T.Color(0xf0e8dc), normalScale: new T.Vector2(.65,.65) });
       const plaster = surface('plaster', [1,1]);
+      // Keep subtle surface relief, but use luminous painted plaster instead
+      // of multiplying pastel walls by a dark photographic stone albedo.
+      plaster.map = noise;
+      noise.repeat.set(1,1);
+      this.m.cream.color.set(0xffedc9); this.m.peach.color.set(0xf2b097);
+      this.m.sage.color.set(0xb5cfb2); this.m.blue.color.set(0xa9cbd9);
+      this.m.grass.color.set(0xb5c887);
+      this.m.road.color.set(0xc6c8c8);
+      this.m.flower.color.set(0xed689a);
+      // Decal-like layers have deterministic depth priority at intersections.
+      Object.assign(this.m.road,{polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-2});
+      Object.assign(this.m.stripe,{polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-4});
+      asphalt.repeat.set(1,1);asphaltNormal.repeat.set(1,1);
       for (const name of ['cream','peach','sage','blue']) Object.assign(this.m[name], plaster, { normalScale: new T.Vector2(.45,.45) });
       const timber = surface('wood', [1,1]);
       for (const name of ['wood','teak']) Object.assign(this.m[name], timber, { color: new T.Color(name==='teak'?0xd4b898:0xa68b72), normalScale: new T.Vector2(.45,.45) });
       // Match physical texture scale on differently sized façades and timber pieces.
-      this.worldUVMaterials = new Set(['cream','peach','sage','blue','wood','teak'].map(name=>this.m[name]));
+      this.worldUVMaterials = new Set(['cream','peach','sage','blue','wood','teak','pavement','road'].map(name=>this.m[name]));
       const rough = this.loader.load(ROOT+'hd/asphalt-roughness-2k.jpg');
       rough.wrapS=rough.wrapT=T.RepeatWrapping; rough.repeat.copy(asphalt.repeat); this.m.road.roughnessMap=rough;
       const normal = this.loader.load(ROOT+'hd/grass-normal-2k.jpg');
       normal.wrapS=normal.wrapT=T.RepeatWrapping; normal.repeat.copy(groundMap.repeat); this.m.grass.normalMap=normal; this.m.grass.normalScale=new T.Vector2(.4,.4);
+      Object.assign(this.m.road,{map:this.m.pavement.map,normalMap:this.m.pavement.normalMap,roughnessMap:this.m.pavement.roughnessMap,color:new T.Color(0xc1b095),normalScale:new T.Vector2(.35,.35)});
     }
   }
   mesh(geometry, material, x = 0, y = 0, z = 0, rotation = 0) {
-    const matrix = new T.Matrix4().compose(new T.Vector3(x, y, z), new T.Quaternion().setFromAxisAngle(new T.Vector3(0, 1, 0), rotation), new T.Vector3(1, 1, 1));
+    const matrix = new T.Matrix4().compose(new T.Vector3(x, y + (this.elevationOffset || 0), z), new T.Quaternion().setFromAxisAngle(new T.Vector3(0, 1, 0), rotation), new T.Vector3(1, 1, 1));
     geometry.applyMatrix4(matrix);
     if (this.worldUVMaterials?.has(material)) {
       const pos=geometry.attributes.position, normals=geometry.attributes.normal, uv=geometry.attributes.uv;
@@ -139,22 +163,25 @@ export class World {
     this.batches.clear();
   }
   environment() {
-    this.scene.fog = new T.FogExp2(0xd3bca0, .0019);
-    this.sun = new T.DirectionalLight(0xffdeb0, 3.2); this.sun.position.set(95, 80, -65);
+    this.scene.fog = new T.FogExp2(this.location === 'porto' ? 0xb5cfe0 : 0xd3bca0, this.location === 'porto' ? .00048 : .0019);
+    this.sun = new T.DirectionalLight(0xffe1b5, this.location === 'porto' ? 4.2 : 3.2); this.sun.position.set(95, 80, -65);
     this.sun.castShadow = true; this.sun.shadow.mapSize.set(2048, 2048);
     Object.assign(this.sun.shadow.camera, { left: -72, right: 72, top: 72, bottom: -72, near: 1, far: 290 });
     this.sun.shadow.normalBias = .045; this.sun.shadow.bias = -.00015; this.sun.shadow.blurSamples = 8;
     this.scene.add(this.sun, this.sun.target);
-    this.ambient = new T.HemisphereLight(0xcbdcde, 0x74604b, 1.65); this.scene.add(this.ambient);
+    this.ambient = new T.HemisphereLight(0xb6d6ff, 0x947359, this.location === 'porto' ? 1.05 : 1.65); this.scene.add(this.ambient);
     this.skyTexture = this.loader.load(ROOT + 'hd/sky-8k.jpg'); this.skyTexture.colorSpace = T.SRGBColorSpace;
     this.skyMaterial = new T.ShaderMaterial({
       side: T.BackSide, depthWrite: false, uniforms: { panorama: { value: this.skyTexture }, night: { value: 0 } },
       vertexShader: 'varying vec2 vUv;varying vec3 vPos;void main(){vUv=uv;vPos=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
       fragmentShader: `uniform sampler2D panorama;uniform float night;varying vec2 vUv;varying vec3 vPos;
       void main(){vec3 dir=normalize(vPos);vec3 photo=texture2D(panorama,vUv).rgb;
-        float h=smoothstep(-.05,.65,dir.y);vec3 dusk=mix(vec3(.86,.62,.43),vec3(.29,.49,.62),h);
-        vec3 col=mix(dusk,photo*vec3(1.08,.89,.73),.42);
-        float sun=pow(max(dot(dir,normalize(vec3(.85,.22,-.55))),0.),1400.);col+=vec3(1.,.75,.38)*sun*3.;
+        float h=smoothstep(-.05,.65,dir.y);vec3 dusk=mix(vec3(.91,.75,.54),vec3(.22,.48,.72),h);
+        float cloud=smoothstep(.38,.79,dot(photo,vec3(.2126,.7152,.0722)));
+        vec3 clearSky=mix(vec3(.32,.65,.9),vec3(.025,.22,.58),h);
+        vec3 cloudColor=mix(vec3(.66,.77,.91),vec3(1.,.97,.90),cloud);
+        vec3 col=mix(clearSky,cloudColor,cloud*.88);
+        float sun=pow(max(dot(dir,normalize(vec3(190.,200.,-130.))),0.),1400.);col+=vec3(1.,.75,.38)*sun*3.;
         col=mix(col,vec3(.025,.06,.12)+photo*.045,night);gl_FragColor=vec4(col,1.);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
@@ -188,13 +215,13 @@ export class World {
       vec2 skyUV=vec2(atan(reflected.z,reflected.x)/6.283185+.5,asin(clamp(reflected.y,-1.,1.))/3.141593+.5);
       vec3 sky=texture2D(panorama,skyUV).rgb;
       vec2 shore=max(abs(p-vec2(-208.,-20.))-vec2(272.,380.),0.);float coast=length(shore);
-      vec3 depthColor=mix(vec3(.025,.28,.27),vec3(.008,.075,.13),smoothstep(0.,100.,coast));
+      vec3 depthColor=mix(vec3(.035,.39,.43),vec3(.012,.16,.26),smoothstep(0.,100.,coast));
       vec3 col=mix(depthColor,sky,.06+.82*f);
-      vec3 halfV=normalize(view+normalize(vec3(95.,80.,-65.)));float spec=pow(max(dot(n,halfV),0.),220.);
+      vec3 halfV=normalize(view+normalize(vec3(190.,200.,-130.)));float spec=pow(max(dot(n,halfV),0.),220.);
       col+=vec3(1.,.81,.54)*spec*2.;
       float foam=(1.-smoothstep(.3,2.8,coast))*smoothstep(.45,.85,sin(coast*2.8-time*1.5+wave(p*.4)*4.));
       col=mix(col,vec3(.63,.78,.72),foam*.42);
-      float fog=1.-exp(-length(cameraPosition-vWorld)*.0018);col=mix(col,vec3(.60,.65,.63),fog);
+      float fog=1.-exp(-length(cameraPosition-vWorld)*.00048);col=mix(col,vec3(.56,.68,.73),fog);
       col=mix(col,col*vec3(.15,.23,.35),night);gl_FragColor=vec4(col,1.);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
@@ -225,7 +252,9 @@ export class World {
       color.lerp(new T.Color(0xb2a18a),1-T.MathUtils.smoothstep(h,0,12));
       color.multiplyScalar(.83+noise(vertices.getX(i)*.3,vertices.getZ(i)*.3)*.24);colors.push(color.r,color.g,color.b);
     }
-    terrain.setAttribute('color',new T.Float32BufferAttribute(colors,3));this.mesh(terrain, hill, -240, 0, -730);
+    terrain.setAttribute('color',new T.Float32BufferAttribute(colors,3));
+    coastalVista(this, terrain);
+    this.mesh(terrain, hill, -240, 0, -730);
     this.scene.add(createLighthouse());
   }
   ground() {
@@ -238,7 +267,7 @@ export class World {
     for (const z of [28, 51]) for (let x = -30; x < -17; x += 1.6)this.box(.8, .012, 3.4, x, .04, z, this.m.stripe);
     for (const x of [-36, -12]) for (let z = 35; z < 46; z += 1.6)this.box(3.4, .012, .8, x, .04, z, this.m.stripe);
     for (const x of [-32.2, -15.8]) { this.box(.25, .18, 166, x, .05, -56, this.m.trim); this.box(.25, .18, 67, x, .05, 85, this.m.trim); }
-    this.box(.4, 1.25, 460, 64, -.6, -30, this.m.cream);
+    if(this.location!=='porto')this.box(.4, 1.25, 460, 64, -.6, -30, this.m.cream);
     // Fine paving joints along the pedestrian waterfront.
     for (let x = 38; x <= 63; x += 3.5)this.box(.018, .006, 459, x, .009, -30, this.m.sand);
     for (let z = -259; z < 200; z += 3.5)this.box(26, .006, .018, 51, .01, z, this.m.sand);
@@ -249,10 +278,12 @@ export class World {
     this.box(w, h, .08, x, y, z, mat, rotation);
   }
   building(x, z, w, d, h, material, shop, front = 'east') {
+    if(this.location==='porto')return buildPortoBuilding(this,x,z,w,d,h,material,shop,front);
     if(this.location==='porto'){
+      this.cityBuildings?.push({x,z,width:w,depth:d,height:h,shop,front,base:this.elevationOffset||0});
       // Camera occlusion needs the building shell, not every balcony and window.
       const proxy=new T.Mesh(new T.BoxGeometry(w+.5,h+1,d+.5));
-      proxy.position.set(x,(h+1)/2,z);proxy.updateMatrixWorld(true);this.cameraColliders.push(proxy);
+      proxy.position.set(x,(h+1)/2+(this.elevationOffset||0),z);proxy.updateMatrixWorld(true);this.cameraColliders.push(proxy);
     }
     this.box(w, h, d, x, h / 2, z, material); this.obstacle(x, z, w + .05, d + .05);
     this.box(w + .4, .35, d + .4, x, h - .2, z, this.m.trim);
@@ -312,7 +343,8 @@ export class World {
       this.box(.08,.42,.12,x+.19,.32,z-.62,this.m.chrome);
     }
     this.building(14, -48, 20, 23, 10.7, this.m.sage, 'LIVRARIA');
-    this.building(11, -83, 25, 22, 17.3, this.m.cream, 'PORTO SOL');
+    if(this.location==='porto')buildFirstHome(this);
+    else this.building(11, -83, 25, 22, 17.3, this.m.cream, 'PORTO SOL');
     this.building(9, -118, 27, 18, 14, this.m.blue, 'ATELIER');
     this.building(12, 77, 22, 31, 14, this.m.peach, 'MERCADO');
     this.building(-53, 10, 25, 25, 14, this.m.sage, 'FLORISTA', 'south');
@@ -374,7 +406,7 @@ export class World {
   lamp(x, z) {
     this.cylinder(.055, .12, 4.4, x, 2.2, z, this.m.dark, 8); this.box(.55, .08, .55, x, 4.45, z, this.m.dark);
     this.box(.3, .55, .3, x, 4.1, z, this.m.lamp); this.cylinder(.2, .28, .12, x, .08, z, this.m.dark, 8);
-    const light = new T.PointLight(0xffd5a1, 0, 12, 2); light.position.set(x, 3.8, z); light.visible = false; this.scene.add(light); this.lights.push(light);
+    const light = new T.PointLight(0xffd5a1, 0, 12, 2); light.position.set(x, 3.8+(this.elevationOffset||0), z); light.visible = false; this.scene.add(light); this.lights.push(light);
     this.obstacle(x, z, .3, .3);
   }
   waterfront() {
@@ -449,7 +481,7 @@ export class World {
         const prepare = m => { m = m.clone(); m.side = T.DoubleSide; if (m.name.includes('leaves')) { m.alphaMap = alpha; m.alphaTest = .45; m.transparent = false; } m.roughness = .9; return m; };
         const materials = Array.isArray(o.material) ? o.material.map(prepare) : prepare(o.material);
         const mesh = new T.InstancedMesh(geo, materials, this.treePositions.length); const obj = new T.Object3D();
-        this.treePositions.forEach((p, i) => { obj.position.set(p.x, 0, p.z); obj.scale.setScalar(p.scale); obj.rotation.y = i * 1.8; obj.updateMatrix(); mesh.setMatrixAt(i, obj.matrix); });
+        this.treePositions.forEach((p, i) => { obj.position.set(p.x, this.location==='porto'?groundElevation(p.x,p.z):0, p.z); obj.scale.setScalar(p.scale); obj.rotation.y = i * 1.8; obj.updateMatrix(); mesh.setMatrixAt(i, obj.matrix); });
         mesh.castShadow = true; mesh.receiveShadow = true; this.scene.add(mesh);
       });
     } catch (error) { console.warn('Detailed trees unavailable:', error.message); }
@@ -461,6 +493,8 @@ export class World {
         gltf.scene.traverse(o => { if (!o.isMesh) return; const prep = old => { const part = old.name.includes('opacity') ? 'opacity' : old.name.includes('head') ? 'head' : 'body'; return new T.MeshStandardMaterial({ map: textures[part], name: part, roughness: .88, side: part === 'opacity' ? T.DoubleSide : T.FrontSide, alphaTest: part === 'opacity' ? .45 : 0 }); }; o.material = Array.isArray(o.material) ? o.material.map(prep) : prep(o.material); o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; });
         const clip = gltf.animations.find(a => a.name === 'Walk');
         this.questWorld.addCharacter(gltf.scene, clip, prefix);
+        this.welcomeWorld?.addCharacter(gltf.scene,clip,prefix);
+        this.lifeWorld?.addCharacter(gltf.scene,clip,prefix);
         if (prefix === 'm002') { const Avatar=this.location==='porto'?Explorer:Cyclist; this.avatarTemplate=gltf.scene;this.avatarClip=clip;this.Avatar=Avatar;this.cyclist = new Avatar(gltf.scene, clip);this.scene.add(this.cyclist.group);this.syncRemoteRiders(); }
         if (prefix === 'm002' && this.location === 'porto') {
           this.combat = new RiderCombat();
@@ -482,7 +516,7 @@ export class World {
     if (!this.combat) return false;
     const hit = this.combat.update(dt, player, this.obstacles, this.pickups);
     this.combat.rivals.forEach((p, i) => {
-      const rider = this.rivalCyclists[i]; rider.update(p, dt);
+      const rider = this.rivalCyclists[i]; rider.update(p, dt);this.placeOnTerrain(rider,{...p,y:groundElevation(p.x,p.z)});
       rider.cycle.group.rotation.z = Math.sin(p.stagger * 18) * Math.min(.16, p.stagger * .2);
     });
     return hit;
@@ -506,7 +540,14 @@ export class World {
     }
   }
   setLocalArrival(arrival,player){
-    this.localFlight??={};return showArrival(this.scene,this.localFlight,this.cyclist,arrival,player);
+    this.localFlight??={};const pose=showArrival(this.scene,this.localFlight,this.cyclist,arrival,player);
+    if(this.location==='porto'&&(!arrival||arrival.phase==='landed'))this.placeOnTerrain(this.cyclist,player);
+    return pose;
+  }
+  placeOnTerrain(rider,p){
+    if(!rider?.cycle)return;
+    if(p.mode==='walking'&&p.bike)rider.cycle.group.position.y=.015+groundElevation(p.bike.x,p.bike.z);
+    else if(p.mode!=='walking')rider.cycle.group.position.y=.015+(p.y||0);
   }
   updateRemote(dt) {
     const k = 1 - Math.exp(-14 * dt);
@@ -517,23 +558,32 @@ export class World {
       p.y=(p.y||0)+((target.y||0)-(p.y||0))*k;p.vy=target.vy||0;p.grounded=target.grounded!==false;
       p.mode=target.mode;p.bike=target.bike;p.speed=target.speed;p.swimming=target.swimming===true;rider.update(p,dt);rider.setQuestStage(this.questStage,this.remoteCarrier===target.id);
       stepArrival(entry.arrival,dt);showArrival(this.scene,entry,rider,entry.arrival,p);
+      if(this.location==='porto'&&(!entry.arrival||entry.arrival.phase==='landed'))this.placeOnTerrain(rider,p);
     }
   }
   setNight(night) {
     this.night = night; this.skyMaterial.uniforms.night.value = night ? 1 : 0; this.oceanMaterial.uniforms.night.value = night ? 1 : 0;
-    this.sun.intensity = night ? .25 : 3.2; this.sun.color.set(night ? 0x9ab9eb : 0xffdeb0); this.ambient.intensity = night ? .48 : 1.65;
-    this.scene.environmentIntensity = night ? .1 : .38; this.scene.fog.color.set(night ? 0x192b41 : 0xd3bca0);
+    this.sun.intensity = night ? .25 : (this.location === 'porto' ? 4.2 : 3.2); this.sun.color.set(night ? 0x9ab9eb : 0xffe1b5); this.ambient.intensity = night ? .48 : (this.location === 'porto' ? 1.05 : 1.65);
+    this.scene.environmentIntensity = night ? .1 : .38; this.scene.fog.color.set(night ? 0x192b41 : (this.location === 'porto' ? 0xb5cfe0 : 0xd3bca0));
     this.m.lamp.emissiveIntensity = night ? 4 : 1.5; this.lights.forEach(l => { l.intensity = night ? 35 : 0; l.visible = false; });
     this.m.glass.emissive.set(night ? 0xb27c3b : 0); this.m.glass.emissiveIntensity = night ? .3 : 0;
   }
   update(time, dt, camera) {
     this.questWorld.update(time, this.questStage);
+    if(this.lifeObjective){this.questWorld.marker.visible=true;this.questWorld.marker.position.set(this.lifeObjective.x,0,this.lifeObjective.z);}
     this.cyclist?.setQuestStage(this.questStage, this.carryParcel);
 
     this.oceanMaterial.uniforms.time.value = time; this.sky.position.copy(camera.position);
     // Stabilize the moving shadow frustum to avoid shimmering at walking speed.
     const sx = Math.round(camera.position.x / 2) * 2, sz = Math.round(camera.position.z / 2) * 2;
-    this.sun.position.set(sx + 95, 100, sz - 65); this.sun.target.position.set(sx, 0, sz); this.sun.target.updateMatrixWorld();
+    // Aerial views need shadows across the city, not a tiny patch under the balloon.
+    const span = camera.position.y > 35 ? 260 : 90;
+    const shadowCamera = this.sun.shadow.camera;
+    if (shadowCamera.right !== span) {
+      Object.assign(shadowCamera, {left:-span,right:span,top:span,bottom:-span,far:700});
+      shadowCamera.updateProjectionMatrix();
+    }
+    this.sun.position.set(sx + 190, 200, sz - 130); this.sun.target.position.set(sx, 0, sz); this.sun.target.updateMatrixWorld();
     if (this.night) { const nearest = this.lights.map(light => ({ light, d: light.position.distanceToSquared(camera.position) })).sort((a, b) => a.d - b.d).slice(0, 5); const active = new Set(nearest.map(item => item.light)); this.lights.forEach(light => { light.visible = active.has(light); }); }
     for (const w of this.walkers) {
       w.phase += dt * .016; const angle = w.phase; const x = w.lane + Math.cos(angle) * 1.5, z = -10 + Math.sin(angle) * w.range;

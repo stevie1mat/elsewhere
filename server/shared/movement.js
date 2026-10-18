@@ -1,3 +1,5 @@
+import {groundElevation,shorelineX} from './landscape.js';
+export {groundElevation,shorelineX} from './landscape.js';
 export const PORTO_BOUNDS = Object.freeze({minX:-479,maxX:64,minZ:-399,maxZ:359});
 export const URBAN_BOUNDS = Object.freeze({minX:-119,maxX:64,minZ:-139,maxZ:119});
 export const SPAWN = Object.freeze({ x: 47, z: 66, yaw: -0.23, pitch: 0.25 });
@@ -18,7 +20,7 @@ export function stepSwimmer(p,input,delta,obstacles){
     const x=p.x+p.vx*dt,z=p.z+p.vz*dt;
     if(canTravelOnFoot(x,p.z,obstacles))p.x=x;else p.vx=0;
     if(canTravelOnFoot(p.x,z,obstacles))p.z=z;else p.vz=0;
-    if(onLand(p.x,p.z,.35)){p.swimming=false;p.y=0;p.grounded=true;p.jumpHeld=!!input.jump;break;}
+    if(onLand(p.x,p.z,.35)){p.swimming=false;p.y=groundElevation(p.x,p.z);p.grounded=true;p.jumpHeld=!!input.jump;break;}
   }
   p.speed=Math.hypot(p.vx,p.vz);p.moving=p.speed>.05;
   if(p.swimming)p.y=-2.55+Math.min(1,p.speed/1.6)*.4+Math.sin(p.swimTime*3)*.05;
@@ -26,6 +28,7 @@ export function stepSwimmer(p,input,delta,obstacles){
 }
 export const CHALLENGE_BIKE=Object.freeze({x:40,y:.015,z:-368,radius:3.5,color:0xf16b3d,replace:true});
 export const LANDMARKS = Object.freeze([
+  {id:'home',name:'Casa Aurora',subtitle:'Your first room in Porto Sol. A place to leave your suitcase and come back to.',x:19,z:-83,radius:5,number:'12'},
   {id:'skyway',name:'Skyway Ride',subtitle:'Endless cycling over the sea to the mountains. Press F at the gate.',x:55,z:-380,radius:9,number:'11'},
   { id: 'cafe', name: 'Café Luma', subtitle: 'A slow morning, any time of day.', x: 31, z: 10, radius: 10, number: '01' },
   { id: 'pier', name: 'The old pier', subtitle: 'Nothing between you and the horizon.', x: 105, z: -36, radius: 11, number: '02' },
@@ -40,7 +43,7 @@ export const LANDMARKS = Object.freeze([
 ]);
 
 export function onLand(x, z, radius = 0.95, bounds = PORTO_BOUNDS) {
-  const main = x >= bounds.minX + radius && x <= bounds.maxX - radius && z >= bounds.minZ + radius && z <= bounds.maxZ - radius;
+  const main = x >= bounds.minX + radius && x <= (bounds===PORTO_BOUNDS?shorelineX(z):bounds.maxX) - radius && z >= bounds.minZ + radius && z <= bounds.maxZ - radius;
   const pier = x >= 60 && x <= 117 - radius && z >= -42 + radius && z <= -30 - radius;
   return main || pier;
 }
@@ -90,7 +93,7 @@ export function stepPlayer(p, input, delta, obstacles, bounds = PORTO_BOUNDS) {
   p.walked += distance * Math.sign(p.speed);
   p.moving = distance > 0.002;
   if (distance < Math.abs(p.speed)*dt*.5) p.speed = 0;
-  p.y = 0; p.vy = 0; p.grounded = true;
+  p.y = bounds===PORTO_BOUNDS?groundElevation(p.x,p.z):0; p.vy = 0; p.grounded = true;
   return p;
 }
 
@@ -100,7 +103,9 @@ export function stepWalker(p,input,delta,obstacles,bounds=PORTO_BOUNDS){
   const elapsed=Math.min(.1,Math.max(0,delta)),steps=Math.max(1,Math.ceil(elapsed/(1/120))),dt=elapsed/steps;
   const forward=Math.max(-1,Math.min(1,input.forward||0)),turn=Math.max(-1,Math.min(1,input.right||0));
   p.y??=0;p.vy??=0;p.vx??=0;p.vz??=0;
-  p.grounded=p.y<=.001&&p.vy<=0;
+  const ground=()=>bounds===PORTO_BOUNDS?groundElevation(p.x,p.z):0;
+  p.grounded=p.y<=ground()+.001&&p.vy<=0;
+  if(p.grounded){p.y=ground();p.vy=0;}
   if(input.jump&&!p.jumpHeld&&p.grounded){p.vy=5.2;p.grounded=false;}
   p.jumpHeld=!!input.jump;
   let traveled=0;
@@ -119,7 +124,8 @@ export function stepWalker(p,input,delta,obstacles,bounds=PORTO_BOUNDS){
     const distance=Math.hypot(p.x-oldX,p.z-oldZ);traveled+=distance;
     if(p.grounded)p.walked+=distance*(forward<0?-1:1);
     // Constant gravity with analytic displacement avoids frame-rate-dependent jumps.
-    if(!p.grounded){p.y+=p.vy*dt-9.81*dt*dt/2;p.vy-=9.81*dt;if(p.y<=0){p.y=0;p.vy=0;p.grounded=true;}}
+    if(p.grounded){p.y=ground();p.vy=0;}
+    else {p.y+=p.vy*dt-9.81*dt*dt/2;p.vy-=9.81*dt;if(p.y<=ground()){p.y=ground();p.vy=0;p.grounded=true;}}
   }
   p.speed=Math.hypot(p.vx,p.vz)*(forward<0?-1:1);p.moving=traveled>.0001;return p;
 }

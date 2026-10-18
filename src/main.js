@@ -1,3 +1,6 @@
+import {lifeStep} from './settling-story.js';
+import {mountSettlingStory} from './settling-ui.js';
+import {createWelcome,meetGuide,stepWelcome,welcomeAction,welcomeCopy} from './welcome.js';
 import { PORTO_ROADS } from './porto-expansion.js';
 import {mountOpeningStory,STORY_VERSION} from './opening-story.js';
 import {movementInput} from './movement-input.js';
@@ -13,7 +16,7 @@ import { MumbaiWorld } from './mumbai-world.js';
 import { ChaiWorld } from './chai-world.js';
 import { CHAI_SPAWN,CHAI_LANDMARKS,CHAI_ROADS,createChai,chaiTarget,canServe,serveChai,stepChai } from './chai.js';
 import { MUMBAI_SPAWN, MUMBAI_LANDMARKS, MUMBAI_ROADS } from './mumbai-layout.js';
-import { SPAWN as PORTO_SPAWN, LANDMARKS as PORTO_LANDMARKS, PORTO_BOUNDS, URBAN_BOUNDS, createPlayer as createPortoPlayer, stepPlayer, toggleTravelMode, validateSavedPosition } from './movement.js';
+import { SPAWN as PORTO_SPAWN, LANDMARKS as PORTO_LANDMARKS, PORTO_BOUNDS, shorelineX, URBAN_BOUNDS, createPlayer as createPortoPlayer, stepPlayer, toggleTravelMode, validateSavedPosition } from './movement.js';
 import './style.css';
 import { normalizeLook } from './explorer.js';
 import { mapProjection,panMap,zoomMap } from './map-view.js';
@@ -140,6 +143,24 @@ const cameraRay=new THREE.Raycaster(), cameraAim=new THREE.Vector3(), cameraDesi
 let renderer, scene, camera, world, audioContext, audioGain, toastTimer, discoveryTimer;
 const keys=new Set(), discovered=new Set();
 const storage={get(key){try{return JSON.parse(localStorage.getItem(`elsewhere:${isChai?'chai:':isMumbai?'mumbai:':''}${key}`));}catch{return null;}},set(key,value){try{localStorage.setItem(`elsewhere:${isChai?'chai:':isMumbai?'mumbai:':''}${key}`,JSON.stringify(value));return true;}catch{return false;}}};
+const welcome=createWelcome(storage.get('first-home'));
+const lifeStory=isUrban?null:mountSettlingStory({storage,getPlayer:()=>player,getWorld:()=>world,releaseKeys,onChange:state=>{if(state.stage===9)setNight(true);if(state.complete)setNight(false);}});
+$('#app').insertAdjacentHTML('beforeend','<section id="welcome-card" hidden aria-label="Your first day"><small>YOUR FIRST DAY</small><h2 id="welcome-title"></h2><p id="welcome-body"></p><button id="welcome-action" type="button"></button></section>');
+$('#welcome-action').onclick=()=>talk();
+function updateWelcome(dt){
+  if(isUrban||!world)return;
+  const active=started&&!airborne()&&!skyRide;
+  document.body.classList.toggle('welcoming',welcome.phase!=='settled'||!lifeStory?.state.complete);
+  lifeStory?.update(active&&welcome.phase==='settled');
+  if(welcome.phase!=='settled'||!lifeStory?.state.complete)world.questStage=-1;
+  if(active){meetGuide(welcome,player,world.obstacles);stepWelcome(welcome,player,modalOpen()?0:dt);}
+  world.welcomeWorld?.update(welcome,player,active,dt,world.cyclist,world.obstacles);
+  $('#welcome-card').hidden=!active||modalOpen()||welcome.phase==='settled';
+  const copy=welcomeCopy(welcome,player);
+  $('#welcome-title').textContent=copy.title;$('#welcome-body').textContent=copy.body;$('#welcome-action').textContent=copy.action;
+  $('#welcome-action').disabled=welcome.phase==='leading'||!welcome.guide||Math.hypot(player.x-welcome.guide.x,player.z-welcome.guide.z)>4;
+}
+
 const openingStory=isUrban?null:mountOpeningStory({onFinish(){storage.set('story-seen',STORY_VERSION);releaseKeys();startRide();}});
 if(openingStory){
   const replay=document.createElement('button');replay.textContent='Replay opening story';replay.type='button';replay.className='story-replay';
@@ -297,7 +318,7 @@ function updateDiscoveries(){
 }
 function reset(){world?.pickups?.reset();world?.combat?.reset();player.attack=null;Object.assign(player,createPlayer());refreshTravel();if(isChai){chai=createChai();if(world)world.delivery=chai;}orbitYaw=0;releaseKeys();toast(isChai?'Fresh start at Asha’s chai stall.':isMumbai?'Back outside the church.':'Back where the sea meets the street.');}
 function setNight(value){night=value;world?.setNight(night);$('#time-label').textContent=night?'Blue hour':'Golden hour';$('#time-toggle').querySelector('svg').outerHTML=icon(night?'moon':'sun');$('#time-toggle').setAttribute('aria-label',night?'Switch to golden hour':'Switch to blue hour');document.querySelectorAll('[data-time]').forEach(b=>b.classList.toggle('active',(b.dataset.time==='night')===night));savePrefs();}
-function setQuality(value){quality=value;if(renderer){renderer.setPixelRatio(Math.min(devicePixelRatio,quality==='high'?1:.85));renderer.shadowMap.enabled=quality==='high';renderer.shadowMap.needsUpdate=true;renderer.setSize(innerWidth,innerHeight);}document.querySelectorAll('[data-quality]').forEach(b=>b.classList.toggle('active',b.dataset.quality===quality));savePrefs();}
+function setQuality(value){quality=value;if(renderer){renderer.setPixelRatio(Math.min(devicePixelRatio,quality==='high'?1.5:1));renderer.shadowMap.enabled=true;renderer.shadowMap.needsUpdate=true;renderer.setSize(innerWidth,innerHeight);}document.querySelectorAll('[data-quality]').forEach(b=>b.classList.toggle('active',b.dataset.quality===quality));savePrefs();}
 function setBob(){ $('#bob-toggle').textContent=bob?'On':'Off';$('#bob-toggle').setAttribute('aria-pressed',String(bob)); }
 
 function updateQuest() {
@@ -312,15 +333,29 @@ function updateQuest() {
   const others=coop.state?.players.filter(p=>p.id!==coop.id)??[];
   $('#coop-hud').textContent=!coop.active?'':!coop.connected?'Shared world connection interrupted':`${others.length+1} ${others.length?'riders':'rider'} online · one shared Porto Sol`;
   if(coop.active&&quest.stage>0&&quest.stage<3)$('#quest-item').textContent=coop.state?.carrier===coop.id?'Your bike carries the shared parcel':'Another rider carries the shared parcel';
-  const nearby=started&&!modalOpen()&&canInteract(quest,player);
+  const nearby=started&&!modalOpen()&&canInteract(quest,player)&&!!lifeStory?.state.complete;
   $('#quest-interact').hidden=!nearby;
   $('#quest-interact').textContent=stop?`F · ${stop.action}`:'';
   if(started&&!airborne()&&!modalOpen()&&player.mode==='walking'&&!player.bike&&Math.hypot(player.x-BIKE_SHOP.x,player.z-BIKE_SHOP.z)<=BIKE_SHOP.radius){$('#quest-interact').hidden=false;$('#quest-interact').textContent='F · Collect bicycle';}
   if(world)world.questStage=quest.stage;
   if(started&&!modalOpen()&&nearChallengeBike()){$('#quest-interact').hidden=false;$('#quest-interact').textContent='F · Collect Coral bicycle';}
+  if(lifeStory&&!lifeStory.state.complete){
+    const personal=lifeStep(lifeStory.state);$('#quest-count').textContent=`Chapter ${personal.chapter} / 4`;
+    $('#quest-title').textContent=welcome.phase==='settled'?personal.title:'A place to begin';
+    $('#quest-objective').textContent=welcome.phase==='settled'?personal.place:'Meet Mara and leave your suitcase at Casa Aurora.';
+    $('#quest-item').textContent=`€${lifeStory.state.money} · Open your story journal for belongings and memories`;
+  }
 }
 function talk() {
   if(airborne())return;
+  if(!modalOpen()&&lifeStory?.interact())return;
+  if(!isUrban&&started&&!modalOpen()&&welcome.phase!=='settled'){
+    if(welcomeAction(welcome,player,world.obstacles)){
+      releaseKeys();
+      if(welcome.phase==='settled'){storage.set('first-home',{version:1,settled:true});toast('Your suitcase is safe. Casa Aurora is your first home. Welcome to Porto Sol.');}
+      updateWelcome(0);return;
+    }
+  }
   if(!isUrban&&started&&!modalOpen()&&nearChallengeBike()){
     const error=collectBicycle(player,world.obstacles,CHALLENGE_BIKE);
     if(!error){challengeBicycle.visible=false;world.cyclist.cycle.paintColor=CHALLENGE_BIKE.color;world.cyclist.cycle.frameMaterial.color.set(CHALLENGE_BIKE.color);}
@@ -339,7 +374,7 @@ function talk() {
     updateChaiHUD();return;
   }
   if(isMumbai)return;
-  if(!started||modalOpen()||!canInteract(quest,player))return;
+  if(!started||modalOpen()||!canInteract(quest,player)||!lifeStory?.state.complete)return;
   if(coop.active&&!coop.connected){toast('Reconnect to the room before continuing the shared quest.');return;}
   dialogueStop=activeStop(quest);
   $('#quest-speaker').textContent=dialogueStop.speaker;
@@ -349,7 +384,7 @@ function talk() {
   openDialog('#quest-dialog');updateQuest();
 }
 $('#quest-interact').onclick=talk;
-$('#quest-track').onclick=()=>{const stop=isChai?chaiTarget(chai):activeStop(quest);if(!stop)return;selected=stop.id;updateDiscoveries();toast((isChai?stop.name:stop.objective)+' Follow the gold marker.');};
+$('#quest-track').onclick=()=>{if(lifeStory&&!lifeStory.state.complete){$('#game-menu').close();lifeStory.journal();return;}const stop=isChai?chaiTarget(chai):activeStop(quest);if(!stop)return;selected=stop.id;updateDiscoveries();toast((isChai?stop.name:stop.objective)+' Follow the gold marker.');};
 $('#quest-confirm').onclick=()=>{
   if(coop.active){if(!coop.connected){toast('Waiting for the room to reconnect.');return;}$('#quest-confirm').disabled=true;coop.position(player);coop.advance(quest.stage,dialogueStop?.id);return;}
   const next=advanceQuest(quest,player,dialogueStop?.id);
@@ -379,12 +414,13 @@ if(isChai)$('#chai-retry').onclick=reset;
 
 function initialize(){
   renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
-  renderer.setPixelRatio(Math.min(devicePixelRatio,quality==='high'?1:.85));renderer.setSize(innerWidth,innerHeight);
-  renderer.shadowMap.enabled=quality==='high';renderer.shadowMap.type=THREE.PCFShadowMap;
-  renderer.shadowMap.autoUpdate=false;renderer.shadowMap.needsUpdate=true;
+  renderer.setPixelRatio(Math.min(devicePixelRatio,quality==='high'?1.5:1));renderer.setSize(innerWidth,innerHeight);
+  renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFShadowMap;
+  // Animated characters and their shadows must use the same frame's pose.
+  renderer.shadowMap.autoUpdate=true;renderer.shadowMap.needsUpdate=true;
   renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=.88;
   renderer.domElement.setAttribute('aria-label',`Third-person cycling in ${worldName}`);renderer.domElement.tabIndex=0;viewport.appendChild(renderer.domElement);
-  scene=new THREE.Scene();camera=new THREE.PerspectiveCamera(66,innerWidth/innerHeight,.08,3500);camera.rotation.order='YXZ';
+  scene=new THREE.Scene();camera=new THREE.PerspectiveCamera(66,innerWidth/innerHeight,.3,3500);camera.rotation.order='YXZ';
   const manager=new THREE.LoadingManager();let failed=0;
   manager.onProgress=(_,loaded,total)=>{$('#progress').style.width=`${loaded/total*100}%`;$('#loading-status').textContent=`Bringing ${worldName} to life · ${Math.round(loaded/total*100)}%`;};
   manager.onError=()=>{failed++;};
@@ -398,7 +434,7 @@ function initialize(){
   const saved=isUrban&&!isChai?validateSavedPosition(storage.get('spot'),world.obstacles,URBAN_BOUNDS):null;if(saved)Object.assign(player,saved);
   setNight(night);setQuality(quality);setBob();updateDiscoveries();updateQuest();
   setTimeout(()=>{if(!ready){finish();$('#loading-status').textContent='You can explore while the remaining details load.';}},25000);
-  let previous=performance.now(),frames=0,frameClock=0,uiClock=0,lastShadowUpdate=-Infinity;
+  let previous=performance.now(),frames=0,frameClock=0,uiClock=0;
   function frame(now){
     const dt=Math.min((now-previous)/1000,.05);previous=now;
     if(!document.hidden){
@@ -409,8 +445,8 @@ function initialize(){
         steerArrival(arrival,player,{forward:Number(keys.has('KeyW')||keys.has('ArrowUp'))-Number(keys.has('KeyS')||keys.has('ArrowDown')),right:Number(keys.has('KeyD')||keys.has('ArrowRight'))-Number(keys.has('KeyA')||keys.has('ArrowLeft')),orbitYaw},dt);
         $('#arrival-drop').hidden=!canDrop;
         $('#arrival-title').textContent=arrival.phase==='parachute'?'Welcome to the island.':canDrop?'Porto Sol, beneath your feet.':'Your island is on the horizon.';
-        $('#arrival-detail').textContent=arrival.phase==='parachute'?'A/D steer · W glide · S flare near ground · Drag to look':canDrop?'A / D turn · W cruise · S slow · Wind carries you · Drag to look':`Drag to look around · ${Math.max(0,Math.ceil(JOURNEY_SECONDS-arrival.elapsed))}s until you can fly`;
-        if(!airborne()){player.mode='walking';player.bike=null;selected='bikes';updateDiscoveries();refreshTravel();player.pitch=Math.max(.05,Math.min(.85,player.pitch));releaseKeys();toast('Landed on foot · Cycle House is marked on your map.');coop.position(player);}
+        $('#arrival-detail').textContent=arrival.phase==='parachute'?'A/D steer · W glide · S flare near ground · Drag to look':canDrop?'A / D turn · W cruise · S slow · Wind carries you · Drag to look':`Drag to look around · ${Math.max(0,Math.ceil(JOURNEY_SECONDS-arrival.elapsed))}s until we reach Porto Sol`;
+        if(!airborne()){player.mode='walking';player.bike=null;selected='bikes';updateDiscoveries();refreshTravel();player.pitch=Math.max(.05,Math.min(.85,player.pitch));releaseKeys();toast(welcome.phase==='settled'?'Welcome back to Porto Sol.':'Mara is here to welcome you. Meet her by the gold marker · F');coop.position(player);}
       }
       const active=started&&!modalOpen()&&!airborne();
       if(isChai)world.updateStreet(active?dt:0,player);
@@ -441,10 +477,13 @@ function initialize(){
       world.pickupDisplay?.update(player);
       world.cyclist?.update(player,active?dt:0);
       const arrivalView=world.setLocalArrival(arrival,player);
-      if(skyRide){world.cyclist.group.position.y=player.y;world.cyclist.cycle.group.rotateX(-player.slope);world.cyclist.cycle.group.rotateZ(-Math.max(-.16,Math.min(.16,skyRide.laneVelocity*.1)));}
+      updateWelcome(active?dt:0);
+      if(skyRide){world.cyclist.cycle.group.position.y=.015;world.cyclist.group.position.y=player.y;world.cyclist.cycle.group.rotateX(-player.slope);world.cyclist.cycle.group.rotateZ(-Math.max(-.16,Math.min(.16,skyRide.laneVelocity*.1)));}
       world.updateRemote(dt);
+      if(skyway)skyway.group.visible=!!skyRide;
       // Orbit around the visible rider; the bike's heading is independent of the mouse.
-      const viewYaw=player.yaw+orbitYaw, distance=player.mode==='walking'?4.4:5.8;
+      const insideHome=!isUrban&&player.x>14&&player.x<23.6&&player.z>-88&&player.z<-78;
+      const viewYaw=player.yaw+orbitYaw, distance=player.mode==='walking'?(insideHome?2.2:4.4):5.8;
       cameraAim.set(player.x,(player.y||0)+1.15,player.z);
       cameraDesired.set(player.x-Math.sin(viewYaw)*distance*Math.cos(player.pitch),(player.y||0)+1.15+Math.sin(player.pitch)*distance,player.z+Math.cos(viewYaw)*distance*Math.cos(player.pitch));
       if(airborne()){
@@ -458,9 +497,12 @@ function initialize(){
       cameraRay.set(cameraAim,direction.normalize());cameraRay.far=cameraDistance;
       const hit=airborne()||skyRide?null:cameraRay.intersectObjects(world.cameraColliders,false)[0];
       if(hit&&!airborne())camera.position.copy(cameraAim).addScaledVector(direction,Math.max(.25,hit.distance-.3));
+      // Preserve centimetre-scale ground separation in aerial views. The old
+      // 8cm near plane lost depth precision hundreds of metres from the camera.
+      const nearPlane=airborne()?2:(skyRide?1:.3);
+      if(camera.near!==nearPlane){camera.near=nearPlane;camera.updateProjectionMatrix();}
       camera.lookAt(cameraAim);
       world.update(elapsed,modalOpen()?0:dt,camera);
-      if(renderer.shadowMap.enabled&&now-lastShadowUpdate>=50){renderer.shadowMap.needsUpdate=true;lastShadowUpdate=now;}
       renderer.render(scene,camera);
       uiClock+=dt;frameClock+=dt;frames++;
       if(frameClock>1){$('#performance').textContent=`${player.swimming?'Swimming · ':player.mode==='walking'?'Walking · ':''}${Math.round(Math.abs(player.speed)*3.6)} km/h · ${Math.round(frames/frameClock)} fps`;frameClock=0;frames=0;}
@@ -587,13 +629,16 @@ function drawMap(){
     rect(-120,-140,184,260,'#737763');
     for(const r of (isChai?CHAI_ROADS:MUMBAI_ROADS))rect(r.x-r.w/2,r.z-r.d/2,r.w,r.d,'#c5bca2');
   }else{
+  ctx.fillStyle='#68786c';ctx.beginPath();ctx.moveTo(px(-479),pz(-399));
+  for(let z=-399;z<=359;z+=2)ctx.lineTo(px(shorelineX(z)),pz(z));
+  ctx.lineTo(px(-479),pz(359));ctx.closePath();ctx.fill();
   rect(PORTO_BOUNDS.minX,PORTO_BOUNDS.minZ,PORTO_BOUNDS.maxX-PORTO_BOUNDS.minX,PORTO_BOUNDS.maxZ-PORTO_BOUNDS.minZ,'#526457');rect(-240,-260,304,460,'#68786c');for(const road of PORTO_ROADS)rect(road.x-road.w/2,road.z-road.d/2,road.w,road.d,'#a4ad92');rect(-402,-12,104,140,'#415c44');rect(-217,54.5,76,67,'#415c44');rect(64,-42,53,12,'#b4b294');rect(-101.5,53,65,60,'#415c44');rect(-59.5,53,5,60,'#9aa784');rect(-101.5,67.5,65,5,'#9aa784');
   }
   for(const b of world.obstacles){if(b.maxX-b.minX>10&&b.maxZ-b.minZ>10)rect(b.minX,b.minZ,b.maxX-b.minX,b.maxZ-b.minZ,'#c2baa0');}
   ctx.strokeStyle='#a0b9aa25';ctx.lineWidth=1;for(let x=0;x<w;x+=24){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke();}for(let y=0;y<h;y+=24){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}
   if(selected){const dest=LANDMARKS.find(l=>l.id===selected);ctx.beginPath();ctx.setLineDash([4,5]);ctx.strokeStyle='#e6ecbc70';ctx.moveTo(px(player.x),pz(player.z));ctx.lineTo(px(dest.x),pz(dest.z));ctx.stroke();ctx.setLineDash([]);}
   for(const landmark of LANDMARKS){ctx.beginPath();ctx.arc(px(landmark.x),pz(landmark.z),selected===landmark.id?10:7,0,Math.PI*2);ctx.fillStyle=selected===landmark.id?'#e7edbb':'#203c35';ctx.fill();ctx.lineWidth=1.5;ctx.strokeStyle='#d3dcaf';ctx.stroke();ctx.fillStyle=selected===landmark.id?'#243c33':'#e5ebc5';ctx.font='9px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(discovered.has(landmark.id)?'✓':String(Number(landmark.number)),px(landmark.x),pz(landmark.z)+.5);if(mapExpanded){ctx.font='22px sans-serif';ctx.textAlign='left';ctx.fillStyle='#f5efd7';ctx.strokeStyle='#203c35';ctx.lineWidth=4;ctx.strokeText(landmark.name,px(landmark.x)+17,pz(landmark.z));ctx.fillText(landmark.name,px(landmark.x)+17,pz(landmark.z));}}
-  const questStop=isChai?chaiTarget(chai):isMumbai?null:activeStop(quest);
+  const questStop=isChai?chaiTarget(chai):isMumbai?null:welcome.phase!=='settled'?welcome.guide:world.lifeObjective||(lifeStory?.state.complete?activeStop(quest):null);
   if(questStop){
     ctx.beginPath();ctx.setLineDash([3,4]);ctx.strokeStyle='#f1ce7e';ctx.moveTo(px(player.x),pz(player.z));ctx.lineTo(px(questStop.x),pz(questStop.z));ctx.stroke();ctx.setLineDash([]);
     ctx.save();ctx.translate(px(questStop.x),pz(questStop.z));ctx.rotate(Math.PI/4);ctx.fillStyle='#f1ce7e';ctx.fillRect(-5,-5,10,10);ctx.restore();

@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createBalloon,animateHelm,createParachute,createParachutePack} from '../src/flight-models.js';
-import {createArrival,stepArrival,steerArrival} from '../src/arrival.js';
+import {JOURNEY_SECONDS,createArrival,stepArrival,steerArrival} from '../src/arrival.js';
 
 test('balloon has a visible wheel that follows steering and returns to center',()=>{
   const balloon=createBalloon(),wheel=balloon.getObjectByName('Balloon steering wheel');
   assert.ok(wheel?.children.length>6);
-  const a=createArrival(),p={x:0,z:0};stepArrival(a,10);
+  const a=createArrival(),p={x:0,z:0};stepArrival(a,JOURNEY_SECONDS);
   steerArrival(a,p,{right:1},.05);animateHelm(balloon,a.steering);
   assert.ok(wheel.rotation.z<0);
   const turned=Math.abs(wheel.rotation.z);

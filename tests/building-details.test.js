@@ -24,9 +24,9 @@ test('building upgrade reuses existing materials and stays within a small triang
     assert.ok(triangles<=100,`detail budget: ${triangles}`);
   }
 });
-test('representative building stays below 3400 triangles without extra collider geometry',()=>{
+test('representative building stays below 3400 triangles with bounded volume colliders',()=>{
   let triangles=0;
   const w={location:'porto',cameraColliders:[],m:{},box(){triangles+=12;},obstacle(){},cylinder(a,b,c,d,e,f,g,segments=10){triangles+=segments*4;},mesh(g){triangles+=g.attributes.position.count/3;g.dispose();}};
   World.prototype.building.call(w,1,0,22,21,14,{});
-  assert.ok(triangles<3400,`${triangles} triangles`);assert.equal(w.cameraColliders.length,1);
+  assert.ok(triangles<3400,`${triangles} triangles`);assert.ok(w.cameraColliders.length>=1&&w.cameraColliders.length<=4);
 });

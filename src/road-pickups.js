@@ -1,5 +1,5 @@
 import * as T from 'three';
-import { canOccupy } from './movement.js';
+import { canOccupy,groundElevation } from './movement.js';
 import { PORTO_ROADS } from './porto-expansion.js';
 
 export function pickupLocations(obstacles=[],random=Math.random,count=64){
@@ -49,7 +49,7 @@ export class RoadPickups {
     const messages=[];this.time+=dt;this.flash=Math.max(0,this.flash-dt);
     for(const item of this.items){
       item.cooldown=Math.max(0,item.cooldown-dt);
-      if(dt<=0||item.cooldown>0||(p.y||0)>1.6||Math.hypot(item.x-p.x,item.z-p.z)>1.15)continue;
+      if(dt<=0||item.cooldown>0||(p.y||0)-groundElevation(item.x,item.z)>1.6||Math.hypot(item.x-p.x,item.z-p.z)>1.15)continue;
       this.collected[item.type]++;
       const type=item.type==='mystery'?['nitro','coin','shield'][Math.min(2,Math.floor(this.random()*3))]:item.type;
       if(type==='nitro'){this.nitro=Math.min(100,this.nitro+50);messages.push('Nitro +50% · Hold B while pedaling');}
@@ -79,6 +79,6 @@ export class PickupDisplay {
     });
   }
   update(){
-    this.models.forEach(({group,body},i)=>{const item=this.state.items[i];group.position.set(item.x,0,item.z);group.visible=item.cooldown===0;body.rotation.y=this.state.time*1.8+i;body.position.y=.68+Math.sin(this.state.time*3+i)*.1;});
+    this.models.forEach(({group,body},i)=>{const item=this.state.items[i];group.position.set(item.x,groundElevation(item.x,item.z),item.z);group.visible=item.cooldown===0;body.rotation.y=this.state.time*1.8+i;body.position.y=.68+Math.sin(this.state.time*3+i)*.1;});
   }
 }

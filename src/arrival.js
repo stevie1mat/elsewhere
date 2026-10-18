@@ -1,5 +1,5 @@
-import {PORTO_BOUNDS} from './movement.js';
-export const JOURNEY_SECONDS=10;
+import {PORTO_BOUNDS,groundElevation,shorelineX} from './movement.js';
+export const JOURNEY_SECONDS=24;
 export const DESCENT_SECONDS=7;
 export function createArrival(origin){return {phase:'balloon',elapsed:0,...(origin?{origin:{x:origin.x,z:origin.z}}:{})};}
 // Game-assisted propulsion: real balloons cannot steer against the wind.
@@ -59,9 +59,10 @@ export function stepParachute(a,delta,{input={},player,canLand=()=>true}={}){
     c.vx+=(targetX-c.vx)*(1-Math.exp(-1.5*dt));c.vz+=(targetZ-c.vz)*(1-Math.exp(-1.5*dt));
     const nx=c.x+c.vx*dt,nz=c.z+c.vz*dt;
     if(canLand(nx,nz)||!canLand(c.x,c.z)){c.x=nx;c.z=nz;}else{c.vx*=Math.exp(-8*dt);c.vz*=Math.exp(-8*dt);}
-    c.y=Math.max(canLand(c.x,c.z)?0:25,c.y+c.vy*dt);
+    const floor=groundElevation(c.x,c.z);
+    c.y=Math.max(canLand(c.x,c.z)?floor:floor+25,c.y+c.vy*dt);
     if(canLand(c.x,c.z))a.landing={x:c.x,z:c.z};
-    if(c.y<=0){a.phase='landed';c.vy=0;if(player){player.x=c.x;player.z=c.z;player.y=0;player.yaw=a.heading;player.vy=0;player.grounded=true;}}
+    if(c.y<=floor){a.phase='landed';c.vy=0;if(player){player.x=c.x;player.z=c.z;player.y=floor;player.yaw=a.heading;player.vy=0;player.grounded=true;}}
   }
 }
 function tourPose(elapsed,p){
@@ -69,20 +70,22 @@ function tourPose(elapsed,p){
   const lengths=route.slice(1).map((b,i)=>Math.hypot(b.x-route[i].x,b.z-route[i].z));
   let distance=elapsed*12%lengths.reduce((a,b)=>a+b,0);
   for(let i=0;i<lengths.length;i++){
-    if(distance<=lengths[i]){const t=lengths[i]?distance/lengths[i]:0,s=t*t*(3-2*t);return {x:route[i].x+(route[i+1].x-route[i].x)*s,y:42+Math.sin(elapsed*.25)*1.2,z:route[i].z+(route[i+1].z-route[i].z)*s};}
+    if(distance<=lengths[i]){const t=lengths[i]?distance/lengths[i]:0,s=t*t*(3-2*t);return {x:route[i].x+(route[i+1].x-route[i].x)*s,y:42+groundElevation(route[i].x+(route[i+1].x-route[i].x)*s,route[i].z+(route[i+1].z-route[i].z)*s)+Math.sin(elapsed*.25)*1.2,z:route[i].z+(route[i+1].z-route[i].z)*s};}
     distance-=lengths[i];
   }
   return {x:p.x,y:42,z:p.z};
 }
 export function arrivalPose(a,p){
-  if(!a||a.phase==='landed')return {x:p.x,y:0,z:p.z};
+  if(!a||a.phase==='landed')return {x:p.x,y:groundElevation(p.x,p.z),z:p.z};
   if(a.phase==='balloon'){
-    if(a.pilot)return {x:a.pilot.x,y:42+Math.sin((a.elapsed-JOURNEY_SECONDS)*.25)*1.2,z:a.pilot.z};
+    if(a.pilot)return {x:a.pilot.x,y:42+groundElevation(a.pilot.x,a.pilot.z)+Math.sin((a.elapsed-JOURNEY_SECONDS)*.25)*1.2,z:a.pilot.z};
     const origin=a.origin??p;
     if(a.elapsed>=JOURNEY_SECONDS)return tourPose(a.elapsed-JOURNEY_SECONDS,origin);
-    const t=a.elapsed/JOURNEY_SECONDS,s=t*t*(3-2*t);return {x:origin.x+70*(1-s),y:42+Math.sin(t*Math.PI)*3,z:origin.z+35*(1-s)};
+    const t=a.elapsed/JOURNEY_SECONDS,s=t*t*(3-2*t);
+    const oceanX=Math.max(origin.x+150,shorelineX(origin.z+35)+110);
+    return {x:origin.x+(oceanX-origin.x)*(1-s),y:42+Math.sin(t*Math.PI)*3,z:origin.z+35*(1-s)};
   }
   if(a.canopy)return {x:a.canopy.x,y:a.canopy.y,z:a.canopy.z};
   const t=Math.min(1,a.elapsed/DESCENT_SECONDS),from=a.from??{x:p.x,y:42,z:p.z},landing=a.landing??p,s=t*t*(3-2*t);
-  return {x:from.x+(landing.x-from.x)*s,y:from.y*(1-t),z:from.z+(landing.z-from.z)*s};
+  return {x:from.x+(landing.x-from.x)*s,y:groundElevation(landing.x,landing.z)+(from.y-groundElevation(landing.x,landing.z))*(1-t),z:from.z+(landing.z-from.z)*s};
 }

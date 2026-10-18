@@ -1,3 +1,4 @@
+import {createHighlands} from './highland-terrain.js';
 import * as T from 'three';
 import {challengeGeometry} from './challenge-pickups.js';
 export const SKYWAY_GATE={x:55,z:-380,radius:9};
@@ -88,20 +89,13 @@ export class Skyway {
       dummy.position.set(p.x,p.y+1.2,p.z);dummy.rotation.set(0,-p.yaw,0);dummy.scale.set(1,1,1);dummy.updateMatrix();arches.setMatrixAt(i,dummy.matrix);
       for(const [j,side] of [-1,1].entries()){dummy.position.set(p.x+Math.cos(p.yaw)*side*5.5,p.y+.6,p.z+Math.sin(p.yaw)*side*5.5);dummy.updateMatrix();feet.setMatrixAt(i*2+j,dummy.matrix);}
     }this.group.add(arches,feet);
-    // Shared low-poly scenery: no extra lights, textures or per-frame animation.
-    const peaks=new T.InstancedMesh(new T.ConeGeometry(1,1,7),new T.MeshStandardMaterial({color:0x727e70,roughness:1,flatShading:true}),24);
-    const caps=new T.InstancedMesh(new T.ConeGeometry(1,1,7),new T.MeshStandardMaterial({color:0xe4e8df,roughness:1,flatShading:true}),24);
-    peaks.name='Highland rock formations';caps.name='Summit snow caps';peaks.count=caps.count=0;
-    const roadSamples=Array.from({length:512},(_,i)=>this.pose(i/512*this.length,1));
-    for(let i=0;i<24;i++){
-      const p=this.pose((.22+i/24*.52)*this.length,1),side=i%2?1:-1,x=p.x+Math.cos(p.yaw)*side*180,z=p.z+Math.sin(p.yaw)*side*180;
-      if(roadSamples.some(q=>Math.hypot(q.x-x,q.z-z)<135))continue;
-      const height=p.y+65,index=peaks.count++;
-      dummy.rotation.set(0,i*.8,0);dummy.position.set(x,height/2-4,z);dummy.scale.set(115,height,115);dummy.updateMatrix();peaks.setMatrixAt(index,dummy.matrix);
-      // Top fifth follows exactly the same slope as the rock underneath.
-      dummy.position.y=height*.9-3.8;dummy.scale.set(23,height*.2,23);dummy.updateMatrix();caps.setMatrixAt(caps.count++,dummy.matrix);
+    // The town keeps a visible entrance even while the elevated circuit is hidden.
+    this.entrance=new T.Group();this.entrance.name='Skyway town entrance';scene.add(this.entrance);
+    for(const [source,indices] of [[arches,[0]],[feet,[0,1]]])for(const index of indices){
+      const mesh=new T.Mesh(source.geometry,stone);source.getMatrixAt(index,mesh.matrix);mesh.matrix.decompose(mesh.position,mesh.quaternion,mesh.scale);this.entrance.add(mesh);
     }
-    this.group.add(peaks,caps);
+
+    this.group.add(createHighlands());
     const banners=new T.InstancedMesh(new T.BoxGeometry(1,1,1),new T.MeshStandardMaterial({roughness:.8}),60);
     banners.name='Route region pennants';const colors=[0x37a8b0,0xb28b50,0xe1e8e2,0x829866,0xe6a15b];
     for(let i=0;i<60;i++){const u=(i+.5)/60,p=this.pose(u*this.length,1),side=i%2?1:-1;dummy.position.set(p.x+Math.cos(p.yaw)*side*5.2,p.y+1.15,p.z+Math.sin(p.yaw)*side*5.2);dummy.rotation.set(0,-p.yaw,0);dummy.scale.set(.08,1.1,.75);dummy.updateMatrix();banners.setMatrixAt(i,dummy.matrix);banners.setColorAt(i,new T.Color(colors[u<.16?0:u<.36?1:u<.58?2:u<.8?3:4]));}this.group.add(banners);

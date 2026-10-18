@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { RoadPickups, PickupDisplay } from '../src/road-pickups.js';
-import { stepPlayer,createPlayer } from '../src/movement.js';
+import { stepPlayer,createPlayer,groundElevation } from '../src/movement.js';
 import { RiderCombat } from '../src/rider-combat.js';
 import * as T from 'three';
 
@@ -70,5 +70,5 @@ test('pickups scatter safely with spacing and reshuffle their visible locations 
  }
  s.reset();display.update(createPlayer());
  assert.notDeepEqual(s.items.map(p=>[p.x,p.z]),previous);
- s.items.forEach((p,i)=>assert.deepEqual(display.models[i].group.position.toArray(),[p.x,0,p.z]));
+ s.items.forEach((p,i)=>assert.deepEqual(display.models[i].group.position.toArray(),[p.x,groundElevation(p.x,p.z),p.z]));
 });

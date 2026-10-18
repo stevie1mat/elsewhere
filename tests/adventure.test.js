@@ -21,7 +21,7 @@ test('checkpoint restores one heart, gives shield and awards bonus only once',()
 test('long scenic route has five regions, bounded scenery and over six kilometres',()=>{
   const route=new Skyway(new T.Scene());assert.ok(route.length>6000);
   assert.equal(new Set([.1,.2,.4,.6,.9].map(u=>rideRegion(u*route.length,route.length))).size,5);
-  const peaks=route.group.getObjectByName('Highland rock formations');assert.ok(peaks.count>0&&peaks.count<=24);
+  const hills=route.group.getObjectByName('Continuous coastal highlands');assert.ok(hills.geometry.attributes.position.count<20000);assert.ok(hills.geometry.attributes.color);
   assert.equal(route.group.getObjectByName('Route region pennants').count,60);
 });
 test('upgraded bicycle starts with earned equipment and a failed ride earns no checkpoint',()=>{

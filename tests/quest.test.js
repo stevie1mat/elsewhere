@@ -1,3 +1,8 @@
+import {LIFE_STEPS} from '../src/settling-story.js';
+import {homeRoute,FIRST_HOME} from '../src/welcome.js';
+import {townFabric} from '../src/town-fabric.js';
+import {curvedHarbor,hillsideLandmarks} from '../src/landscape-builders.js';
+import {enrichCity} from '../src/city-details.js';
 import { RoadPickups } from '../src/road-pickups.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -25,9 +30,12 @@ test('invalid saves cannot skip the quest',()=>{
 });
 test('all quest stops are reachable with bicycle clearance in the real neighborhood layout',()=>{
  const w=Object.create(World.prototype);
- Object.assign(w,{obstacles:[],treePositions:[],lights:[],birds:[],seed:427,scene:new T.Scene(),m:new Proxy({}, {get:()=>new T.MeshStandardMaterial()})});
+ Object.assign(w,{location:'porto',cameraColliders:[],cityBuildings:[],loader:{load:()=>new T.Texture()},obstacles:[],treePositions:[],lights:[],birds:[],seed:427,scene:new T.Scene(),m:new Proxy({}, {get:()=>new T.MeshStandardMaterial()})});
  w.box=()=>{};w.cylinder=()=>{};w.sign=()=>{};w.mesh=geometry=>geometry.dispose();
- w.neighborhood();w.waterfront();w.garden();w.details();expandPorto(w);
+ w.neighborhood();w.waterfront();w.garden();w.details();expandPorto(w);hillsideLandmarks(w);curvedHarbor(w);townFabric(w);enrichCity(w);
+ const guideRoute=homeRoute(SPAWN,w.obstacles);assert.ok(guideRoute.length>0,'guide can reach the furnished room');
+ for(const point of guideRoute)assert.ok(canOccupy(point.x,point.z,w.obstacles,.6));
+ assert.deepEqual(guideRoute.at(-1),{x:FIRST_HOME.x,z:FIRST_HOME.z});
  for(const stop of QUEST_STOPS)assert.ok(canOccupy(stop.x,stop.z,w.obstacles),`${stop.id} is clear`);
  const queue=[[SPAWN.x,SPAWN.z]],seen=new Set([`${SPAWN.x},${SPAWN.z}`]);
  for(let i=0;i<queue.length;i++){
@@ -37,5 +45,5 @@ test('all quest stops are reachable with bicycle clearance in the real neighborh
      if(!seen.has(key)&&canOccupy(nx,nz,w.obstacles)&&canOccupy(x+dx*.5,z+dz*.5,w.obstacles)){seen.add(key);queue.push([nx,nz]);}
    }
  }
- for(const stop of [...QUEST_STOPS,...LANDMARKS,...new RoadPickups(w.obstacles).items])assert.ok(seen.has(`${stop.x},${stop.z}`),`${stop.id} has a rideable approach`);
+ for(const stop of [...QUEST_STOPS,...LIFE_STEPS,...LANDMARKS,...new RoadPickups(w.obstacles).items])assert.ok(seen.has(`${stop.x},${stop.z}`),`${stop.id} has a rideable approach`);
 });

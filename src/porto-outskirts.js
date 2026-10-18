@@ -1,3 +1,5 @@
+import {terrainPatch,elevated} from './landscape-builders.js';
+import {groundElevation} from './movement.js';
 import * as T from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 
@@ -11,29 +13,38 @@ export function expandOutskirts(w){
   // New land borders the old city without covering its streets or gardens.
   for(const [x,z,width,depth] of [[-360,-20,240,760],[-88,-330,304,140],[-88,280,304,160]]){
     w.box(width,3,depth,x,-1.53,z,w.m.sand);
-    w.box(width,.05,depth,x,-.04,z,w.m.grass);
+    terrainPatch(w,width,depth,x,z,-.015,w.m.grass);
   }
   for(const r of OUTSKIRT_ROADS){
-    w.box(r.w+5,.06,r.d+2,r.x,-.005,r.z,w.m.pavement);
-    w.box(r.w,.04,r.d,r.x,.035,r.z,w.m.road);
-    const vertical=r.d>r.w,length=vertical?r.d:r.w;
-    for(let n=-length/2+8;n<length/2-4;n+=12)w.box(vertical?.12:4,.015,vertical?4:.12,r.x+(vertical?0:n),.063,r.z+(vertical?n:0),w.m.stripe);
+    terrainPatch(w,r.w+5,r.d+2,r.x,r.z,.025,w.m.pavement);
+    terrainPatch(w,r.w,r.d,r.x,r.z,.055,w.m.pavement);
+    // Stone lanes suit the village; avoid highway-style painted dashes.
   }
+
   const colors=[w.m.cream,w.m.peach,w.m.sage,w.m.blue];
-  for(const [i,z] of [-280,-220,-100,-45,200,235].entries())for(const [j,x] of [-450,-360,-315].entries()){
-    const width=14+(i%3)*3,depth=16+(j%2)*4,height=7.5+((i+j)%3)*3.25;
-    w.box(width+7,.05,depth+7,x,.01,z,w.m.pavement);
-    w.building(x,z,width,depth,height,colors[(i+j)%4],i===2&&j===1?'VILA POENTE':undefined,'south');
+  // Closely spaced, varied homes form lanes instead of isolated apartment blocks.
+  for(const [i,z] of [-283,-246,-205,-110,-72,-32,176,214,249].entries())for(const [j,x] of [-451,-382,-343,-310].entries()){
+    const width=14+(i+j)%3*2,depth=16+(j%2)*2,height=7.5+((i+j)%3)*3.25;
+    elevated(w,x,z,()=>{
+      w.box(width+2,3,depth+2,x,-1.5,z,w.m.cream);
+      w.building(x,z,width,depth,height,colors[(i+j)%4],i===3&&j===1?'CASA DAS FLORES':undefined,'south');
+      if((i+j)%3===0){w.table(x,z+depth/2+3);w.umbrella(x,z+depth/2+3,w.m.trim);}
+    });
+    // Grove pockets at the ends of housing rows.
+    if(j===0||j===3){const tx=x+width/2+3;w.treePositions.push({x:tx,z:z-4,scale:6+(i%3)});w.obstacle(tx,z-4,.8,.8);}
   }
+  // A connected overlook at the western crest, bordered by stone and flowers.
+  terrainPatch(w,28,140,-455,68,.08,w.m.pavement);
+  for(let z=8;z<=128;z+=24)elevated(w,-466,z,()=>{w.bench(-466,z,Math.PI/2);w.planter(-472,z);w.lamp(-469,z+7);});
   for(const [i,x] of [-175,-110,-62,20].entries()){
-    w.building(x,-365,18,18,7.5+(i%2)*3.25,colors[i],i===0?'CASA DAS OLIVEIRAS':undefined,'south');
+    elevated(w,x,-365,()=>w.building(x,-365,18,18,7.5+(i%2)*3.25,colors[i],i===0?'CASA DAS OLIVEIRAS':undefined,'south'));
     w.building(x,320,20,21,7.5+(i%3)*3.25,colors[3-i],i===3?'CAFÉ DA COSTA':undefined,'south');
   }
-  w.box(116,.05,5,-350,.03,78,w.m.pavement);w.box(5,.05,140,-350,.03,58,w.m.pavement);
-  for(const z of [28,78,122])for(const x of [-365,-335])w.bench(x,z);
+  terrainPatch(w,116,5,-350,78,.08,w.m.pavement);terrainPatch(w,5,140,-350,58,.08,w.m.pavement);
+  for(const z of [28,78,122])for(const x of [-365,-335])elevated(w,x,z,()=>w.bench(x,z));
   for(let z=215;z<350;z+=25){w.palm(43,z,7+w.random()*2);w.lamp(59,z);w.bench(55,z,Math.PI/2);}
   w.box(24,.06,150,52,.01,280,w.m.pavement);
-  for(const r of OUTSKIRT_ROADS.filter(r=>r.d>r.w))for(let z=-370;z<345;z+=52)w.lamp(r.x-9,z);
+  for(const r of OUTSKIRT_ROADS.filter(r=>r.d>r.w))for(let z=-370;z<345;z+=52)elevated(w,r.x-9,z,()=>w.lamp(r.x-9,z));
   addVegetation(w);
 }
 
@@ -68,7 +79,7 @@ function addVegetation(w){
     const geometry=mergeGeometries(planes);planes.forEach(g=>g.dispose());
     const material=new T.MeshStandardMaterial({map:atlas,alphaTest:.5,side:T.DoubleSide,roughness:1,color:0xc8d0bd});
     const mesh=new T.InstancedMesh(geometry,material,plants.length),dummy=new T.Object3D();
-    plants.forEach((p,i)=>{dummy.position.set(p.x,0,p.z);dummy.scale.setScalar(p.height);dummy.rotation.y=p.rotation;dummy.updateMatrix();mesh.setMatrixAt(i,dummy.matrix);});
+    plants.forEach((p,i)=>{dummy.position.set(p.x,groundElevation(p.x,p.z),p.z);dummy.scale.setScalar(p.height);dummy.rotation.y=p.rotation;dummy.updateMatrix();mesh.setMatrixAt(i,dummy.matrix);});
     mesh.name='AI coastal vegetation';mesh.receiveShadow=true;mesh.castShadow=true;
     mesh.customDepthMaterial=new T.MeshDepthMaterial({depthPacking:T.RGBADepthPacking,map:atlas,alphaTest:.5});
     w.scene.add(mesh);
