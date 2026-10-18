@@ -1,11 +1,11 @@
 import { randomBytes } from 'node:crypto';
 import { activeStop,canInteract } from './shared/quest.js';
-import { SPAWN,onLand } from './shared/movement.js';
+import { SPAWN,onLand,inSwimArea } from './shared/movement.js';
 
 const token=()=>randomBytes(16).toString('hex');
 export const PUBLIC_ROOM='0000000000000000';
 export function validPosition(p){
-  return p && ['x','z','yaw','walked','speed'].every(k=>Number.isFinite(p[k])) && onLand(p.x,p.z,p.mode==='walking'?.35:.95) && Math.abs(p.speed)<=15.1 && Math.abs(p.yaw)<1e8 && Math.abs(p.walked)<1e9;
+  return p && ['x','z','yaw','walked','speed'].every(k=>Number.isFinite(p[k])) && (onLand(p.x,p.z,p.mode==='walking'?.35:.95)||(p.mode==='walking'&&inSwimArea(p.x,p.z)&&Math.abs(p.speed)<=3)) && Math.abs(p.speed)<=15.1 && Math.abs(p.yaw)<1e8 && Math.abs(p.walked)<1e9;
 }
 export class Rooms {
   constructor(now=Date.now){this.now=now;this.room={code:PUBLIC_ROOM,stage:0,carrier:null,players:new Map(),updated:this.now()};this.rooms=new Map([[PUBLIC_ROOM,this.room]]);}
@@ -27,7 +27,8 @@ export class Rooms {
   snapshot(room){return {type:'state',room:room.code,stage:room.stage,carrier:room.carrier,players:[...room.players.values()].filter(p=>p.peer).map(p=>({id:p.id,...p.position}))};}
   position(room,p,value) {
     if(!validPosition(value))return false;
-    if(value.y!=null&&(!Number.isFinite(value.y)||value.y<0||value.y>3))return false;
+    const swimming=value.mode==='walking'&&!onLand(value.x,value.z,.35)&&inSwimArea(value.x,value.z);
+    if(value.y!=null&&(!Number.isFinite(value.y)||value.y<(swimming?-2.7:0)||value.y>3))return false;
     if(value.vy!=null&&(!Number.isFinite(value.vy)||Math.abs(value.vy)>12))return false;
     const bike=value.bike;
     const walking=value.mode==='walking'&&(bike==null||(['x','z','yaw','walked'].every(k=>Number.isFinite(bike[k]))
@@ -45,7 +46,7 @@ export class Rooms {
       mode:walking?'walking':'cycling',bike:walking&&bike?{x:bike.x,z:bike.z,yaw:bike.yaw,walked:bike.walked}:null};
     if(arrival?.pilot)p.position.arrival.pilot={x:arrival.pilot.x,z:arrival.pilot.z};
     if(arrival?.canopy)p.position.arrival.canopy=Object.fromEntries(['x','y','z','vx','vy','vz'].map(k=>[k,arrival.canopy[k]]));
-    p.position.y=value.y??0;p.position.vy=value.vy??0;p.position.grounded=p.position.y<=.001;
+    p.position.y=value.y??0;p.position.vy=value.vy??0;p.position.swimming=swimming;p.position.grounded=!swimming&&p.position.y<=.001;
     if(arrival?.steering!=null)p.position.arrival.steering=arrival.steering;
     for(const key of ['heading','vx','vz','turnRate'])if(arrival?.[key]!=null)p.position.arrival[key]=arrival[key];
     p.lastSeen=this.now();room.updated=this.now();return true;

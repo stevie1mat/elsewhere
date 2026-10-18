@@ -144,6 +144,9 @@ export class Explorer {
     }
   }
   update(p,dt=0) {
+    // Solve bicycle IK in its ground-level frame, then the challenge applies
+    // elevation/slope to the completed rider and bicycle together.
+    this.group.position.y=0;
     this.flightPose.restore();
     const walking=p.mode==='walking';
     const gait=this.locomotion.update(p,dt);
@@ -159,7 +162,20 @@ export class Explorer {
       this.flightPose.capture();
       const idle=1-Math.min(1,Math.abs(p.speed)/.5);
       for(const {bone,rotation} of this.idleLegs)bone.quaternion.slerp(rotation,idle);
-      this.walker.position.set(p.x,p.y||0,p.z);this.walker.rotation.y=Math.PI-p.yaw;
+      this.walker.position.set(p.x,p.y||0,p.z);this.walker.rotation.set(0,Math.PI-p.yaw,0,'YXZ');
+      if(p.swimming){
+        this.swimClock=(this.swimClock||0)+Math.min(.1,dt);
+        const effort=Math.min(1,Math.abs(p.speed)/1.6),stroke=this.swimClock*(2+effort*2);
+        this.walker.rotation.x=.15+effort*.55;
+        for(const {bone,rotation} of this.idleLegs){bone.quaternion.copy(rotation);if(bone.name.endsWith('_Thigh'))bone.rotation.y+=Math.sin(stroke*2+(bone.name.includes('_L_')?0:Math.PI))*.14*effort;}
+        this.walker.updateWorldMatrix(true,true);
+        for(const side of ['L','R']){
+          const bone=name=>this.walker.getObjectByName(`Bip01_${side}_${name}`),upper=bone('UpperArm');
+          const sign=Math.sign(this.walker.worldToLocal(upper.getWorldPosition(new T.Vector3())).x)||1;
+          const reach=(Math.sin(stroke)+1)*.5;
+          limb(upper,bone('Forearm'),bone('Hand'),this.walker.localToWorld(new T.Vector3(sign*(28+reach*26),120+reach*15,25+(1-reach)*30)),this.walker.localToWorld(new T.Vector3(sign*65,125,5)));
+        }
+      }
     }
   }
 }

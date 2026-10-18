@@ -5,6 +5,7 @@ import { expandPorto } from './porto-expansion.js';
 import * as T from 'three';
 import {buildingDetails,drawRoofTiles,drawWindow} from './building-details.js';
 import {createShopBicycles,SHOP_BIKES} from './cycle-shop.js';
+import {createLighthouse} from './lighthouse.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
@@ -201,7 +202,7 @@ export class World {
     if (this.location !== 'porto') return;
     const ocean = new T.Mesh(new T.PlaneGeometry(3600, 3600), this.oceanMaterial); ocean.rotation.x = -Math.PI / 2; ocean.position.y = -1.15; this.scene.add(ocean);
     // A layered headland and a small lighthouse across the water.
-    const rock = this.mat(0x7c8980); const hill = new T.MeshStandardMaterial({vertexColors:true,roughness:.94});
+    const hill = new T.MeshStandardMaterial({vertexColors:true,roughness:.94});
     const terrain = new T.PlaneGeometry(1100, 460, 220, 100); terrain.rotateX(-Math.PI / 2);
     const vertices = terrain.attributes.position;
     const hash=(x,z)=>{const v=Math.sin(x*127.1+z*311.7)*43758.5453;return v-Math.floor(v);};
@@ -225,10 +226,7 @@ export class World {
       color.multiplyScalar(.83+noise(vertices.getX(i)*.3,vertices.getZ(i)*.3)*.24);colors.push(color.r,color.g,color.b);
     }
     terrain.setAttribute('color',new T.Float32BufferAttribute(colors,3));this.mesh(terrain, hill, -240, 0, -730);
-    this.mesh(new T.SphereGeometry(30, 14, 8), rock, 188, -15, -161);
-    this.cylinder(2, 3.8, 23, 188, 12, -161, this.m.trim, 16); this.cylinder(3, 3, 2, 188, 25, -161, this.m.dark, 16);
-    this.cylinder(1.8, 1.8, 3, 188, 27, -161, this.m.glass, 16); this.cylinder(0, 3.3, 3, 188, 30, -161, this.m.tile, 16);
-    this.cylinder(3.4, 3.4, .3, 188, 25, -161, this.m.trim, 16);
+    this.scene.add(createLighthouse());
   }
   ground() {
     this.box(304, 3, 460, -88, -1.53, -30, this.m.sand);
@@ -517,7 +515,7 @@ export class World {
       if (Math.hypot(p.x - target.x, p.z - target.z) > 15) Object.assign(p, target);
       else { p.x += (target.x - p.x) * k; p.z += (target.z - p.z) * k; p.yaw += Math.atan2(Math.sin(target.yaw - p.yaw), Math.cos(target.yaw - p.yaw)) * k; p.walked += (target.walked - p.walked) * k; }
       p.y=(p.y||0)+((target.y||0)-(p.y||0))*k;p.vy=target.vy||0;p.grounded=target.grounded!==false;
-      p.mode=target.mode;p.bike=target.bike;p.speed=target.speed;rider.update(p,dt);rider.setQuestStage(this.questStage,this.remoteCarrier===target.id);
+      p.mode=target.mode;p.bike=target.bike;p.speed=target.speed;p.swimming=target.swimming===true;rider.update(p,dt);rider.setQuestStage(this.questStage,this.remoteCarrier===target.id);
       stepArrival(entry.arrival,dt);showArrival(this.scene,entry,rider,entry.arrival,p);
     }
   }

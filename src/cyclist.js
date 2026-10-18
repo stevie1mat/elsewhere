@@ -187,7 +187,7 @@ export class Cyclist {
   setQuestStage(stage, carry = true) {
     this.parcel.visible = carry && (stage === 1 || stage === 2);
     if (this.questStage === stage) return;
-    this.questStage = stage; this.frameMaterial.color.set(stage === 3 ? 0xcaa24d : (this.baseColor ?? 0x278e86));
+    this.questStage = stage; this.frameMaterial.color.set(this.paintColor ?? (stage === 3 ? 0xcaa24d : (this.baseColor ?? 0x278e86)));
   }
 
   update(player, dt = 0) {

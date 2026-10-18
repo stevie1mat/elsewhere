@@ -1,7 +1,7 @@
 import {PORTO_BOUNDS} from './movement.js';
 export const JOURNEY_SECONDS=10;
 export const DESCENT_SECONDS=7;
-export function createArrival(){return {phase:'balloon',elapsed:0};}
+export function createArrival(origin){return {phase:'balloon',elapsed:0,...(origin?{origin:{x:origin.x,z:origin.z}}:{})};}
 // Game-assisted propulsion: real balloons cannot steer against the wind.
 // Heading, angular inertia and drag replace camera-relative strafing.
 export function balloonWind(time){return {x:1.4+Math.sin(time*.13)*.8,z:-1.2+Math.cos(time*.09)*.7};}
@@ -78,8 +78,9 @@ export function arrivalPose(a,p){
   if(!a||a.phase==='landed')return {x:p.x,y:0,z:p.z};
   if(a.phase==='balloon'){
     if(a.pilot)return {x:a.pilot.x,y:42+Math.sin((a.elapsed-JOURNEY_SECONDS)*.25)*1.2,z:a.pilot.z};
-    if(a.elapsed>=JOURNEY_SECONDS)return tourPose(a.elapsed-JOURNEY_SECONDS,p);
-    const t=a.elapsed/JOURNEY_SECONDS,s=t*t*(3-2*t);return {x:p.x+70*(1-s),y:42+Math.sin(t*Math.PI)*3,z:p.z+35*(1-s)};
+    const origin=a.origin??p;
+    if(a.elapsed>=JOURNEY_SECONDS)return tourPose(a.elapsed-JOURNEY_SECONDS,origin);
+    const t=a.elapsed/JOURNEY_SECONDS,s=t*t*(3-2*t);return {x:origin.x+70*(1-s),y:42+Math.sin(t*Math.PI)*3,z:origin.z+35*(1-s)};
   }
   if(a.canopy)return {x:a.canopy.x,y:a.canopy.y,z:a.canopy.z};
   const t=Math.min(1,a.elapsed/DESCENT_SECONDS),from=a.from??{x:p.x,y:42,z:p.z},landing=a.landing??p,s=t*t*(3-2*t);

@@ -1,8 +1,10 @@
 import { PORTO_ROADS } from './porto-expansion.js';
 import {movementInput} from './movement-input.js';
-import {Skyway,SKYWAY_GATE,createRide,rideInput,stepRide} from './skyway.js';
+import {Skyway,SKYWAY_GATE,SKYWAY_ENTRY_BLOCK,keepOutsideRamp,createRide,rideInput,stepRide,rideRegion,rideDifficulty,CHECKPOINT_METERS} from './skyway.js';
+import {GOALS,createAdventure,advanceAdventure,adventureUpgrades} from './adventure.js';
 import {createArrival,stepArrival,steerArrival,dropArrival,JOURNEY_SECONDS} from './arrival.js';
-import {canOccupy,BIKE_SHOP,collectBicycle} from './movement.js';
+import {canOccupy,BIKE_SHOP,CHALLENGE_BIKE,collectBicycle} from './movement.js';
+import {createShopBicycles} from './cycle-shop.js';
 import * as THREE from 'three';
 import { World } from './world.js';
 import { ATTACK_KEYS } from './rider-combat.js';
@@ -125,7 +127,7 @@ $('#game-menu-button').onclick=()=>openDialog('#game-menu');
 $('.character-tools').hidden=isUrban;
 const player = createPlayer();
 let started=false, ready=false, selected=null, elapsed=0, night=false, bob=!matchMedia('(prefers-reduced-motion: reduce)').matches, soundOn=false, quality='high';
-const arrival=isUrban?null:createArrival();
+const arrival=isUrban?null:createArrival(PORTO_SPAWN);
 const airborne=()=>!!arrival&&arrival.phase!=='landed';
 document.body.classList.toggle('arriving',airborne());
 document.querySelector('#app').insertAdjacentHTML('beforeend','<section id="arrival-ui"><small>WELCOME TO PORTO SOL</small><h2 id="arrival-title">Your island is on the horizon.</h2><p id="arrival-detail">Preparing your balloon…</p><button id="arrival-drop" class="enter" hidden>Drop to island · Parachute ↓</button></section>');
@@ -144,7 +146,7 @@ let chaiBest=Number(storage.get('best'))||0;
 let dialogueStop=null;
 let pendingInvite=false, entryRoom=null, returningRoom=false;
 const coop=new CoopClient({
-  onWelcome(message){if(arrival?.phase==='balloon'&&arrival.elapsed<JOURNEY_SECONDS)Object.assign(player,createPlayer(),message.position,{mode:'walking',bike:null});player.arrival=arrival;refreshTravel();releaseKeys();entryRoom=message.room;returningRoom=true;coop.position(player);if(ready)startRide();refreshEntry();},
+  onWelcome(message){if(arrival?.phase==='balloon'&&arrival.elapsed<JOURNEY_SECONDS)Object.assign(player,createPlayer(),{mode:'walking',bike:null});player.arrival=arrival;refreshTravel();releaseKeys();entryRoom=message.room;returningRoom=true;coop.position(player);if(ready)startRide();refreshEntry();},
   onState(state){
     const previous=quest.stage;quest={version:1,stage:state.stage};
     if(world){world.coopMode=true;world.carryParcel=state.carrier===coop.id;world.setRemotes(state.players.filter(p=>p.id!==coop.id),state.carrier);}
@@ -164,20 +166,47 @@ entryRoom=invitedRoom;
 try{returningRoom=!!(entryRoom&&sessionStorage.getItem(`elsewhere:room:${entryRoom}`));}catch{}
 player.arrival=arrival;
 let skyway,skyRide=null,skyReturn=null,skyBest=Number(storage.get('skyway-best'))||0;
+let challengeBicycle;
+const adventure=createAdventure(storage.get('adventure'));
+function progressAdventure(metrics){
+  const before=JSON.stringify(adventure),fresh=advanceAdventure(adventure,metrics);
+  if(JSON.stringify(adventure)!==before)storage.set('adventure',adventure);
+  if(fresh.length)toast(`Unlocked: ${fresh.map(g=>g.reward).join(' · ')}`);
+  if(world?.cyclist?.cycle&&(adventure.unlocked.includes('local')||adventure.unlocked.includes('summit'))){
+    const color=adventure.unlocked.includes('summit')?0xe2b44f:0x9959cf;
+    world.cyclist.cycle.paintColor=color;world.cyclist.cycle.frameMaterial.color.set(color);
+  }
+}
+function bankSkyway(){if(skyRide)progressAdventure({distance:skyRide.distance});}
+const nearChallengeBike=()=>challengeBicycle?.visible&&!skyRide&&!airborne()&&Math.hypot(player.x-CHALLENGE_BIKE.x,player.z-CHALLENGE_BIKE.z)<=CHALLENGE_BIKE.radius;
 const skyHUD=document.createElement('section');skyHUD.id='skyway-hud';skyHUD.hidden=true;
 const collectionHUD=document.createElement('section');collectionHUD.id='collection-hud';collectionHUD.hidden=true;collectionHUD.setAttribute('aria-label','Items collected this outing');
 collectionHUD.innerHTML='<div class="collection-title">COLLECTED <small>THIS OUTING</small></div><div class="collection-items">'+[['coin','●','Coins'],['nitro','ϟ','Nitro'],['shield','◆','Shields'],['mystery','?','Mysteries']].map(([type,icon,label])=>`<div class="collection-item ${type}" title="${label} collected"><span class="collection-icon" aria-hidden="true">${icon}</span><span><b id="collected-${type}">0</b><small>${label}</small></span></div>`).join('')+'</div><div id="collection-wallet"></div>';
 document.querySelector('#ui').append(collectionHUD);
-skyHUD.innerHTML='<strong>SKYWAY RIDE</strong><p id="skyway-score"></p><small>A/D lanes · Space jump · Esc exit</small><div><button id="skyway-start">Start ride</button><button data-sky-key="KeyA" aria-label="Move to left lane">←</button><button data-sky-key="Space">Jump</button><button data-sky-key="KeyD" aria-label="Move to right lane">→</button><button id="skyway-exit">Exit</button></div>';
+collectionHUD.insertAdjacentHTML('beforeend','<details id="adventure-goals"><summary id="adventure-next">Island adventure</summary><div id="adventure-list"></div><button id="adventure-track">Find an undiscovered place ↗</button></details>');
+$('#adventure-track').onclick=()=>{const next=LANDMARKS.find(l=>!discovered.has(l.id));if(next){selected=next.id;updateDiscoveries();toast(`${next.name} marked on your map.`);}else toast('Every city destination discovered!');};
+skyHUD.innerHTML='<strong>SKYWAY RIDE</strong><p id="skyway-score"></p><div id="skyway-rewards"></div><small class="skyway-help">A/D lanes · Space jump · S brake · Esc exit</small><div id="skyway-actions"><button id="skyway-start">Start ride</button><button data-sky-key="KeyA" aria-label="Move to left lane">←</button><button data-sky-key="Space">Jump</button><button data-sky-key="KeyD" aria-label="Move to right lane">→</button><button id="skyway-exit">Exit</button></div>';
 document.querySelector('#app').append(skyHUD);
+const checkpointBanner=document.createElement('aside');checkpointBanner.id='checkpoint-victory';checkpointBanner.hidden=true;checkpointBanner.setAttribute('role','status');checkpointBanner.setAttribute('aria-live','polite');
+checkpointBanner.innerHTML='<span class="checkpoint-medal" aria-hidden="true">★</span><div><small>CHECKPOINT CLEARED</small><strong id="checkpoint-victory-title"></strong><span id="checkpoint-victory-detail"></span></div>';
+document.querySelector('#app').append(checkpointBanner);
+let checkpointBannerTimer;
+function hideCheckpointVictory(){clearTimeout(checkpointBannerTimer);checkpointBanner.hidden=true;}
+function showCheckpointVictory(ride){
+  const difficulty=rideDifficulty(ride.checkpoint);
+  $('#checkpoint-victory-title').textContent=`Checkpoint ${ride.checkpoint} · Victory!`;
+  $('#checkpoint-victory-detail').textContent=`+${500*ride.bonusMultiplier} points · +1 heart (up to ${ride.maxLives}) · Shield\nLevel ${difficulty.tier+1} · Cruise ${Math.round(difficulty.speed*3.6)} km/h${difficulty.tier===7?' · Maximum difficulty':''}`;
+  clearTimeout(checkpointBannerTimer);checkpointBanner.hidden=false;
+  checkpointBannerTimer=setTimeout(hideCheckpointVictory,3200);
+}
 function beginSkyway(){
   if(!skyway||airborne()||modalOpen())return;
   if(!skyRide&&Math.hypot(player.x-SKYWAY_GATE.x,player.z-SKYWAY_GATE.z)>SKYWAY_GATE.radius)return;
   if(!skyRide)skyReturn={...player};
-  skyRide=createRide();releaseKeys();player.mode='cycling';player.bike=null;orbitYaw=0;player.pitch=.25;
+  hideCheckpointVictory();bankSkyway();skyRide=createRide(Math.random,adventureUpgrades(adventure));releaseKeys();player.mode='cycling';player.bike=null;orbitYaw=0;player.pitch=.25;
   toast('Skyway Ride · Auto-pedal · A/D switch lanes · Space jump · Shield absorbs one hit');
 }
-function exitSkyway(){if(!skyRide)return;skyBest=Math.max(skyBest,skyRide.score);storage.set('skyway-best',skyBest);skyRide=null;Object.assign(player,skyReturn);skyReturn=null;world.cyclist.group.position.y=0;skyway.update(null,0);releaseKeys();refreshTravel();}
+function exitSkyway(){if(!skyRide)return;hideCheckpointVictory();bankSkyway();skyBest=Math.max(skyBest,skyRide.score);storage.set('skyway-best',skyBest);skyRide=null;Object.assign(player,skyReturn);skyReturn=null;world.cyclist.group.position.y=0;skyway.update(null,0);releaseKeys();refreshTravel();}
 $('#skyway-start').onclick=beginSkyway;$('#skyway-exit').onclick=exitSkyway;
 skyHUD.querySelectorAll('[data-sky-key]').forEach(b=>b.onclick=()=>{if(skyRide)rideInput(skyRide,b.dataset.skyKey);});
 setInterval(()=>{if(coop.connected)coop.position(skyRide?skyReturn:player);},100);
@@ -281,9 +310,15 @@ function updateQuest() {
   $('#quest-interact').textContent=stop?`F · ${stop.action}`:'';
   if(started&&!airborne()&&!modalOpen()&&player.mode==='walking'&&!player.bike&&Math.hypot(player.x-BIKE_SHOP.x,player.z-BIKE_SHOP.z)<=BIKE_SHOP.radius){$('#quest-interact').hidden=false;$('#quest-interact').textContent='F · Collect bicycle';}
   if(world)world.questStage=quest.stage;
+  if(started&&!modalOpen()&&nearChallengeBike()){$('#quest-interact').hidden=false;$('#quest-interact').textContent='F · Collect Coral bicycle';}
 }
 function talk() {
   if(airborne())return;
+  if(!isUrban&&started&&!modalOpen()&&nearChallengeBike()){
+    const error=collectBicycle(player,world.obstacles,CHALLENGE_BIKE);
+    if(!error){challengeBicycle.visible=false;world.cyclist.cycle.paintColor=CHALLENGE_BIKE.color;world.cyclist.cycle.frameMaterial.color.set(CHALLENGE_BIKE.color);}
+    toast(error||'Coral bicycle collected · Ready for the Skyway.');releaseKeys();refreshTravel();coop.position(player);return;
+  }
   if(!isUrban&&started&&!modalOpen()&&Math.hypot(player.x-SKYWAY_GATE.x,player.z-SKYWAY_GATE.z)<=SKYWAY_GATE.radius){beginSkyway();return;}
   if(!isUrban&&started&&!modalOpen()&&player.mode==='walking'&&!player.bike&&Math.hypot(player.x-BIKE_SHOP.x,player.z-BIKE_SHOP.z)<=BIKE_SHOP.radius){
     const error=collectBicycle(player,world.obstacles);toast(error||'Bicycle collected · X to get off and explore.');releaseKeys();refreshTravel();coop.position(player);return;
@@ -350,7 +385,9 @@ function initialize(){
   manager.onLoad=finish;
   world=isChai?new ChaiWorld(scene,renderer,manager):isMumbai?new MumbaiWorld(scene,renderer,manager):new World(scene,renderer,manager);
   if(isChai)world.delivery=chai;
-  if(!isUrban){skyway=new Skyway(scene);world.sign('SKYWAY RIDE · F',55,3,-380,7,.9);world.bake();}
+  if(!isUrban){skyway=new Skyway(scene);world.obstacles.push({...SKYWAY_ENTRY_BLOCK});world.sign('SKYWAY RIDE · F TO ENTER',46,2.6,-375,4,.6);
+    challengeBicycle=createShopBicycles([CHALLENGE_BIKE],CHALLENGE_BIKE.color);challengeBicycle.name='Coral bicycle pickup';scene.add(challengeBicycle);
+    world.sign('CORAL BICYCLE · F TO COLLECT',40,2.1,-371,5,.65);world.bake();}
   const saved=isUrban&&!isChai?validateSavedPosition(storage.get('spot'),world.obstacles,URBAN_BOUNDS):null;if(saved)Object.assign(player,saved);
   setNight(night);setQuality(quality);setBob();updateDiscoveries();updateQuest();
   setTimeout(()=>{if(!ready){finish();$('#loading-status').textContent='You can explore while the remaining details load.';}},25000);
@@ -371,16 +408,24 @@ function initialize(){
       const active=started&&!modalOpen()&&!airborne();
       if(isChai)world.updateStreet(active?dt:0,player);
       if(active&&skyRide){
-        stepRide(skyRide,dt);const p=skyway.pose(skyRide.distance,skyRide.lanePosition);
+        const checkpoint=skyRide.checkpoint,wasRunning=skyRide.running;
+        stepRide(skyRide,dt,{brake:keys.has('KeyS')||keys.has('ArrowDown')});const p=skyway.pose(skyRide.distance,skyRide.lanePosition);
+        if(skyRide.checkpoint>checkpoint){showCheckpointVictory(skyRide);bankSkyway();}
+        if(wasRunning&&!skyRide.running){hideCheckpointVictory();bankSkyway();}
         Object.assign(player,p,{y:p.y+skyRide.jump,mode:'cycling',speed:skyRide.running?skyRide.speed:0,walked:skyRide.distance});
         skyway.update(skyRide,elapsed);
         if(!skyRide.running&&skyRide.score>skyBest){skyBest=skyRide.score;storage.set('skyway-best',skyBest);}
       }
       if(active&&!skyRide){
+        const wasSwimming=player.swimming;
+        if(!isUrban)keepOutsideRamp(player);
         stepPlayer(player,{...movementInput(keys,player.mode),boost:world.pickups?.boost(dt,player,keys.has('KeyB')&&(keys.has('KeyW')||keys.has('ArrowUp')),keys.has('Space'))},dt,isChai?world.obstacles.concat(world.dynamicObstacles):world.obstacles,isUrban?URBAN_BOUNDS:PORTO_BOUNDS);
+        if(player.swimming&&!wasSwimming)toast('Swimming · W/S swim · A/D turn · Shift faster · Swim toward shore to climb out.');
         if(isChai)stepChai(chai,player,dt);
+        const previousCoins=world.pickups?.collected.coin??0;
         const collected=world.pickups?.update(dt,player)??[];
         if(collected.length){toast(collected.at(-1));pickupSound();}
+        if(!isUrban&&world.pickups?.collected.coin>previousCoins)progressAdventure({coins:adventure.coins+world.pickups.collected.coin-previousCoins});
 
       }
       if(world.cyclist?.applyLook&&world.cyclist.look!==characterLook){world.cyclist.applyLook(characterLook);characterLook=world.cyclist.look;}
@@ -389,7 +434,7 @@ function initialize(){
       world.pickupDisplay?.update(player);
       world.cyclist?.update(player,active?dt:0);
       const arrivalView=world.setLocalArrival(arrival,player);
-      if(skyRide){world.cyclist.group.position.y=player.y;world.cyclist.cycle.group.rotateX(-player.slope);}
+      if(skyRide){world.cyclist.group.position.y=player.y;world.cyclist.cycle.group.rotateX(-player.slope);world.cyclist.cycle.group.rotateZ(-Math.max(-.16,Math.min(.16,skyRide.laneVelocity*.1)));}
       world.updateRemote(dt);
       // Orbit around the visible rider; the bike's heading is independent of the mouse.
       const viewYaw=player.yaw+orbitYaw, distance=player.mode==='walking'?4.4:5.8;
@@ -411,7 +456,7 @@ function initialize(){
       if(renderer.shadowMap.enabled&&now-lastShadowUpdate>=50){renderer.shadowMap.needsUpdate=true;lastShadowUpdate=now;}
       renderer.render(scene,camera);
       uiClock+=dt;frameClock+=dt;frames++;
-      if(frameClock>1){$('#performance').textContent=`${player.mode==='walking'?'Walking · ':''}${Math.round(Math.abs(player.speed)*3.6)} km/h · ${Math.round(frames/frameClock)} fps`;frameClock=0;frames=0;}
+      if(frameClock>1){$('#performance').textContent=`${player.swimming?'Swimming · ':player.mode==='walking'?'Walking · ':''}${Math.round(Math.abs(player.speed)*3.6)} km/h · ${Math.round(frames/frameClock)} fps`;frameClock=0;frames=0;}
       if(uiClock>.12){updateHUD();uiClock=0;}
     }
     requestAnimationFrame(frame);
@@ -424,6 +469,14 @@ function initialize(){
 }
 
 function updateHUD(){
+  if(!isUrban){
+    progressAdventure({places:discovered.size,delivery:quest.stage});
+    const next=GOALS.find(g=>!adventure.unlocked.includes(g.id));
+    $('#adventure-next').textContent=next?`${next.title} · ${Math.min(next.target,Math.floor(adventure[next.key]))}/${next.target}`:'All expedition rewards unlocked ✓';
+    const content=GOALS.map(g=>`${adventure.unlocked.includes(g.id)?'✓':'○'} ${g.title} — ${g.reward}`).join('\n');
+    if($('#adventure-list').textContent!==content)$('#adventure-list').textContent=content;
+  }
+  $('#adventure-goals').hidden=isUrban;
   const pickups=world?.pickups;
   collectionHUD.hidden=!started||airborne()||!!skyRide||!pickups;
   if(pickups){
@@ -434,7 +487,10 @@ function updateHUD(){
   }
   const atSkyway=!isUrban&&started&&!airborne()&&Math.hypot(player.x-SKYWAY_GATE.x,player.z-SKYWAY_GATE.z)<=SKYWAY_GATE.radius;
   skyHUD.hidden=!skyRide&&!atSkyway;
-  if(!skyHUD.hidden){$('#skyway-score').textContent=skyRide?`${skyRide.running?'':'Ride over · '}${skyRide.score} pts · ${skyRide.coins} coins · ${skyRide.gems} gems · ${skyRide.lives} hearts${skyRide.shield?' · Shield ready':''} · Best ${skyBest}`:`Sea bridge → mountain circuit · Best ${skyBest} · Challenge bicycle provided`;
+  skyHUD.classList.toggle('in-ride',!!skyRide);
+  if(!skyHUD.hidden){$('#skyway-score').textContent=skyRide?`${skyRide.running?'': 'Ride over · '}${skyRide.score.toLocaleString()} POINTS · BEST ${skyBest.toLocaleString()}`:'Sea bridge → mountain circuit · Challenge bicycle provided';
+    $('#skyway-rewards').textContent=skyRide?`${rideRegion(skyRide.distance,skyway.length)} · ${(skyRide.distance/1000).toFixed(2)} km · ${CHECKPOINT_METERS-Math.floor(skyRide.distance%CHECKPOINT_METERS)}m to checkpoint\n● ${skyRide.coins}   ◆ ${skyRide.gems}   ♥ ${skyRide.lives}/${skyRide.maxLives}   ${skyRide.shield?'⬡ Shield':''}`:`${(skyway.length/1000).toFixed(1)} km loop · Checkpoints every 750m · Continues endlessly. City goals unlock upgrades.`;
+    skyHUD.querySelectorAll('[data-sky-key]').forEach(b=>b.hidden=!skyRide);
     $('#skyway-start').hidden=!!skyRide?.running;$('#skyway-start').textContent=skyRide?'Retry':'Start ride · F';$('#skyway-exit').hidden=!skyRide;}
   $('#pickup-hud').hidden=!started||!pickups;
   if(pickups){
@@ -448,7 +504,7 @@ function updateHUD(){
   refreshTravel();
   updateQuest();
   for(const landmark of LANDMARKS){const distance=Math.hypot(player.x-landmark.x,player.z-landmark.z);$(`#distance-${landmark.id}`).textContent=`${Math.round(distance)}m`;
-    if(started&&distance<landmark.radius&&!discovered.has(landmark.id)){
+    if(started&&!airborne()&&!skyRide&&distance<landmark.radius&&!discovered.has(landmark.id)){
       discovered.add(landmark.id);storage.set('discoveries',[...discovered]);updateDiscoveries();
       $('#discovery-name').textContent=landmark.name;$('#discovery-description').textContent=landmark.subtitle;$('#discovery').classList.add('visible');
       clearTimeout(discoveryTimer);discoveryTimer=setTimeout(()=>$('#discovery').classList.remove('visible'),4500);
@@ -560,6 +616,7 @@ function addControls(){
   document.addEventListener('pointerlockerror',()=>toast('Mouse capture is unavailable. Drag to look, or use A / D to steer.'));
   window.addEventListener('keydown',event=>{
     if(skyRide&&!modalOpen()){
+      if(event.code==='KeyS'||event.code==='ArrowDown'){event.preventDefault();keys.add(event.code);return;}
       if(['KeyA','KeyD','ArrowLeft','ArrowRight','Space','Escape','KeyR'].includes(event.code)){event.preventDefault();if(!event.repeat){if(event.code==='Escape')exitSkyway();else if(event.code==='KeyR')beginSkyway();else rideInput(skyRide,event.code);}}
       return;
     }

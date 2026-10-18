@@ -29,7 +29,8 @@ PATH=/opt/homebrew/opt/node@22/bin:$PATH npm run dev -- --port 5174
 
 Map marker **11**, on the northern shoreline at `(55, -380)`, starts an endless cycling challenge. Approach the stone gateway and press **F** (or Start ride). A challenge bicycle is provided; your previous position and bicycle are restored on exit.
 
-- Automatic forward movement; **A/D** or arrows switch among three lanes; **Space** jumps; **Esc** exits; **R** retries. On-screen buttons support touch.
+- Automatic forward movement with gradual acceleration; **A/D** or arrows switch among three lanes with lateral momentum; **Space** jumps using 9.81 m/s² gravity; **S / down arrow** brakes; **Esc** exits; **R** retries. On-screen buttons support lane changes and jumping on touch.
+- The free-roam approach is blocked before the rising deck: enter with **F** rather than riding underneath the bridge. Rider IK is solved at neutral height before applying the bridge elevation and slope; banking is limited to gentle turns.
 - The elevated circuit crosses the sea and climbs over the mountain landscape, looping continuously with newly generated obstacle rows. Each row has a clear lane; speed gradually increases to a cap.
 - Distance gives 3 points/m, coins 25, gems 200. Green shields absorb one collision. Three lives, brief collision protection, and a best score saved in this browser.
 - This is a local challenge within the shared island, not synchronized competitive multiplayer. While riding, your room presence remains at the gate. Rewards are challenge-only.
@@ -173,6 +174,38 @@ pigeons that scatter nearby. People, ground animals, and traffic have collision 
 vehicles yield near the bicycle. Traffic follows predefined loops, not a full traffic simulator.
 Animals, vehicles, and architecture are original procedural models; human models and surface
 assets retain the credits above. This is detailed real-time 3D, not a photogrammetric recreation.
+
+### Porto expedition progression
+
+On foot, moving off the Porto shoreline enters surface swimming: W/S propel,
+A/D turn, Shift swims faster. Water drag eases acceleration and buoyancy keeps
+the head above the surface. Swim back toward clear shore to return to walking.
+Bicycles remain parked on land; swimming is bounded to the coastal play area,
+with the lighthouse rocks excluded (the island is scenery, not a climbable area).
+The lighthouse has a rocky base, striped tower, balcony rails and emissive lantern
+lenses, merged into six material meshes without additional dynamic lights.
+Restart an already-running multiplayer server after updating these shared movement
+rules so remote swimmers are accepted and displayed correctly.
+
+The Skyway now follows a 6.45 km closed sea-to-mountain route and continues endlessly.
+Five regions have colored roadside pennants; the highland stretch adds instanced rock
+formations and snow caps. Checkpoints every 750 m restore one heart (up to capacity),
+grant a shield and award 500 bonus points. They are reward milestones, not respawn saves.
+Each checkpoint shows a brief gold victory badge away from the center sightline.
+Cruise speed rises by 2 m/s per checkpoint (12 to 26 m/s), with smooth acceleration.
+Obstacle rows tighten from 46 to 32 m and gain more double barriers while retaining
+one safe lane; difficulty caps at level 8 to preserve reaction time. The entrance and
+route portals are open rounded arches, with the entry sign moved off to the side.
+
+Expand the compact goal line below the collection counters to see six saved objectives.
+Discover 3 places for improved Skyway steering; collect 25 city coins for a starting
+shield; complete the existing parcel quest for a fourth heart; ride 3 km in one run for
+double checkpoint bonuses; discover 10 places for purple paint; ride 6 km for gold paint.
+Upgrades equip automatically on the next challenge run. Goals and unlocks are saved
+locally in this browser, not synchronized as multiplayer rewards. City coins accumulate
+across outings; run-distance records are saved at checkpoints, ride end, retry and exit.
+The map-tracking button points to an undiscovered city landmark. Airborne flyovers no
+longer unlock landmarks. New scenery uses shared instanced meshes and fixed item pools.
 
 `src/chai.js` contains standalone delivery rules and the layout. `src/chai-world.js` builds and
 animates the district. `tests/chai.test.js` checks pickup/delivery/refill, spilling and cooling,

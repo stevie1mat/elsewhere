@@ -1,7 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createArrival,stepArrival,steerArrival,dropArrival,arrivalPose} from '../src/arrival.js';
-import {PORTO_BOUNDS} from '../src/movement.js';
+import {PORTO_BOUNDS,SPAWN} from '../src/movement.js';
+test('fresh city arrival ignores a restored challenge position, but preserves a deliberate piloted drop',()=>{
+  const a=createArrival(SPAWN),p={x:55,z:-380};
+  stepArrival(a,10);
+  assert.equal(arrivalPose(a,p).x,SPAWN.x);assert.equal(arrivalPose(a,p).z,SPAWN.z);
+  assert.equal(dropArrival(a,p),true);
+  stepArrival(a,15,{player:p});assert.equal(a.phase,'landed');assert.ok(Math.hypot(p.x-SPAWN.x,p.z-SPAWN.z)<30);
+  const b=createArrival(SPAWN);stepArrival(b,10);b.pilot={x:-100,z:-100};
+  assert.equal(dropArrival(b,p),true);assert.equal(b.from.x,-100);assert.equal(b.from.z,-100);
+});
 test('turning changes heading gradually, independent of the camera',()=>{
   const p={x:0,z:0},a=createArrival(),b=createArrival();stepArrival(a,10);stepArrival(b,10);
   steerArrival(a,p,{forward:1},.05);steerArrival(b,p,{forward:1,orbitYaw:Math.PI},.05);

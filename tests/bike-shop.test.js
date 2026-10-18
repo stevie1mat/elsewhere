@@ -1,6 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createPlayer,collectBicycle,BIKE_SHOP,toggleTravelMode,stepPlayer} from '../src/movement.js';
+import {createPlayer,collectBicycle,BIKE_SHOP,CHALLENGE_BIKE,toggleTravelMode,stepPlayer} from '../src/movement.js';
+test('challenge bicycle can be picked up on foot or exchanged, only nearby and grounded',()=>{
+  const p={...createPlayer(),mode:'walking',x:CHALLENGE_BIKE.x,z:CHALLENGE_BIKE.z};
+  assert.equal(collectBicycle(p,[],CHALLENGE_BIKE),null);assert.equal(p.mode,'cycling');
+  assert.equal(collectBicycle(p,[],CHALLENGE_BIKE),null);
+  p.grounded=false;assert.match(collectBicycle(p,[],CHALLENGE_BIKE),/Land/);
+  p.grounded=true;p.x+=10;assert.match(collectBicycle(p,[],CHALLENGE_BIKE),/Visit/);
+});
 test('uncollected bicycle cannot be summoned, but walking works',()=>{
   const p={...createPlayer(),mode:'walking',bike:null};
   assert.match(toggleTravelMode(p,[]),/Cycle House/);
