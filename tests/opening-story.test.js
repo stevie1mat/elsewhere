@@ -1,7 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync,statSync} from 'node:fs';
-import {STORY_CHAPTERS,STORY_VERSION} from '../src/opening-story.js';
+import {STORY_CHAPTERS,STORY_VERSION,STORY_SCENES,STORY_SCENE_MS} from '../src/opening-story.js';
+test('film captions start with their shots without an empty ferry beat',()=>{
+  assert.equal(STORY_SCENES.length,5);
+  assert.ok(STORY_SCENES.every(scene=>scene.subtitle.trim()));
+  const ferry=STORY_SCENES.filter(scene=>scene.image.includes('crossing'));
+  assert.equal(ferry.length,1);
+  assert.equal(ferry[0].subtitle,'“Tell me when you get there.”');
+  assert.equal(STORY_SCENE_MS,4500);
+  assert.equal(STORY_SCENES.at(-1).subtitle,'Your first morning starts here.');
+});
 test('opening has six readable chapters and four bundled, optimized illustrations',()=>{
   assert.equal(STORY_VERSION,1);assert.equal(STORY_CHAPTERS.length,6);
   const images=new Set(STORY_CHAPTERS.map(c=>c.image));assert.equal(images.size,4);

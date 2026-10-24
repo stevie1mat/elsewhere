@@ -240,3 +240,60 @@ The opening balloon now approaches from open water over 24 seconds before flight
 After storing the suitcase, an eleven-stop personal campaign takes priority over the optional parcel quest and collection HUD. Four chapters cover a message home and first meal, paid bakery work, furnishing the room, and a neighbourhood supper followed by an ending at home. Press F at the gold world/map marker, choose a response, and review memories, possessions, neighbours, and earnings in the Journal. The bread must be collected and delivered before Rui pays €18; the market offers a €6 plant, a €4 mug, or saving the money. Unpacking adds the photograph, recipe notebook, and chosen furnishing to the room. Supper changes the town to blue hour, and finishing the story returns it to morning and free exploration.
 
 Personal choices are persisted as `elsewhere:settling-story` and replayed on load to derive money, possessions, and milestones rather than trusting saved totals. This campaign is local to each player; the earlier co-op parcel quest remains optional after the ending.
+
+
+## Android and iOS
+
+The Capacitor projects bundle the game and its assets for local play. Touch devices
+start with Balanced graphics unless a saved preference overrides it. Saves remain
+local to each app installation; browser saves do not transfer automatically.
+The provisional bundle identifier is `com.promptdrive.elsewhere` and the app name
+is Elsewhere. Choose the final identifier before distributing releases.
+
+Requires Node 22.12+, Java 21, Android SDK 36 for Android, and a compatible Xcode
+installation for iOS. Install dependencies with `npm ci`.
+
+- `npm run mobile:sync`: build the web game and copy it into both native projects.
+- `npm run mobile:android`: sync and open Android Studio.
+- `npm run mobile:apk`: sync and build an installable debug APK at
+  `android/app/build/outputs/apk/debug/app-debug.apk`.
+- `npm run mobile:ios`: sync and open the Xcode project. Select your signing team
+  and a connected iPhone to run it. Use Archive for a signed distribution build.
+
+On this Mac, use the working Node installation and Java 21 when building Android:
+
+```sh
+export PATH=/opt/homebrew/opt/node@22/bin:$PATH
+export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
+export ANDROID_HOME="$HOME/Library/Android/sdk"
+npm run mobile:apk
+```
+
+An iOS simulator build without signing:
+
+```sh
+xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug \
+  -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+  -derivedDataPath build/ios-simulator CODE_SIGNING_ALLOWED=NO build
+```
+
+For multiplayer, set `VITE_COOP_URL=wss://your-server.example/coop` before syncing.
+Packaged builds do not fall back to a development server at localhost. The Node
+multiplayer server must be hosted separately; it is not included in the app.
+
+These are development builds with template app icons and launch screens. Test
+controls, notches, audio interruptions, camera export, memory use, and sustained
+frame rate on real phones before release. Android store distribution needs a
+signed release AAB; iPhone distribution needs Apple signing and provisioning.
+
+### Initial mobile build verification
+
+Android `assembleDebug` and the unsigned iOS simulator build both succeeded.
+The APK contains the current production web bundle (approximately 113 MiB).
+No physical-device gameplay testing has been performed yet.
+
+The game suite reports 113 passing tests and 8 existing failures covering the
+camera proxy, runner speed/jumping, walking/animation/co-op positions, elevated
+parachute landing, and urban saved positions. These same gameplay failures were
+reproduced against the unchanged Git HEAD. The sandbox additionally blocks the
+WebSocket integration test; it passes when local listening is allowed.

@@ -8,13 +8,21 @@
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1",
     "test": "node --test tests/*.test.js",
-    "multiplayer": "node server/index.js"
+    "multiplayer": "node server/index.js",
+    "mobile:sync": "npm run build && cap sync",
+    "mobile:android": "npm run mobile:sync && cap open android",
+    "mobile:ios": "npm run mobile:sync && cap open ios",
+    "mobile:apk": "npm run mobile:sync && cd android && ./gradlew assembleDebug"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/ios": "^8.5.3",
     "three": "0.185.1",
     "ws": "^8.22.0"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.3",
     "vite": "8.0.13"
   },
   "engines": {

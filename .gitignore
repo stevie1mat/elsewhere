@@ -5,3 +5,6 @@ dist/
 !.env.example
 .DS_Store
 .vercel/
+
+# Native build products
+build/

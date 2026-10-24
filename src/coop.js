@@ -1,7 +1,7 @@
 export function coopEndpoint(){
   const configured=import.meta.env?.VITE_COOP_URL;
   if(configured){try{const url=new URL(configured);if(!['ws:','wss:'].includes(url.protocol)||location.protocol==='https:'&&url.protocol!=='wss:')return '';return url.href;}catch{return '';}}
-  return ['localhost','127.0.0.1'].includes(location.hostname)?`ws://${location.hostname}:8787/coop`:'';
+  return import.meta.env?.DEV!==false&&['localhost','127.0.0.1'].includes(location.hostname)?`ws://${location.hostname}:8787/coop`:'';
 }
 export const PUBLIC_ROOM='0000000000000000';
 export class CoopClient {

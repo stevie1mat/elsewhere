@@ -1,0 +1,9 @@
+{
+  "appId": "com.promptdrive.elsewhere",
+  "appName": "Elsewhere",
+  "webDir": "dist",
+  "backgroundColor": "#192a2c",
+  "ios": {
+    "contentInset": "automatic"
+  }
+}

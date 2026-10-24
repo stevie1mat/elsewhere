@@ -18,6 +18,7 @@ import { CHAI_SPAWN,CHAI_LANDMARKS,CHAI_ROADS,createChai,chaiTarget,canServe,ser
 import { MUMBAI_SPAWN, MUMBAI_LANDMARKS, MUMBAI_ROADS } from './mumbai-layout.js';
 import { SPAWN as PORTO_SPAWN, LANDMARKS as PORTO_LANDMARKS, PORTO_BOUNDS, shorelineX, URBAN_BOUNDS, createPlayer as createPortoPlayer, stepPlayer, toggleTravelMode, validateSavedPosition } from './movement.js';
 import './style.css';
+import './story-cinema.css';
 import { normalizeLook } from './explorer.js';
 import { mapProjection,panMap,zoomMap } from './map-view.js';
 import { CoopClient,coopEndpoint,PUBLIC_ROOM } from './coop.js';
@@ -130,7 +131,7 @@ for(const selector of ['.top-actions','.character-tools','.quest-card','.journey
 $('#game-menu-button').onclick=()=>openDialog('#game-menu');
 $('.character-tools').hidden=isUrban;
 const player = createPlayer();
-let started=false, ready=false, selected=null, elapsed=0, night=false, bob=!matchMedia('(prefers-reduced-motion: reduce)').matches, soundOn=false, quality='high';
+let started=false, ready=false, selected=null, elapsed=0, night=false, bob=!matchMedia('(prefers-reduced-motion: reduce)').matches, soundOn=false, quality=matchMedia('(pointer: coarse)').matches?'balanced':'high';
 const arrival=isUrban?null:createArrival(PORTO_SPAWN);
 const airborne=()=>!!arrival&&arrival.phase!=='landed';
 document.body.classList.toggle('arriving',airborne());

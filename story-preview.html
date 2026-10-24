@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Elsewhere · Cinematic story preview</title>
+  </head>
+  <body>
+    <button id="replay" type="button">Replay opening story</button>
+    <script type="module">
+      import './src/style.css';
+      import './src/story-cinema.css';
+      import {mountOpeningStory} from './src/opening-story.js';
+      const story = mountOpeningStory();
+      document.querySelector('#replay').onclick = () => story.open();
+      story.open();
+    </script>
+  </body>
+</html>

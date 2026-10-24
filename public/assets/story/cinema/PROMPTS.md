@@ -1,0 +1,20 @@
+# Cinematic opening artwork
+
+Generated with the built-in image_gen tool. The user-provided reference guided the grayscale animated-film style. JPEGs are optimized from the generated originals.
+
+## packing-v2.jpg
+
+Use case: illustration-story. Asset type: full-screen 16:9 game opening background, 1536x864 or wider landscape. Create an original grayscale animated feature-film illustration inspired by the attached reference's soft sculpted cartoon characters, expressive large eyes, elegant proportions, atmospheric city architecture and diffused cinematic light. Reference image is style guidance only. Scene: a young adult traveler with tousled dark hair and a simple coat, seated beside an open suitcase on a bed in a modest apartment, tenderly holding a folded shirt, a notebook and small family photograph beside the suitcase. Composition: traveler and suitcase centered in the upper-middle/right portion, wide room with window and distant old European waterfront rooftops, generously open darker lower quarter for UI captions. Strict monochrome charcoal, ivory and silver palette; softly modeled 3D cartoon rendering with delicate hand-drawn contours and subtle paper grain, emotional quiet anticipation. Fill the entire image edge to edge, no paper sheet, no frame, no border, no lettering, no watermark. This is an evocative polished movie still, not a flat icon or stick-figure drawing.
+
+## goodbye-v2.jpg
+
+Use case: illustration-story. Generate a new 16:9 full-bleed grayscale cinematic cartoon movie still for the next scene in this story. The attached packing artwork is a character and rendering style reference: preserve that same young adult male traveler with tousled dark hair, long expressive face, large eyes, simple coat, softly sculpted 3D animation design. Scene: he hugs a dark-haired loved one goodbye at an apartment doorway, suitcase beside their feet, quiet bittersweet emotion, morning light beyond the door. Characters central upper half, medium-wide composition, moody spacious lower quarter for overlay text. Elegant monochrome silver/ivory/charcoal, delicate hand drawn contours, subtle paper grain, soft volumetric light, cinematic depth. Full environment edge to edge, no sheet of paper, no frame, no text, no watermark.
+
+## crossing-v2.jpg
+
+Use case: illustration-story. Generate new 16:9 full-bleed grayscale cinematic cartoon movie still. Attached image is character/style reference only; keep same tousled dark-haired young adult male traveler, elongated expressive face, large eyes and simple coat, soft sculpted animated-film rendering. New scene: seated inside a ferry beside a broad window, holding a small phone loosely and gazing wistfully across luminous water at the receding shoreline. Suitcase by his seat. Character center-right in upper half, window fills left side, spacious dark lower quarter for caption overlay. Charcoal silver ivory monochrome, soft morning light, atmospheric depth, subtle paper grain and drawn contours. Beautiful restrained emotional animated feature film aesthetic. No text, border, watermark, or paper sheet. Environment fills image edge to edge.
+
+## arrival-v2.jpg
+
+Use case: illustration-story. Generate a new 16:9 full-bleed grayscale cinematic cartoon movie still for the arrival ending of this journey. Attached image is rendering and character reference only. Scene: an enchanting small Portuguese-inspired island waterfront town named Porto Sol (do NOT write any text). A hot-air balloon with the same tousled dark-haired young male traveler in its basket floats above the harbor toward a welcoming terrace; lighthouse on a rocky promontory, tiled rooftops, balconies and bicycles on the promenade, glistening water, hopeful morning atmosphere. Balloon upper right-center, town spread across center, wide cinematic establishing shot. Soft sculpted 3D animated feature-film art, expressive whimsical shapes, refined charcoal silver ivory monochrome, atmospheric light, subtle paper grain. Lower quarter darker water with room for UI text. Full environment edge to edge, no frame, no paper sheet, no lettering or watermark.
+
