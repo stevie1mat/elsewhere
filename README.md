@@ -177,15 +177,9 @@ assets retain the credits above. This is detailed real-time 3D, not a photogramm
 
 ### Porto expedition progression
 
-First-time Porto visitors see a six-chapter illustrated opening: packing, goodbye,
-crossing, a message from home, arrival and the first morning. Four AI-generated
-illustrations are bundled in `public/assets/story/`; full prompts are recorded in
-`public/assets/story/PROMPTS.md`. It is a fictional immigrant story, not intended
-to speak for every migration experience. Nationality and reasons for leaving are
-left open. No voiceover is included. Back/Continue, arrow-key navigation and Skip
-(or Escape) are supported; there is no automatic reading timer. The balloon
-countdown waits while the story is open. Completion or skipping is remembered in
-this browser; use **Replay opening story** in the game menu to revisit it.
+Porto visitors start directly in the balloon journey as soon as the world loads.
+The opening slideshow and its replay menu option are disabled. After landing,
+Mara welcomes the player and guides them to their first room.
 
 On foot, moving off the Porto shoreline enters surface swimming: W/S propel,
 A/D turn, Shift swims faster. Water drag eases acceleration and buoyancy keeps

@@ -136,6 +136,13 @@ export class World {
       const normal = this.loader.load(ROOT+'hd/grass-normal-2k.jpg');
       normal.wrapS=normal.wrapT=T.RepeatWrapping; normal.repeat.copy(groundMap.repeat); this.m.grass.normalMap=normal; this.m.grass.normalScale=new T.Vector2(.4,.4);
       Object.assign(this.m.road,{map:this.m.pavement.map,normalMap:this.m.pavement.normalMap,roughnessMap:this.m.pavement.roughnessMap,color:new T.Color(0xc1b095),normalScale:new T.Vector2(.35,.35)});
+      // Quiet, painted surfaces carry the film's mood into the explorable town.
+      for(const [name,color] of Object.entries({cream:0xe6ddc9,peach:0xc8a998,sage:0xa7b5a0,blue:0xa5b8be,grass:0x9aa77f,flower:0xc58e9e}))this.m[name].color.set(color);
+      for(const name of ['cream','peach','sage','blue','wood','teak','pavement','road','grass']){
+        this.m[name].normalScale?.multiplyScalar(.42);
+        this.m[name].roughness=Math.max(.92,this.m[name].roughness);
+      }
+
     }
   }
   mesh(geometry, material, x = 0, y = 0, z = 0, rotation = 0) {
@@ -163,13 +170,13 @@ export class World {
     this.batches.clear();
   }
   environment() {
-    this.scene.fog = new T.FogExp2(this.location === 'porto' ? 0xb5cfe0 : 0xd3bca0, this.location === 'porto' ? .00048 : .0019);
-    this.sun = new T.DirectionalLight(0xffe1b5, this.location === 'porto' ? 4.2 : 3.2); this.sun.position.set(95, 80, -65);
+    this.scene.fog = new T.FogExp2(this.location === 'porto' ? 0xc9cec9 : 0xd3bca0, this.location === 'porto' ? .0008 : .0019);
+    this.sun = new T.DirectionalLight(0xffe1b5, this.location === 'porto' ? 3.1 : 3.2); this.sun.position.set(95, 80, -65);
     this.sun.castShadow = true; this.sun.shadow.mapSize.set(2048, 2048);
     Object.assign(this.sun.shadow.camera, { left: -72, right: 72, top: 72, bottom: -72, near: 1, far: 290 });
-    this.sun.shadow.normalBias = .045; this.sun.shadow.bias = -.00015; this.sun.shadow.blurSamples = 8;
+    this.sun.shadow.normalBias = .045; this.sun.shadow.bias = -.00015; this.sun.shadow.blurSamples = 8; this.sun.shadow.radius = this.location==='porto'?3:1;
     this.scene.add(this.sun, this.sun.target);
-    this.ambient = new T.HemisphereLight(0xb6d6ff, 0x947359, this.location === 'porto' ? 1.05 : 1.65); this.scene.add(this.ambient);
+    this.ambient = new T.HemisphereLight(this.location==='porto'?0xdce2df:0xb6d6ff, this.location==='porto'?0x928674:0x947359, this.location === 'porto' ? 1.4 : 1.65); this.scene.add(this.ambient);
     this.skyTexture = this.loader.load(ROOT + 'hd/sky-8k.jpg'); this.skyTexture.colorSpace = T.SRGBColorSpace;
     this.skyMaterial = new T.ShaderMaterial({
       side: T.BackSide, depthWrite: false, uniforms: { panorama: { value: this.skyTexture }, night: { value: 0 } },
@@ -187,7 +194,7 @@ export class World {
         #include <colorspace_fragment>
       }`});
     this.sky = new T.Mesh(new T.SphereGeometry(1900, 40, 24), this.skyMaterial); this.scene.add(this.sky);
-    new HDRLoader(this.manager).load(ROOT + 'hd/lighting.hdr', texture => { texture.mapping = T.EquirectangularReflectionMapping; this.scene.environment = texture; this.scene.environmentIntensity = .38; });
+    new HDRLoader(this.manager).load(ROOT + 'hd/lighting.hdr', texture => { texture.mapping = T.EquirectangularReflectionMapping; this.scene.environment = texture; this.scene.environmentIntensity = this.night?.1:(this.location==='porto'?.28:.38); });
     this.oceanMaterial = new T.ShaderMaterial({
       uniforms: { time: { value: 0 }, night: { value: 0 }, panorama: {value:this.skyTexture} },
       vertexShader: `varying vec3 vWorld;void main(){vec4 p=modelMatrix*vec4(position,1.);vWorld=p.xyz;gl_Position=projectionMatrix*viewMatrix*p;}`,
@@ -563,8 +570,8 @@ export class World {
   }
   setNight(night) {
     this.night = night; this.skyMaterial.uniforms.night.value = night ? 1 : 0; this.oceanMaterial.uniforms.night.value = night ? 1 : 0;
-    this.sun.intensity = night ? .25 : (this.location === 'porto' ? 4.2 : 3.2); this.sun.color.set(night ? 0x9ab9eb : 0xffe1b5); this.ambient.intensity = night ? .48 : (this.location === 'porto' ? 1.05 : 1.65);
-    this.scene.environmentIntensity = night ? .1 : .38; this.scene.fog.color.set(night ? 0x192b41 : (this.location === 'porto' ? 0xb5cfe0 : 0xd3bca0));
+    this.sun.intensity = night ? .25 : (this.location === 'porto' ? 3.1 : 3.2); this.sun.color.set(night ? 0x9ab9eb : 0xffe1b5); this.ambient.intensity = night ? .48 : (this.location === 'porto' ? 1.4 : 1.65);
+    this.scene.environmentIntensity = night ? .1 : (this.location==='porto'?.28:.38); this.scene.fog.color.set(night ? 0x192b41 : (this.location === 'porto' ? 0xc9cec9 : 0xd3bca0));
     this.m.lamp.emissiveIntensity = night ? 4 : 1.5; this.lights.forEach(l => { l.intensity = night ? 35 : 0; l.visible = false; });
     this.m.glass.emissive.set(night ? 0xb27c3b : 0); this.m.glass.emissiveIntensity = night ? .3 : 0;
   }

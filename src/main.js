@@ -2,7 +2,6 @@ import {lifeStep} from './settling-story.js';
 import {mountSettlingStory} from './settling-ui.js';
 import {createWelcome,meetGuide,stepWelcome,welcomeAction,welcomeCopy} from './welcome.js';
 import { PORTO_ROADS } from './porto-expansion.js';
-import {mountOpeningStory,STORY_VERSION} from './opening-story.js';
 import {movementInput} from './movement-input.js';
 import {Skyway,SKYWAY_GATE,SKYWAY_ENTRY_BLOCK,keepOutsideRamp,createRide,rideInput,stepRide,rideRegion,rideDifficulty,CHECKPOINT_METERS} from './skyway.js';
 import {GOALS,createAdventure,advanceAdventure,adventureUpgrades} from './adventure.js';
@@ -18,7 +17,6 @@ import { CHAI_SPAWN,CHAI_LANDMARKS,CHAI_ROADS,createChai,chaiTarget,canServe,ser
 import { MUMBAI_SPAWN, MUMBAI_LANDMARKS, MUMBAI_ROADS } from './mumbai-layout.js';
 import { SPAWN as PORTO_SPAWN, LANDMARKS as PORTO_LANDMARKS, PORTO_BOUNDS, shorelineX, URBAN_BOUNDS, createPlayer as createPortoPlayer, stepPlayer, toggleTravelMode, validateSavedPosition } from './movement.js';
 import './style.css';
-import './story-cinema.css';
 import { normalizeLook } from './explorer.js';
 import { mapProjection,panMap,zoomMap } from './map-view.js';
 import { CoopClient,coopEndpoint,PUBLIC_ROOM } from './coop.js';
@@ -162,12 +160,6 @@ function updateWelcome(dt){
   $('#welcome-action').disabled=welcome.phase==='leading'||!welcome.guide||Math.hypot(player.x-welcome.guide.x,player.z-welcome.guide.z)>4;
 }
 
-const openingStory=isUrban?null:mountOpeningStory({onFinish(){storage.set('story-seen',STORY_VERSION);releaseKeys();startRide();}});
-if(openingStory){
-  const replay=document.createElement('button');replay.textContent='Replay opening story';replay.type='button';replay.className='story-replay';
-  replay.onclick=()=>{$('#game-menu').close();releaseKeys();openingStory.open();};$('#game-menu-content').append(replay);
-  if(storage.get('story-seen')!==STORY_VERSION)openingStory.open();
-}
 let characterLook=normalizeLook(storage.get('character'));
 let quest=restoreQuest(storage.get('quest'));
 let chai=createChai();
@@ -291,7 +283,7 @@ for(const button of document.querySelectorAll('[data-outfit]'))button.onclick=()
 for(const input of document.querySelectorAll('[data-gear]'))input.onchange=()=>{characterLook={...characterLook,[input.dataset.gear]:input.checked};storage.set('character',characterLook);updateWardrobe();};
 updateWardrobe();
 function startRide(){
-  if(!ready||openingStory?.active)return;
+  if(!ready)return;
   started=true;$('#intro').classList.add('hidden');$('#intro').inert=true;$('#ui').classList.add('playing','unlocked');renderer.domElement.focus();
 }
 function savePrefs(){storage.set('preferences',{night,quality,bob});}
@@ -419,9 +411,9 @@ function initialize(){
   renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFShadowMap;
   // Animated characters and their shadows must use the same frame's pose.
   renderer.shadowMap.autoUpdate=true;renderer.shadowMap.needsUpdate=true;
-  renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=.88;
-  renderer.domElement.setAttribute('aria-label',`Third-person cycling in ${worldName}`);renderer.domElement.tabIndex=0;viewport.appendChild(renderer.domElement);
-  scene=new THREE.Scene();camera=new THREE.PerspectiveCamera(66,innerWidth/innerHeight,.3,3500);camera.rotation.order='YXZ';
+  renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=isUrban?.88:.94;
+  renderer.domElement.setAttribute('aria-label',`Third-person cycling in ${worldName}`);renderer.domElement.tabIndex=0;viewport.appendChild(renderer.domElement);viewport.classList.toggle('storybook-world',!isUrban);
+  scene=new THREE.Scene();camera=new THREE.PerspectiveCamera(isUrban?66:59,innerWidth/innerHeight,.3,3500);camera.rotation.order='YXZ';
   const manager=new THREE.LoadingManager();let failed=0;
   manager.onProgress=(_,loaded,total)=>{$('#progress').style.width=`${loaded/total*100}%`;$('#loading-status').textContent=`Bringing ${worldName} to life · ${Math.round(loaded/total*100)}%`;};
   manager.onError=()=>{failed++;};
@@ -440,7 +432,7 @@ function initialize(){
     const dt=Math.min((now-previous)/1000,.05);previous=now;
     if(!document.hidden){
       elapsed+=dt;
-      if(ready&&world.cyclist&&airborne()&&!openingStory?.active){
+      if(ready&&world.cyclist&&airborne()){
         stepArrival(arrival,dt,{player,input:movementInput(keys,'cycling'),canLand:(x,z)=>canOccupy(x,z,world.obstacles)});document.body.classList.toggle('arriving',airborne());
         const canDrop=arrival.phase==='balloon'&&arrival.elapsed>=JOURNEY_SECONDS;
         steerArrival(arrival,player,{forward:Number(keys.has('KeyW')||keys.has('ArrowUp'))-Number(keys.has('KeyS')||keys.has('ArrowDown')),right:Number(keys.has('KeyD')||keys.has('ArrowRight'))-Number(keys.has('KeyA')||keys.has('ArrowLeft')),orbitYaw},dt);
