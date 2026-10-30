@@ -286,7 +286,7 @@ function updateDiscoveries(){
 }
 function reset(){if(residentSession){toast('Your resident’s life is persistent. Reloading will keep their progress.');return;}world?.pickups?.reset();world?.combat?.reset();player.attack=null;Object.assign(player,createPlayer());refreshTravel();if(isChai){chai=createChai();if(world)world.delivery=chai;}orbitYaw=0;releaseKeys();toast(isChai?'Fresh start at Asha’s chai stall.':isMumbai?'Back outside the church.':'Back where the sea meets the street.');}
 function setNight(value){night=value;world?.setNight(night);$('#time-label').textContent=night?'Blue hour':'Golden hour';$('#time-toggle').querySelector('svg').outerHTML=icon(night?'moon':'sun');$('#time-toggle').setAttribute('aria-label',night?'Switch to golden hour':'Switch to blue hour');document.querySelectorAll('[data-time]').forEach(b=>b.classList.toggle('active',(b.dataset.time==='night')===night));savePrefs();}
-function setQuality(value){quality=value;if(renderer){renderer.setPixelRatio(Math.min(devicePixelRatio,quality==='high'?1.5:1));renderer.shadowMap.enabled=true;renderer.shadowMap.needsUpdate=true;renderer.setSize(innerWidth,innerHeight);}document.querySelectorAll('[data-quality]').forEach(b=>b.classList.toggle('active',b.dataset.quality===quality));savePrefs();}
+function setQuality(value){quality=value;if(renderer){renderer.setPixelRatio(Math.min(devicePixelRatio,quality==='high'?1.5:1));renderer.shadowMap.enabled=true;renderer.shadowMap.needsUpdate=true;renderer.setSize(viewport.clientWidth,viewport.clientHeight);}document.querySelectorAll('[data-quality]').forEach(b=>b.classList.toggle('active',b.dataset.quality===quality));savePrefs();}
 function setBob(){ $('#bob-toggle').textContent=bob?'On':'Off';$('#bob-toggle').setAttribute('aria-pressed',String(bob)); }
 
 function updateQuest() {
@@ -378,13 +378,13 @@ if(isChai)$('#chai-retry').onclick=reset;
 
 function initialize(){
   renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
-  renderer.setPixelRatio(Math.min(devicePixelRatio,quality==='high'?1.5:1));renderer.setSize(innerWidth,innerHeight);
+  renderer.setPixelRatio(Math.min(devicePixelRatio,quality==='high'?1.5:1));renderer.setSize(viewport.clientWidth,viewport.clientHeight);
   renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFShadowMap;
   // Animated characters and their shadows must use the same frame's pose.
   renderer.shadowMap.autoUpdate=true;renderer.shadowMap.needsUpdate=true;
   renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=isUrban?.88:.94;
   renderer.domElement.setAttribute('aria-label',`Third-person cycling in ${worldName}`);renderer.domElement.tabIndex=0;viewport.appendChild(renderer.domElement);viewport.classList.toggle('storybook-world',!isUrban);
-  scene=new THREE.Scene();camera=new THREE.PerspectiveCamera(isUrban?66:59,innerWidth/innerHeight,.3,3500);camera.rotation.order='YXZ';if(residentSession)spectatorCamera=createSpectatorCamera(camera,renderer.domElement);
+  scene=new THREE.Scene();camera=new THREE.PerspectiveCamera(isUrban?66:59,viewport.clientWidth/viewport.clientHeight,.3,3500);camera.rotation.order='YXZ';if(residentSession)spectatorCamera=createSpectatorCamera(camera,renderer.domElement);
   const manager=new THREE.LoadingManager();let failed=0;
   manager.onProgress=(_,loaded,total)=>{$('#progress').style.width=`${loaded/total*100}%`;$('#loading-status').textContent=`Bringing ${worldName} to life · ${Math.round(loaded/total*100)}%`;};
   manager.onError=()=>{failed++;};
@@ -662,7 +662,8 @@ function addControls(){
   document.addEventListener('visibilitychange',()=>{releaseKeys();if(document.hidden)audioContext?.suspend();else if(soundOn)audioContext?.resume();});
   document.querySelectorAll('[data-attack]').forEach(button=>button.addEventListener('pointerdown',e=>{e.preventDefault();const [type,side]=button.dataset.attack.split(',');strike(type,Number(side));}));
   document.querySelectorAll('[data-key]').forEach(button=>{button.addEventListener('pointerdown',e=>{e.preventDefault();button.setPointerCapture(e.pointerId);keys.add(button.dataset.key);});for(const type of ['pointerup','pointercancel','lostpointercapture'])button.addEventListener(type,()=>keys.delete(button.dataset.key));});
-  window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+  const resizeViewport=()=>{camera.aspect=viewport.clientWidth/Math.max(1,viewport.clientHeight);camera.updateProjectionMatrix();renderer.setSize(viewport.clientWidth,viewport.clientHeight);};
+  new ResizeObserver(resizeViewport).observe(viewport);window.addEventListener('resize',resizeViewport);
 }
 
 function openDialog(id){if(document.pointerLockElement)document.exitPointerLock();releaseKeys();if(id!=='#game-menu'&&$('#game-menu').open)$('#game-menu').close();$(id).showModal();}

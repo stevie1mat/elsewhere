@@ -1,3 +1,4 @@
+import {mountResidentSidebar} from './resident-sidebar.js';
 import {mountResidentPhone} from './resident-phone.js';
 import {mountLearningView} from './learning-view.js';
 import {downloadAiCsv} from './ai-csv.js';
@@ -69,7 +70,7 @@ export function mountResidentView({initial,player,arrival,welcome,getWorld,onLoc
   document.querySelector('#app').append(toggle,connection,playback,diagnostics,panel,bubble);
   let snapshot=initial,busy=false,geometrySent=false,lastEvents='',lastMessages='',receivedAt=Date.now();
   let chatBusy=false;
-  const learningView=mountLearningView();const phoneView=mountResidentPhone();
+  const learningView=mountLearningView();const phoneView=mountResidentPhone();mountResidentSidebar();
   const motion=new ResidentMotion(initial.player,performance.now());
   function apply(next){motion.receive(next.player,performance.now(),{snap:next.arrival.phase!==snapshot.arrival.phase||next.arrival.phase!=='landed'});snapshot=next;phoneView.update(next);Object.assign(arrival,next.arrival);Object.assign(welcome,next.welcome);receivedAt=Date.now();
     learningView.update(next);showConnection(next.ai);renderDiagnostics(next);playback.querySelector('#resident-pause').textContent=next.paused?'▶ Resume life & AI':'Ⅱ Pause life & AI';playback.querySelector('#resident-pause-status').textContent=next.paused?'Paused · no new AI requests or memories':'';
@@ -144,12 +145,13 @@ export function mountResidentView({initial,player,arrival,welcome,getWorld,onLoc
     const pitch=player.pitch;Object.assign(player,motion.sample(performance.now()));player.pitch=pitch;if(!snapshot.player.phone)delete player.phone;if(!snapshot.player.interactionPose)delete player.interactionPose;player.arrival=arrival;
     if(Date.now()-receivedAt>3000){player.speed=0;player.moving=false;showConnection(snapshot.ai,true);}
   },render(camera,pose){
+    const rect=document.querySelector('#viewport').getBoundingClientRect(),width=rect.width,height=rect.height;
     point.set(pose.x,(pose.y||0)+2.8,pose.z).project(camera);
     const outside=point.z>1||point.z< -1||Math.abs(point.x)>.9||Math.abs(point.y)>.9;
-    marker.classList.toggle('offscreen',outside);marker.style.left=`${Math.max(85,Math.min(innerWidth-85,(point.x*.5+.5)*innerWidth))}px`;marker.style.top=`${Math.max(110,Math.min(innerHeight-80,(-point.y*.5+.5)*innerHeight))}px`;
+    marker.classList.toggle('offscreen',outside);marker.style.left=`${rect.left+Math.max(85,Math.min(width-85,(point.x*.5+.5)*width))}px`;marker.style.top=`${Math.max(110,Math.min(height-80,(-point.y*.5+.5)*height))}px`;
     marker.title=outside?'Resident is outside the view. Use Locate resident.':'Your autonomous character';
     point.set(pose.x,(pose.y||0)+4.5,pose.z).project(camera);
     bubble.hidden=arrival.phase!=='landed'||point.z>1||point.z< -1||Math.abs(point.x)>1||Math.abs(point.y)>1;
-    bubble.style.left=`${(point.x*.5+.5)*innerWidth}px`;bubble.style.top=`${(-point.y*.5+.5)*innerHeight}px`;
+    bubble.style.left=`${rect.left+(point.x*.5+.5)*width}px`;bubble.style.top=`${(-point.y*.5+.5)*height}px`;
   }};
 }
