@@ -16,7 +16,8 @@
     "start": "npm run build && node server/private.js",
     "groq:check": "node scripts/check-groq.js",
     "ai:mac": "node scripts/mac-ai-worker.js",
-    "ai:local:check": "node scripts/check-local-ai.js"
+    "ai:local:check": "node scripts/check-local-ai.js",
+    "training:preview": "npm run build && node scripts/preview-training.js"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",

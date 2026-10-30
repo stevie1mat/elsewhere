@@ -74,7 +74,7 @@ export function createTrainingService({getState,decide,now=()=>Date.now()}){
    if(record.error){run.state.executionFeedback??=[];run.state.executionFeedback.push({action:d.action,status:'blocked',message:record.error,at:now(),source:'training executor'});run.state.thought=record.error;}
   }catch(error){if(active?.id!==token||terminal.has(run.status))return;
    if(error.status===429&&error.retryMs<=10000){run.status='waiting';run.retryAt=now()+Math.max(1000,error.retryMs);run.waitReason='Waiting for the shared model connection.';}
-   else{if(run.state.trainingProposal){const p=run.state.trainingProposal;run.decisions.push({at:now(),reply:p.decision.reply,command:p.decision,truthful:truthfulReply(p.decision.reply,run.state),executed:false,error:p.issue});}finish({status:error.kind==='decision'?'failed':'interrupted',taskCompleted:false,truthful:null,reason:error.message});}
+   else{if(run.state.trainingProposal){const p=run.state.trainingProposal;run.decisions.push({at:now(),reply:p.decision.reply,command:p.decision,truthful:truthfulReply(p.decision.reply,run.state),executed:false,error:p.issue});}finish({status:error.kind==='decision'?'failed':'interrupted',taskCompleted:false,truthful:null,reason:error.kind==='decision'?error.message:[getState().ai?.error,error.message].filter(Boolean).filter((x,i,a)=>a.indexOf(x)===i).join(' ')});}
   }finally{if(pending===token)pending=null;}
  }
  if(db().inProgress){db().reports.push({...db().inProgress,status:'interrupted',verdict:{reason:'Server restarted during the trial. No success or skill was awarded.'}});delete db().inProgress;}
