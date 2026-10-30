@@ -1,3 +1,4 @@
+import {residentChatRequest} from './resident-chat-request.js';
 import {dailyUsageView} from '../server/daily-usage.js';
 import {mountResidentSidebar} from './resident-sidebar.js';
 import {mountResidentPhone} from './resident-phone.js';
@@ -117,7 +118,7 @@ export function mountResidentView({initial,player,arrival,welcome,getWorld,onLoc
     try{
       for(;;){
         if(snapshot.paused)throw Error('Game paused. Resume to chat.');
-        const response=await fetch('/api/resident/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message})});
+        const response=await residentChatRequest(message,()=>{button.textContent='Thinking on your Mac…';});
         if(response.status===401){location.replace('/');return;}
         const data=await response.json();
         if(!response.ok){

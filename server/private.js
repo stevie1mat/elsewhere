@@ -1,3 +1,4 @@
+import {createMacWorkerBroker,routeResidentClient} from './mac-worker.js';
 import {createMediaService} from './resident-media.js';
 import {validateObjects} from './object-perception.js';
 import {createSupabaseStore} from './supabase-store.js';
@@ -19,13 +20,14 @@ export function createPrivateServer({code=process.env.PRIVATE_ACCESS_CODE||'2792
   let state=existsSync(saveFile)?JSON.parse(readFileSync(saveFile,'utf8')):createResident();
   if(state.version!==1)throw Error('Unsupported resident save version');
   const mediaService=createMediaService();
-  const brain=createResidentBrain({client:groqClient});brain.initialize(state);
+  const mac=createMacWorkerBroker({enabled:state.ai?.localWorkerMode===true});
+  const brain=createResidentBrain({client:routeResidentClient(groqClient,mac)});brain.initialize(state);
   let cloudReady=!cloud.configured,cloudError=null,lastCloudSave=null,cloudWrite=null,loading=null;
   async function loadCloud(){
     if(cloudReady||loading)return loading;
     loading=(async()=>{try{
       const remote=await cloud.load();
-      if(remote&&(!hadLocal||remote.updatedAt>=state.updatedAt)){state=remote;brain.initialize(state);}
+      if(remote&&(!hadLocal||remote.updatedAt>=state.updatedAt)){state=remote;mac.restoreMode(!!state.ai?.localWorkerMode);brain.initialize(state);if(state.ai.chatTask?.status==='thinking')state.ai.chatTask={...state.ai.chatTask,status:'error',error:'Server restarted during local chat. Please retry.'};}
       cloudReady=true;cloudError=null;save();await writeCloud();
     }catch(error){cloudError=error.message;console.error(cloudError);}finally{loading=null;}})();
     return loading;
@@ -38,6 +40,8 @@ export function createPrivateServer({code=process.env.PRIVATE_ACCESS_CODE||'2792
     return cloudWrite;
   }
   const storageStatus=()=>({provider:cloud.configured?'supabase':'local',ready:cloudReady,lastCloudSave,error:cloudError});
+  let localChat=null;
+  if(state.ai.chatTask?.status==='thinking')state.ai.chatTask={...state.ai.chatTask,status:'error',error:'Server restarted during local chat. Please retry.'};
   const sessions=new Map(),attempts=new Map();let saveError=null;
   const save=()=>{if(cloud.configured&&!cloudReady&&!hadLocal)return;try{writeFileSync(saveFile+'.tmp',JSON.stringify(state),{mode:0o600});renameSync(saveFile+'.tmp',saveFile);saveError=null;}catch(e){saveError=e.message;console.error('Resident save failed:',e.message);}};
   if(existsSync(saveFile))remember(state,'Server resumed the saved life. No activity was simulated while the server was stopped.',Date.now());
@@ -72,6 +76,16 @@ export function createPrivateServer({code=process.env.PRIVATE_ACCESS_CODE||'2792
           state.obstacles=input.obstacles.map(({minX,maxX,minZ,maxZ})=>({minX,maxX,minZ,maxZ}));remember(state,'Began the balloon journey to Porto Sol.',Date.now());save();void writeCloud();
         }save();void writeCloud();json(res,200,residentSnapshot(state));return;
       }
+      if(url.pathname==='/api/resident/worker'&&req.method==='POST'){
+        const input=await body(req);try{
+          if(input.op==='connect'){mac.connect(input.workerId,input.model);state.ai.localWorkerMode=true;state.ai.enabled=true;brain.setPaused(state,!!state.paused);state.ai.provider='Mac LM Studio';state.ai.model=input.model;save();void writeCloud();json(res,200,{ok:true,paused:state.paused});return;}
+          if(input.op==='cloud'){mac.cloud();state.ai.localWorkerMode=false;state.ai.enabled=groqClient.configured;brain.setPaused(state,!!state.paused);save();void writeCloud();json(res,200,{ok:true});return;}
+          if(input.op==='poll'){if(!mac.enabled){json(res,410,{error:'Cloud mode selected. Mac worker should stop.'});return;}json(res,200,{job:mac.poll(input.workerId),paused:!!state.paused});return;}
+          if(input.op==='result'){mac.result(input.workerId,input);json(res,200,{ok:true});return;}
+          if(input.op==='disconnect'){if(!mac.disconnect(input.workerId))throw Error('Worker already disconnected.');state.ai.connected=false;state.ai.status='paused';state.ai.error='Mac worker disconnected.';json(res,200,{ok:true});return;}
+          json(res,400,{error:'Invalid worker operation'});
+        }catch(e){json(res,409,{error:e.message});}return;
+      }
       if(url.pathname==='/api/resident/media'&&req.method==='POST'){
         const input=await body(req),m=state.media;
         if(!m||input.id!==m.id||!['player_open','playing_unmuted','playing_muted','ended','paused','closed','blocked'].includes(input.playback)){json(res,400,{error:'Invalid media playback update'});return;}
@@ -87,6 +101,13 @@ export function createPrivateServer({code=process.env.PRIVATE_ACCESS_CODE||'2792
       if(url.pathname==='/api/resident/chat'&&req.method==='POST'){
         const input=await body(req);
         if(typeof input.message!=='string'||!input.message.trim()||input.message.length>1200){json(res,400,{error:'Enter a message of up to 1200 characters.'});return;}
+        if(mac.enabled){
+          if(state.paused){json(res,409,{error:'Game paused. Resume to chat.'});return;}
+          if(localChat&&state.ai.chatTask?.status==='thinking'){if(localChat.message===input.message.trim()){json(res,202,{pending:true,jobId:localChat.id});return;}json(res,429,{error:'Another local chat is being processed.',retryAfterMs:2000});return;}
+          const id=randomBytes(12).toString('hex'),message=input.message.trim();localChat={id,message};state.ai.chatTask={id,status:'thinking',startedAt:Date.now()};
+          void brain.chat(state,message).then(reply=>{state.ai.chatTask={id,status:'complete',reply};save();void writeCloud();}).catch(error=>{state.ai.chatTask={id,status:'error',error:error.message,retryAfterMs:error.retryMs||null};save();void writeCloud();});
+          json(res,202,{pending:true,jobId:id});return;
+        }
         try{const reply=await brain.chat(state,input.message.trim());save();void writeCloud();json(res,200,{reply,messages:state.messages});}
         catch(error){const retryAfterMs=error.retryMs>0?Math.max(1000,error.retryMs):null;if(retryAfterMs)res.setHeader('Retry-After',String(Math.ceil(retryAfterMs/1000)));json(res,error.status===429?429:503,{error:error.message,retryAfterMs});}return;
       }
@@ -98,7 +119,7 @@ export function createPrivateServer({code=process.env.PRIVATE_ACCESS_CODE||'2792
       res.writeHead(200,{'Content-Type':types[extname(path)]||'application/octet-stream','Cache-Control':'no-store'});res.end(req.method==='HEAD'?undefined:readFileSync(path));
     }catch(error){console.error(error.message);if(!res.headersSent)json(res,500,{error:'Unable to process request'});else res.end();}
   });
-  let last=Date.now();const tick=setInterval(()=>{const now=Date.now(),dt=Math.min(1,(now-last)/1000);last=now;try{if(!cloudReady&&!hadLocal)return;void brain.update(state);stepResident(state,dt,now);void mediaService.update(state);}catch(e){console.error('Resident simulation failed:',e.message);}},100);
+  let last=Date.now();const tick=setInterval(()=>{const now=Date.now(),dt=Math.min(1,(now-last)/1000);last=now;try{if(!cloudReady&&!hadLocal)return;if(mac.enabled&&!mac.online&&state.ai.connected){state.ai.connected=false;state.ai.error='Mac worker offline. Start npm run ai:mac.';}void brain.update(state);stepResident(state,dt,now);void mediaService.update(state);}catch(e){console.error('Resident simulation failed:',e.message);}},100);
   const persistence=setInterval(()=>{save();if(cloudReady)void writeCloud();else void loadCloud();const now=Date.now();for(const [key,until] of sessions)if(until<now)sessions.delete(key);for(const [key,limit] of attempts)if(limit.until<now)attempts.delete(key);},5000);
   const ready=loadCloud();
   return {http,get state(){return state;},ready,storageStatus,close:async()=>{brain.stop();clearInterval(tick);clearInterval(persistence);await ready;if(cloudWrite)await cloudWrite;save();await writeCloud();await new Promise(resolve=>http.close(resolve));}};

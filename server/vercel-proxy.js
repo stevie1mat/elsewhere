@@ -4,7 +4,7 @@ export default async function handler(req,res){
   res.setHeader('Cache-Control','no-store');
   const fail=(status,message)=>{res.statusCode=status;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({error:message}));};
   const path=new URL(req.url,'https://localhost').pathname;
-  const methods={'/api/resident/media':'POST','/api/login':'POST','/api/resident':'GET','/api/resident/world':'POST','/api/resident/chat':'POST','/api/resident/control':'POST'};
+  const methods={'/api/resident/worker':'POST','/api/resident/media':'POST','/api/login':'POST','/api/resident':'GET','/api/resident/world':'POST','/api/resident/chat':'POST','/api/resident/control':'POST'};
   if(!methods[path])return fail(404,'Not found');
   if(req.method!==methods[path])return fail(405,'Method not allowed');
   if(req.method==='POST'&&req.headers.origin){

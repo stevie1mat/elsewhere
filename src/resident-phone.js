@@ -1,3 +1,4 @@
+import {residentChatRequest} from './resident-chat-request.js';
 import {PHONE_SEARCH_REQUEST} from '../server/shared/phone-request.js';
 const node=(tag,text)=>{const e=document.createElement(tag);if(text!==undefined)e.textContent=text;return e;};
 let apiPromise;
@@ -25,7 +26,7 @@ export function mountResidentPhone(){
    }});
   }catch(e){playback.textContent=e.message;report('blocked',m.id);}finally{open.disabled=!active()||!snapshot?.media?.selected;}
  };
- ask.onclick=async()=>{if(askBusy)return;askBusy=true;ask.disabled=true;status.textContent='Asking the resident…';try{const r=await fetch('/api/resident/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:PHONE_SEARCH_REQUEST})});const data=await r.json();status.textContent=data.reply||data.error||'Request finished.';}catch{status.textContent='Cannot reach the game server.';}finally{askBusy=false;ask.disabled=!active()&&(snapshot?.paused||snapshot?.ai?.connected!==true);}};
+ ask.onclick=async()=>{if(askBusy)return;askBusy=true;ask.disabled=true;status.textContent='Asking the resident…';try{const r=await residentChatRequest(PHONE_SEARCH_REQUEST,()=>{status.textContent='Resident is choosing on your Mac…';});const data=await r.json();status.textContent=data.reply||data.error||'Request finished.';}catch{status.textContent='Cannot reach the game server.';}finally{askBusy=false;ask.disabled=!active()&&(snapshot?.paused||snapshot?.ai?.connected!==true);}};
  let signature='';return {update(s){snapshot=s;const m=s.media;badge.textContent=`📱 Phone · ${s.mood||'settling in'}${s.player.phone?' · in hand':''}`;
  if(player&&(!active()||playingId!==m?.id||document.hidden))stop('paused');
  ask.disabled=askBusy||!s.ai?.connected||s.paused;ask.textContent=askBusy?'Resident is choosing…':s.paused?'Resume life & AI to use phone':!s.ai?.connected?'Waiting for AI connection':'Ask resident to choose a video';open.disabled=!active()||!m?.selected;open.hidden=!m?.selected;

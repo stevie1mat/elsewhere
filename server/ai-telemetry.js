@@ -13,6 +13,7 @@ export function trackedProviderFetch(fetchImpl,provider,model,secrets=[]){
       if(response.clone){try{const data=await response.clone().json();
         if(data.usage)latest.usage={input:safeNumber(data.usage.prompt_tokens),output:safeNumber(data.usage.completion_tokens),total:safeNumber(data.usage.total_tokens)};
         latest.received={finishReason:data.choices?.[0]?.finish_reason||null,content:data.choices?.[0]?.message?.content||null};
+        if(data.choices?.[0]?.text){try{JSON.parse(data.choices[0].text);latest.received.content=data.choices[0].text;}catch{}}
         if(!response.ok){latest.error=redact(data.error?.message||data.message||`HTTP ${response.status}`);if(response.status===429)latest.quota=rateLimitDetails(data.error?.message||data.message||'',response.headers);}
       }catch{latest.error=response.ok?'Response was not valid JSON.':`HTTP ${response.status}`;}}
       return response;
