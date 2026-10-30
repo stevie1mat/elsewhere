@@ -1,11 +1,7 @@
-# Assets to implement
+# Assets requested by the resident
 
-Drop candidate models and animations into this folder for review. Files placed here are not automatically usable in the game.
+This folder is reserved for assets the AI character asks for. Do not add a developer-generated wishlist.
 
-See `backlog.json` for known implementation gaps. These are developer inventory items, not requests invented by the AI.
+Requests are saved with the resident in Supabase and appear under **Assets to implement** in the frontend. Download the current requests as JSON to bring them into this folder. If the resident has made no requests, the list stays empty.
 
-Resident-authored requests are saved with the resident in Supabase and appear in the frontend under **Assets to implement → Resident requests**. Download the current list there as JSON to bring it into this folder.
-
-For each candidate include its source URL, license, intended interaction, scale and rig information. A usable asset also needs an object registry entry, a reachable approach slot, a supported action, animation/pose support and completion/failure feedback. A model file alone does not implement a skill.
-
-Already supported: registered benches/chairs for sitting and the home bed for lying down. Standing rest without selecting a seat is an action choice, not proof that a bench asset is missing.
+Candidate files should include their source and license. Adding a model does not automatically implement its interaction.
