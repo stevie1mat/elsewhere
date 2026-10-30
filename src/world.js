@@ -24,7 +24,7 @@ import { Cyclist } from './cyclist.js';
 import { RiderCombat } from './rider-combat.js';
 import { coconutPalmGeometry } from './coconut-palm.js';
 import { QuestWorld } from './quest-world.js';
-import {arrivalPose,stepArrival} from './arrival.js';
+import {arrivalPose} from './arrival.js';
 import {createBalloon,createParachute,animateBurner,animateHelm} from './flight-models.js';
 
 const ROOT = '/assets/';
@@ -57,7 +57,7 @@ export class World {
     this.loader = new T.TextureLoader(manager);
     this.materials(); this.environment(); this.ground(); this.neighborhood(); this.waterfront(); this.garden(); this.details(); if (location === 'porto') { expandPorto(this); hillsideLandmarks(this); curvedHarbor(this); townFabric(this); enrichCity(this); addPainterlyGreens(this); } this.bake();
     if(location==='porto'){this.pickups=new RoadPickups(this.obstacles);this.pickupDisplay=new PickupDisplay(scene,this.pickups);}
-    this.questWorld = location !== 'porto' ? { addCharacter() { }, update() { } } : new QuestWorld(scene); this.questStage = 0; this.coopMode = false; this.carryParcel = true; this.remoteStates = []; this.remoteRiders = new Map();
+    this.questWorld = location !== 'porto' ? { addCharacter() { }, update() { } } : new QuestWorld(scene); this.questStage = 0; this.carryParcel = true;
     if(location==='porto'){this.welcomeWorld=new WelcomeWorld(scene);this.lifeWorld=new SettlingWorld(scene);}
     this.loadTrees(); this.loadPeople();
   }
@@ -502,7 +502,7 @@ export class World {
         this.questWorld.addCharacter(gltf.scene, clip, prefix);
         this.welcomeWorld?.addCharacter(gltf.scene,clip,prefix);
         this.lifeWorld?.addCharacter(gltf.scene,clip,prefix);
-        if (prefix === 'm002') { const Avatar=this.location==='porto'?Explorer:Cyclist; this.avatarTemplate=gltf.scene;this.avatarClip=clip;this.Avatar=Avatar;this.cyclist = new Avatar(gltf.scene, clip);this.scene.add(this.cyclist.group);this.syncRemoteRiders(); }
+        if (prefix === 'm002') { const Avatar=this.location==='porto'?Explorer:Cyclist; this.avatarTemplate=gltf.scene;this.avatarClip=clip;this.Avatar=Avatar;this.cyclist = new Avatar(gltf.scene, clip);this.scene.add(this.cyclist.group); }
         if (prefix === 'm002' && this.location === 'porto') {
           this.combat = new RiderCombat();
           this.rivalCyclists = this.combat.rivals.map((p, i) => {
@@ -528,24 +528,6 @@ export class World {
     });
     return hit;
   }
-  setRemotes(states=[], carrier) {
-    this.remoteCarrier = carrier;
-    this.remoteStates = states;
-    this.syncRemoteRiders();
-  }
-  syncRemoteRiders() {
-    if(!this.Avatar||!this.avatarTemplate)return;
-    const active=new Set(this.remoteStates.map(state=>state.id));
-    for(const [id,entry] of this.remoteRiders)if(!active.has(id)){this.scene.remove(entry.rider.group);removeFlight(this.scene,entry);this.remoteRiders.delete(id);}
-    for(const state of this.remoteStates){
-      let entry=this.remoteRiders.get(state.id);
-      if(!entry){
-        const rider=new this.Avatar(this.avatarTemplate,this.avatarClip),hue=[0x6e83bd,0xc06f66,0x73a36b,0xb386c5,0xd09a55][this.remoteRiders.size%5];
-        rider.baseColor=hue;rider.group.name=`Online rider ${state.id}`;this.scene.add(rider.group);entry={rider,pose:{...state},state,arrival:null};this.remoteRiders.set(state.id,entry);
-      }
-      entry.state=state;entry.arrival=state.arrival?{...state.arrival}:null;
-    }
-  }
   setLocalArrival(arrival,player){
     this.localFlight??={};const pose=showArrival(this.scene,this.localFlight,this.cyclist,arrival,player);
     if(this.location==='porto'&&(!arrival||arrival.phase==='landed'))this.placeOnTerrain(this.cyclist,player);
@@ -555,18 +537,6 @@ export class World {
     if(!rider?.cycle)return;
     if(p.mode==='walking'&&p.bike)rider.cycle.group.position.y=.015+groundElevation(p.bike.x,p.bike.z);
     else if(p.mode!=='walking')rider.cycle.group.position.y=.015+(p.y||0);
-  }
-  updateRemote(dt) {
-    const k = 1 - Math.exp(-14 * dt);
-    for(const entry of this.remoteRiders.values()){
-      const {rider,state:target,pose:p}=entry;
-      if (Math.hypot(p.x - target.x, p.z - target.z) > 15) Object.assign(p, target);
-      else { p.x += (target.x - p.x) * k; p.z += (target.z - p.z) * k; p.yaw += Math.atan2(Math.sin(target.yaw - p.yaw), Math.cos(target.yaw - p.yaw)) * k; p.walked += (target.walked - p.walked) * k; }
-      p.y=(p.y||0)+((target.y||0)-(p.y||0))*k;p.vy=target.vy||0;p.grounded=target.grounded!==false;
-      p.mode=target.mode;p.bike=target.bike;p.speed=target.speed;p.swimming=target.swimming===true;rider.update(p,dt);rider.setQuestStage(this.questStage,this.remoteCarrier===target.id);
-      stepArrival(entry.arrival,dt);showArrival(this.scene,entry,rider,entry.arrival,p);
-      if(this.location==='porto'&&(!entry.arrival||entry.arrival.phase==='landed'))this.placeOnTerrain(rider,p);
-    }
   }
   setNight(night) {
     this.night = night; this.skyMaterial.uniforms.night.value = night ? 1 : 0; this.oceanMaterial.uniforms.night.value = night ? 1 : 0;

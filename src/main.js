@@ -1,3 +1,4 @@
+import {mountResidentView} from './resident-view.js';
 import {lifeStep} from './settling-story.js';
 import {mountSettlingStory} from './settling-ui.js';
 import {createWelcome,meetGuide,stepWelcome,welcomeAction,welcomeCopy} from './welcome.js';
@@ -19,9 +20,10 @@ import { SPAWN as PORTO_SPAWN, LANDMARKS as PORTO_LANDMARKS, PORTO_BOUNDS, shore
 import './style.css';
 import { normalizeLook } from './explorer.js';
 import { mapProjection,panMap,zoomMap } from './map-view.js';
-import { CoopClient,coopEndpoint,PUBLIC_ROOM } from './coop.js';
 import { restoreQuest, activeStop, canInteract, advanceQuest } from './quest.js';
 
+const residentSession=window.portoResident||null;
+let residentView;
 const isMumbai=new URLSearchParams(location.search).get('world')==='mumbai';
 const isChai=new URLSearchParams(location.search).get('world')==='chai';
 const isUrban=isMumbai||isChai;
@@ -75,7 +77,7 @@ document.querySelector('#app').innerHTML = `
       ${LANDMARKS.map(l=>`<button class="destination" data-destination="${l.id}"><span class="destination-number">${l.number}</span><span>${l.name}</span><span class="distance" id="distance-${l.id}"></span></button>`).join('')}
       <p class="journey-hint" id="journey-hint">Choose a place to mark it on your map.</p>
     </section>
-    <section class="quest-card" aria-label="Adventure tracker"><div class="quest-eyebrow">THE LAST LIGHT · CHAPTER 01 <span id="quest-count"></span></div><h2 id="quest-title"></h2><p id="quest-objective"></p><small id="quest-item"></small><small id="coop-hud"></small><button id="quest-track" class="text-button">Show destination</button></section>
+    <section class="quest-card" aria-label="Adventure tracker"><div class="quest-eyebrow">THE LAST LIGHT · CHAPTER 01 <span id="quest-count"></span></div><h2 id="quest-title"></h2><p id="quest-objective"></p><small id="quest-item"></small><button id="quest-track" class="text-button">Show destination</button></section>
     <button id="quest-interact" class="quest-interact" hidden></button>
     <aside class="map-card" aria-label="Neighborhood map"><div class="map-header"><span>YOUR LITTLE CORNER</span><button id="map-expand" aria-label="Expand map" title="Open big map (M)">Expand ↗</button></div><div class="map-frame"><canvas id="map" width="356" height="344" tabindex="0" aria-label="Neighborhood map. Drag to pan, scroll to zoom. Plus and minus zoom; zero resets."></canvas><div class="map-north"><span>↑</span>N</div></div><div class="map-controls" aria-label="Map zoom controls"><button id="map-out" aria-label="Zoom map out" title="Zoom out (−)">−</button><output id="map-zoom" aria-label="Map zoom level">1×</output><button id="map-in" aria-label="Zoom map in" title="Zoom in (+)">+</button><button id="map-follow" aria-label="Follow my cyclist" title="Center on your cyclist">Follow</button><button id="map-reset" aria-label="Reset map zoom" title="Show whole neighborhood (0)">Reset</button></div><p class="map-help">Drag to explore · Scroll to zoom · M / Esc to close</p><div class="map-footer"><span class="live"><i></i><span id="zone">Seafront promenade</span></span><span class="performance" id="performance"></span></div></aside>
     <div class="crosshair"></div><div class="look-hint">Click the scene to look around · Esc releases your cursor</div>
@@ -130,11 +132,12 @@ $('#game-menu-button').onclick=()=>openDialog('#game-menu');
 $('.character-tools').hidden=isUrban;
 const player = createPlayer();
 let started=false, ready=false, selected=null, elapsed=0, night=false, bob=!matchMedia('(prefers-reduced-motion: reduce)').matches, soundOn=false, quality=matchMedia('(pointer: coarse)').matches?'balanced':'high';
-const arrival=isUrban?null:createArrival(PORTO_SPAWN);
+const arrival=isUrban?null:(residentSession?.arrival||createArrival(PORTO_SPAWN));
+if(residentSession)Object.assign(player,residentSession.player);
 const airborne=()=>!!arrival&&arrival.phase!=='landed';
 document.body.classList.toggle('arriving',airborne());
 document.querySelector('#app').insertAdjacentHTML('beforeend','<section id="arrival-ui"><small>WELCOME TO PORTO SOL</small><h2 id="arrival-title">Your island is on the horizon.</h2><p id="arrival-detail">Preparing your balloon…</p><button id="arrival-drop" class="enter" hidden>Drop to island · Parachute ↓</button></section>');
-$('#arrival-drop').onclick=()=>{if(dropArrival(arrival,player,(x,z)=>canOccupy(x,z,world.obstacles))){releaseKeys();coop.position(player);}else toast('No clear landing here yet. Keep flying to the next area.');};
+$('#arrival-drop').onclick=()=>{if(dropArrival(arrival,player,(x,z)=>canOccupy(x,z,world.obstacles))){releaseKeys();}else toast('No clear landing here yet. Keep flying to the next area.');};
 let orbitYaw=0;
 const mapView={zoom:1,center:null,bounds:isUrban?null:{...PORTO_BOUNDS,maxX:117}};
 let mapExpanded=false;
@@ -142,12 +145,13 @@ const cameraRay=new THREE.Raycaster(), cameraAim=new THREE.Vector3(), cameraDesi
 let renderer, scene, camera, world, audioContext, audioGain, toastTimer, discoveryTimer;
 const keys=new Set(), discovered=new Set();
 const storage={get(key){try{return JSON.parse(localStorage.getItem(`elsewhere:${isChai?'chai:':isMumbai?'mumbai:':''}${key}`));}catch{return null;}},set(key,value){try{localStorage.setItem(`elsewhere:${isChai?'chai:':isMumbai?'mumbai:':''}${key}`,JSON.stringify(value));return true;}catch{return false;}}};
-const welcome=createWelcome(storage.get('first-home'));
+const welcome=residentSession?.welcome||createWelcome(storage.get('first-home'));
+if(residentSession)residentView=mountResidentView({initial:residentSession,player,arrival,welcome,getWorld:()=>world});
 const lifeStory=isUrban?null:mountSettlingStory({storage,getPlayer:()=>player,getWorld:()=>world,releaseKeys,onChange:state=>{if(state.stage===9)setNight(true);if(state.complete)setNight(false);}});
 $('#app').insertAdjacentHTML('beforeend','<section id="welcome-card" hidden aria-label="Your first day"><small>YOUR FIRST DAY</small><h2 id="welcome-title"></h2><p id="welcome-body"></p><button id="welcome-action" type="button"></button></section>');
 $('#welcome-action').onclick=()=>talk();
 function updateWelcome(dt){
-  if(isUrban||!world)return;
+  if(isUrban||!world||residentSession)return;
   const active=started&&!airborne()&&!skyRide;
   document.body.classList.toggle('welcoming',welcome.phase!=='settled'||!lifeStory?.state.complete);
   lifeStory?.update(active&&welcome.phase==='settled');
@@ -165,26 +169,6 @@ let quest=restoreQuest(storage.get('quest'));
 let chai=createChai();
 let chaiBest=Number(storage.get('best'))||0;
 let dialogueStop=null;
-let pendingInvite=false, entryRoom=null, returningRoom=false;
-const coop=new CoopClient({
-  onWelcome(message){if(arrival?.phase==='balloon'&&arrival.elapsed<JOURNEY_SECONDS)Object.assign(player,createPlayer(),{mode:'walking',bike:null});player.arrival=arrival;refreshTravel();releaseKeys();entryRoom=message.room;returningRoom=true;coop.position(player);if(ready)startRide();refreshEntry();},
-  onState(state){
-    const previous=quest.stage;quest={version:1,stage:state.stage};
-    if(world){world.coopMode=true;world.carryParcel=state.carrier===coop.id;world.setRemotes(state.players.filter(p=>p.id!==coop.id),state.carrier);}
-    if(state.stage!==previous){
-      if($('#quest-dialog').open)$('#quest-dialog').close();dialogueStop=null;
-      selected=activeStop(quest)?.id??null;updateDiscoveries();
-      toast(state.stage===3?'Together, delivered · Sunset Gold unlocked for both riders!':'Shared objective updated. Ride to the next gold marker together.');
-    }
-    $('#quest-confirm').disabled=false;updateQuest();
-  },
-  onStatus(){if(!coop.connected)world?.setRemotes([]);refreshEntry();},
-  onExit(){pendingInvite=false;clearEntryRoom();quest=restoreQuest(storage.get('quest'));if(world){world.coopMode=false;world.carryParcel=true;world.setRemotes([]);}$('#quest-confirm').disabled=false;if($('#quest-dialog').open)$('#quest-dialog').close();dialogueStop=null;updateQuest();},
-  onError(message){pendingInvite=false;refreshEntry();$('#loading-status').textContent=message;$('#quest-confirm').disabled=false;if(!airborne())toast(message);}
-});
-const invitedRoom=!isUrban&&coopEndpoint()?PUBLIC_ROOM:null;
-entryRoom=invitedRoom;
-try{returningRoom=!!(entryRoom&&sessionStorage.getItem(`elsewhere:room:${entryRoom}`));}catch{}
 player.arrival=arrival;
 let skyway,skyRide=null,skyReturn=null,skyBest=Number(storage.get('skyway-best'))||0;
 let challengeBicycle;
@@ -230,30 +214,19 @@ function beginSkyway(){
 function exitSkyway(){if(!skyRide)return;hideCheckpointVictory();bankSkyway();skyBest=Math.max(skyBest,skyRide.score);storage.set('skyway-best',skyBest);skyRide=null;Object.assign(player,skyReturn);skyReturn=null;world.cyclist.group.position.y=0;skyway.update(null,0);releaseKeys();refreshTravel();}
 $('#skyway-start').onclick=beginSkyway;$('#skyway-exit').onclick=exitSkyway;
 skyHUD.querySelectorAll('[data-sky-key]').forEach(b=>b.onclick=()=>{if(skyRide)rideInput(skyRide,b.dataset.skyKey);});
-setInterval(()=>{if(coop.connected)coop.position(skyRide?skyReturn:player);},100);
 const savedDiscoveries=storage.get('discoveries');
 if(Array.isArray(savedDiscoveries))savedDiscoveries.filter(id=>LANDMARKS.some(l=>l.id===id)).forEach(id=>discovered.add(id));
 const prefs=storage.get('preferences');if(prefs){night=prefs.night===true;quality=prefs.quality==='balanced'?'balanced':'high';bob=typeof prefs.bob==='boolean'?prefs.bob:bob;}
 function refreshEntry(){
   if(!ready)return;
-  const joining=pendingInvite&&coop.active&&!coop.connected;
-  $('#enter').disabled=joining;
-  $('#enter span').textContent=joining?'Connecting to Porto Sol…':coop.connected?'Enter shared Porto Sol':`Ride into ${worldName}`;
-  $('.intro-note').textContent=isChai?'Collect • Ride • Deliver · Keep the chai hot and the cup full':isMumbai?'Inspired by your photographs · Free ride':entryRoom&&!coop.connected?'Joining the shared world automatically…':'A parcel. A faded postcard. Someone waiting at the pier.';
-}
-function clearEntryRoom(){
-  entryRoom=null;returningRoom=false;
-  const url=new URL(location.href);url.searchParams.delete('room');history.replaceState(null,'',url);
-  refreshEntry();
-}
-function resumeRoom(){
-  if(!entryRoom||coop.active)return;
-  pendingInvite=true;coop.join(entryRoom);refreshEntry();
+  $('#enter').disabled=false;
+  $('#enter span').textContent='Observe your resident';
+  $('.intro-note').textContent='One resident. One persistent life in Porto Sol.';
 }
 function refreshTravel(){
   $('#travel-toggle').textContent=player.mode==='walking'?(player.bike?`Get on bicycle · ${Math.round(Math.hypot(player.x-player.bike.x,player.z-player.bike.z))}m · X`:`Find cycle shop · ${Math.round(Math.hypot(player.x-BIKE_SHOP.x,player.z-BIKE_SHOP.z))}m`):'Get off bicycle · X';
 }
-function changeTravel(){
+function changeTravel(){if(residentSession)return;
   if(airborne())return;
   if($('#game-menu').open)$('#game-menu').close();
   if(!isUrban&&player.mode==='walking'&&!player.bike){selected='bikes';updateDiscoveries();toast('Cycle shop marked on your map · Press F at its entrance.');return;}
@@ -309,7 +282,7 @@ function updateDiscoveries(){
   $('#discovered-count').textContent=`${discovered.size} / ${LANDMARKS.length}`;
   document.querySelectorAll('.destination').forEach(button=>{const id=button.dataset.destination;button.classList.toggle('visited',discovered.has(id));button.classList.toggle('active',id===selected);button.setAttribute('aria-pressed',String(id===selected));button.querySelector('.destination-number').textContent=discovered.has(id)?'✓':LANDMARKS.find(l=>l.id===id).number;});
 }
-function reset(){world?.pickups?.reset();world?.combat?.reset();player.attack=null;Object.assign(player,createPlayer());refreshTravel();if(isChai){chai=createChai();if(world)world.delivery=chai;}orbitYaw=0;releaseKeys();toast(isChai?'Fresh start at Asha’s chai stall.':isMumbai?'Back outside the church.':'Back where the sea meets the street.');}
+function reset(){if(residentSession){toast('Your resident’s life is persistent. Reloading will keep their progress.');return;}world?.pickups?.reset();world?.combat?.reset();player.attack=null;Object.assign(player,createPlayer());refreshTravel();if(isChai){chai=createChai();if(world)world.delivery=chai;}orbitYaw=0;releaseKeys();toast(isChai?'Fresh start at Asha’s chai stall.':isMumbai?'Back outside the church.':'Back where the sea meets the street.');}
 function setNight(value){night=value;world?.setNight(night);$('#time-label').textContent=night?'Blue hour':'Golden hour';$('#time-toggle').querySelector('svg').outerHTML=icon(night?'moon':'sun');$('#time-toggle').setAttribute('aria-label',night?'Switch to golden hour':'Switch to blue hour');document.querySelectorAll('[data-time]').forEach(b=>b.classList.toggle('active',(b.dataset.time==='night')===night));savePrefs();}
 function setQuality(value){quality=value;if(renderer){renderer.setPixelRatio(Math.min(devicePixelRatio,quality==='high'?1.5:1));renderer.shadowMap.enabled=true;renderer.shadowMap.needsUpdate=true;renderer.setSize(innerWidth,innerHeight);}document.querySelectorAll('[data-quality]').forEach(b=>b.classList.toggle('active',b.dataset.quality===quality));savePrefs();}
 function setBob(){ $('#bob-toggle').textContent=bob?'On':'Off';$('#bob-toggle').setAttribute('aria-pressed',String(bob)); }
@@ -323,9 +296,6 @@ function updateQuest() {
   $('#quest-objective').textContent=stop ? `${stop.objective} · ${Math.round(Math.hypot(player.x-stop.x,player.z-stop.z))}m` : 'Parcel delivered. Some things are worth the long way round.';
   $('#quest-item').textContent=quest.stage===0?'F to talk · Stop near the gold marker':quest.stage===1?'Carrying: sealed parcel':quest.stage===2?'Carrying: parcel + Tomás’s postcard':'Unlocked & equipped: Sunset Gold paint';
   $('#quest-track').hidden=!stop;
-  const others=coop.state?.players.filter(p=>p.id!==coop.id)??[];
-  $('#coop-hud').textContent=!coop.active?'':!coop.connected?'Shared world connection interrupted':`${others.length+1} ${others.length?'riders':'rider'} online · one shared Porto Sol`;
-  if(coop.active&&quest.stage>0&&quest.stage<3)$('#quest-item').textContent=coop.state?.carrier===coop.id?'Your bike carries the shared parcel':'Another rider carries the shared parcel';
   const nearby=started&&!modalOpen()&&canInteract(quest,player)&&!!lifeStory?.state.complete;
   $('#quest-interact').hidden=!nearby;
   $('#quest-interact').textContent=stop?`F · ${stop.action}`:'';
@@ -340,6 +310,7 @@ function updateQuest() {
   }
 }
 function talk() {
+  if(residentSession)return;
   if(airborne())return;
   if(!modalOpen()&&lifeStory?.interact())return;
   if(!isUrban&&started&&!modalOpen()&&welcome.phase!=='settled'){
@@ -352,11 +323,11 @@ function talk() {
   if(!isUrban&&started&&!modalOpen()&&nearChallengeBike()){
     const error=collectBicycle(player,world.obstacles,CHALLENGE_BIKE);
     if(!error){challengeBicycle.visible=false;world.cyclist.cycle.paintColor=CHALLENGE_BIKE.color;world.cyclist.cycle.frameMaterial.color.set(CHALLENGE_BIKE.color);}
-    toast(error||'Coral bicycle collected · Ready for the Skyway.');releaseKeys();refreshTravel();coop.position(player);return;
+    toast(error||'Coral bicycle collected · Ready for the Skyway.');releaseKeys();refreshTravel();return;
   }
   if(!isUrban&&started&&!modalOpen()&&Math.hypot(player.x-SKYWAY_GATE.x,player.z-SKYWAY_GATE.z)<=SKYWAY_GATE.radius){beginSkyway();return;}
   if(!isUrban&&started&&!modalOpen()&&player.mode==='walking'&&!player.bike&&Math.hypot(player.x-BIKE_SHOP.x,player.z-BIKE_SHOP.z)<=BIKE_SHOP.radius){
-    const error=collectBicycle(player,world.obstacles);toast(error||'Bicycle collected · X to get off and explore.');releaseKeys();refreshTravel();coop.position(player);return;
+    const error=collectBicycle(player,world.obstacles);toast(error||'Bicycle collected · X to get off and explore.');releaseKeys();refreshTravel();return;
   }
   if(isChai){
     if(!started||modalOpen()||!serveChai(chai,player))return;
@@ -368,18 +339,16 @@ function talk() {
   }
   if(isMumbai)return;
   if(!started||modalOpen()||!canInteract(quest,player)||!lifeStory?.state.complete)return;
-  if(coop.active&&!coop.connected){toast('Reconnect to the room before continuing the shared quest.');return;}
   dialogueStop=activeStop(quest);
   $('#quest-speaker').textContent=dialogueStop.speaker;
   $('#quest-dialogue').textContent=dialogueStop.text;
   $('#quest-confirm').textContent=dialogueStop.confirm;
-  $('.quest-later').textContent=coop.active?'Any rider can move the shared adventure forward from this marker.':'Close to return later. Your parcel and progress are saved.';
+  $('.quest-later').textContent='Close to return later. Your parcel and progress are saved.';
   openDialog('#quest-dialog');updateQuest();
 }
 $('#quest-interact').onclick=talk;
 $('#quest-track').onclick=()=>{if(lifeStory&&!lifeStory.state.complete){$('#game-menu').close();lifeStory.journal();return;}const stop=isChai?chaiTarget(chai):activeStop(quest);if(!stop)return;selected=stop.id;updateDiscoveries();toast((isChai?stop.name:stop.objective)+' Follow the gold marker.');};
 $('#quest-confirm').onclick=()=>{
-  if(coop.active){if(!coop.connected){toast('Waiting for the room to reconnect.');return;}$('#quest-confirm').disabled=true;coop.position(player);coop.advance(quest.stage,dialogueStop?.id);return;}
   const next=advanceQuest(quest,player,dialogueStop?.id);
   if(next===quest)return;
   quest=next;const saved=storage.set('quest',quest);selected=activeStop(quest)?.id??null;
@@ -417,7 +386,7 @@ function initialize(){
   const manager=new THREE.LoadingManager();let failed=0;
   manager.onProgress=(_,loaded,total)=>{$('#progress').style.width=`${loaded/total*100}%`;$('#loading-status').textContent=`Bringing ${worldName} to life · ${Math.round(loaded/total*100)}%`;};
   manager.onError=()=>{failed++;};
-  const finish=()=>{if(ready)return;ready=true;$('#enter').disabled=false;$('#progress').style.width='100%';$('#loading-line').hidden=true;refreshEntry();if(!isUrban)startRide();resumeRoom();};
+  const finish=()=>{if(ready)return;ready=true;$('#enter').disabled=false;$('#progress').style.width='100%';$('#loading-line').hidden=true;refreshEntry();if(!isUrban)startRide();};
   manager.onLoad=finish;
   world=isChai?new ChaiWorld(scene,renderer,manager):isMumbai?new MumbaiWorld(scene,renderer,manager):new World(scene,renderer,manager);
   if(isChai)world.delivery=chai;
@@ -432,14 +401,14 @@ function initialize(){
     const dt=Math.min((now-previous)/1000,.05);previous=now;
     if(!document.hidden){
       elapsed+=dt;
-      if(ready&&world.cyclist&&airborne()){
+      if(ready&&world.cyclist&&airborne()&&!residentSession){
         stepArrival(arrival,dt,{player,input:movementInput(keys,'cycling'),canLand:(x,z)=>canOccupy(x,z,world.obstacles)});document.body.classList.toggle('arriving',airborne());
         const canDrop=arrival.phase==='balloon'&&arrival.elapsed>=JOURNEY_SECONDS;
         steerArrival(arrival,player,{forward:Number(keys.has('KeyW')||keys.has('ArrowUp'))-Number(keys.has('KeyS')||keys.has('ArrowDown')),right:Number(keys.has('KeyD')||keys.has('ArrowRight'))-Number(keys.has('KeyA')||keys.has('ArrowLeft')),orbitYaw},dt);
         $('#arrival-drop').hidden=!canDrop;
         $('#arrival-title').textContent=arrival.phase==='parachute'?'Welcome to the island.':canDrop?'Porto Sol, beneath your feet.':'Your island is on the horizon.';
         $('#arrival-detail').textContent=arrival.phase==='parachute'?'A/D steer · W glide · S flare near ground · Drag to look':canDrop?'A / D turn · W cruise · S slow · Wind carries you · Drag to look':`Drag to look around · ${Math.max(0,Math.ceil(JOURNEY_SECONDS-arrival.elapsed))}s until we reach Porto Sol`;
-        if(!airborne()){player.mode='walking';player.bike=null;selected='bikes';updateDiscoveries();refreshTravel();player.pitch=Math.max(.05,Math.min(.85,player.pitch));releaseKeys();toast(welcome.phase==='settled'?'Welcome back to Porto Sol.':'Mara is here to welcome you. Meet her by the gold marker · F');coop.position(player);}
+        if(!airborne()){player.mode='walking';player.bike=null;selected='bikes';updateDiscoveries();refreshTravel();player.pitch=Math.max(.05,Math.min(.85,player.pitch));releaseKeys();toast(welcome.phase==='settled'?'Welcome back to Porto Sol.':'Mara is here to welcome you. Meet her by the gold marker · F');}
       }
       const active=started&&!modalOpen()&&!airborne();
       if(isChai)world.updateStreet(active?dt:0,player);
@@ -452,7 +421,7 @@ function initialize(){
         skyway.update(skyRide,elapsed);
         if(!skyRide.running&&skyRide.score>skyBest){skyBest=skyRide.score;storage.set('skyway-best',skyBest);}
       }
-      if(active&&!skyRide){
+      if(active&&!skyRide&&!residentSession){
         const wasSwimming=player.swimming;
         if(!isUrban)keepOutsideRamp(player);
         stepPlayer(player,{...movementInput(keys,player.mode),boost:world.pickups?.boost(dt,player,keys.has('KeyB')&&(keys.has('KeyW')||keys.has('ArrowUp')),keys.has('Space'))},dt,isChai?world.obstacles.concat(world.dynamicObstacles):world.obstacles,isUrban?URBAN_BOUNDS:PORTO_BOUNDS);
@@ -465,14 +434,14 @@ function initialize(){
 
       }
       if(world.cyclist?.applyLook&&world.cyclist.look!==characterLook){world.cyclist.applyLook(characterLook);characterLook=world.cyclist.look;}
-      if(world.updateCombat(player,active&&!skyRide?dt:0))toast(`Hit! Rival staggered · ${world.combat.hits} hits`);
+      if(world.updateCombat(player,active&&!skyRide&&!residentSession?dt:0))toast(`Hit! Rival staggered · ${world.combat.hits} hits`);
       if(world.combat?.incoming)toast(world.combat.incoming);
       world.pickupDisplay?.update(player);
+      residentView?.update(camera);
       world.cyclist?.update(player,active?dt:0);
       const arrivalView=world.setLocalArrival(arrival,player);
       updateWelcome(active?dt:0);
       if(skyRide){world.cyclist.cycle.group.position.y=.015;world.cyclist.group.position.y=player.y;world.cyclist.cycle.group.rotateX(-player.slope);world.cyclist.cycle.group.rotateZ(-Math.max(-.16,Math.min(.16,skyRide.laneVelocity*.1)));}
-      world.updateRemote(dt);
       if(skyway)skyway.group.visible=!!skyRide;
       // Orbit around the visible rider; the bike's heading is independent of the mouse.
       const insideHome=!isUrban&&player.x>14&&player.x<23.6&&player.z>-88&&player.z<-78;
@@ -507,7 +476,7 @@ function initialize(){
   renderer.domElement.addEventListener('webglcontextlost',event=>{event.preventDefault();releaseKeys();toast('Graphics paused. Waiting for the browser to restore the scene…');});
   renderer.domElement.addEventListener('webglcontextrestored',()=>toast('Graphics restored. Welcome back.'));
   addControls();
-  if(import.meta.env.DEV){window.__ELSEWHERE__={getState:()=>({player:{...player},quest:{...quest},chai:isChai?{...chai}:null,coop:{connected:coop.connected,room:coop.room,players:coop.state?.players.length??0},ready,started,night,quality,selected,discovered:[...discovered],drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,obstacles:world.obstacles.length}),landmarks:LANDMARKS};}
+  if(import.meta.env.DEV){window.__ELSEWHERE__={getState:()=>({player:{...player},quest:{...quest},chai:isChai?{...chai}:null,ready,started,night,quality,selected,discovered:[...discovered],drawCalls:renderer.info.render.calls,triangles:renderer.info.render.triangles,obstacles:world.obstacles.length}),landmarks:LANDMARKS};}
 }
 
 function updateHUD(){
@@ -644,22 +613,21 @@ function drawMap(){
     if(mapExpanded){ctx.font='18px sans-serif';ctx.textAlign='left';ctx.fillStyle='#d5f2f0';ctx.fillText('Your bicycle',bx+16,bz);}
     ctx.restore();
   }
-  const friends=coop.connected?coop.state?.players.filter(p=>p.id!==coop.id)??[]:[];
-  for(const friend of friends){ctx.beginPath();ctx.arc(px(friend.x),pz(friend.z),5,0,Math.PI*2);ctx.fillStyle='#a5b8ff';ctx.fill();ctx.strokeStyle='#eef0ff';ctx.stroke();}
   ctx.save();ctx.translate(px(player.x),pz(player.z));ctx.rotate(player.yaw);ctx.beginPath();ctx.moveTo(0,-14);ctx.lineTo(-10,-29);ctx.quadraticCurveTo(0,-34,10,-29);ctx.closePath();ctx.fillStyle='#f3f4d42b';ctx.fill();ctx.beginPath();ctx.moveTo(0,-8);ctx.lineTo(5,6);ctx.lineTo(0,3);ctx.lineTo(-5,6);ctx.closePath();ctx.fillStyle='#f7f7e4';ctx.shadowColor='#f5ffd4';ctx.shadowBlur=8;ctx.fill();ctx.restore();
 }
 
 function addControls(){
   const canvas=renderer.domElement;let dragging=false,lastX=0,lastY=0;
   const look=(dx,dy)=>{orbitYaw+=dx*.0023;player.pitch=Math.max(airborne()?-.35:.05,Math.min(airborne()?1.15:.85,player.pitch+dy*.0023));};
-  async function lockLook(){if(document.pointerLockElement||!started||modalOpen())return;try{await canvas.requestPointerLock();}catch{toast('Drag the scene to look around. A and D steer the bike.');}}
-  $('#enter').addEventListener('click',()=>{if(!ready)return;if(entryRoom&&!coop.connected){pendingInvite=true;coop.join(entryRoom);refreshEntry();return;}startRide();if(!matchMedia('(pointer:coarse)').matches)lockLook();});
+  async function lockLook(){if(residentSession)return;if(document.pointerLockElement||!started||modalOpen())return;try{await canvas.requestPointerLock();}catch{toast('Drag the scene to look around. A and D steer the bike.');}}
+  $('#enter').addEventListener('click',()=>{if(!ready)return;startRide();if(!matchMedia('(pointer:coarse)').matches)lockLook();});
   canvas.addEventListener('pointerdown',event=>{if(!started||modalOpen())return;canvas.focus();dragging=true;lastX=event.clientX;lastY=event.clientY;if(event.pointerType!=='mouse'||airborne()){canvas.setPointerCapture(event.pointerId);}else if(!document.pointerLockElement)lockLook();});
   canvas.addEventListener('pointermove',event=>{if(!started||modalOpen())return;if(document.pointerLockElement===canvas)look(event.movementX,event.movementY);else if(dragging){look(event.clientX-lastX,event.clientY-lastY);lastX=event.clientX;lastY=event.clientY;}});
   const stopDrag=()=>{dragging=false;};window.addEventListener('pointerup',stopDrag);window.addEventListener('pointercancel',stopDrag);
   document.addEventListener('pointerlockchange',()=>{$('#ui').classList.toggle('unlocked',document.pointerLockElement!==canvas);releaseKeys();dragging=false;});
   document.addEventListener('pointerlockerror',()=>toast('Mouse capture is unavailable. Drag to look, or use A / D to steer.'));
   window.addEventListener('keydown',event=>{
+    if(residentSession)return;
     if(skyRide&&!modalOpen()){
       if(event.code==='KeyS'||event.code==='ArrowDown'){event.preventDefault();keys.add(event.code);return;}
       if(['KeyA','KeyD','ArrowLeft','ArrowRight','Space','Escape','KeyR'].includes(event.code)){event.preventDefault();if(!event.repeat){if(event.code==='Escape')exitSkyway();else if(event.code==='KeyR')beginSkyway();else rideInput(skyRide,event.code);}}

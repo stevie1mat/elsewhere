@@ -1,15 +1,13 @@
 {
-  "name": "elsewhere-multiplayer",
+  "name": "elsewhere-private-resident",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node index.js"
+    "start": "node private.js"
   },
   "engines": {
     "node": ">=22.12.0"
   },
-  "dependencies": {
-    "ws": "^8.22.0"
-  }
+  "dependencies": {}
 }

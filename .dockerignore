@@ -3,4 +3,8 @@ dist
 .git
 .env
 .env.*
-public
+**/node_modules
+.private-data
+build
+android
+ios

@@ -8,3 +8,6 @@ dist/
 
 # Native build products
 build/
+
+# Persistent private world and session data
+.private-data/

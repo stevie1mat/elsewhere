@@ -1,27 +1,22 @@
 # Elsewhere — Porto Sol & Mumbai lanes
 
-## Deploy to Vercel
+## Run privately
 
-Import `stevie1mat/elsewhere` into Vercel. This repository contains the game at its root, so leave Root Directory at the repository root (`.`). The included `vercel.json` selects Vite, runs `npm run build`, and publishes `dist`. Solo play needs no environment variables or backend services. Online co-op additionally needs the server and `VITE_COOP_URL` described below.
-
-A standalone, third-person coastal cycling world built with Three.js and Vite. This project lives **beside** `../game`, not inside it. Reused assets are copied into this project's `public/assets`; the original game is not modified or needed at runtime.
-
-## Run
-
-Requires Node 22.12+ (or a compatible recent Node release).
+Requires Node 22.12+. From this directory:
 
 ```sh
+export PATH="/opt/homebrew/opt/node@22/bin:$PATH"
 npm install
-npm run dev -- --port 5174
+npm start
 ```
 
-Open **http://127.0.0.1:5174/** and select **Ride into Porto Sol**.
+Open **http://localhost:8788** and enter **279279**. `npm start`, `npm run dev`,
+`npm run preview`, and `npm run private` all build and launch the same private
+single-resident server. There is no public multiplayer connection or launch mode.
+The server stays active when the browser closes; Ctrl+C saves and stops it.
 
-On this Mac, the default Homebrew Node currently fails because of a missing `libsimdjson.26.dylib`. The installed Node 22 works:
-
-```sh
-PATH=/opt/homebrew/opt/node@22/bin:$PATH npm run dev -- --port 5174
-```
+Host the whole project as a Node service with a persistent disk. A static-only
+Vercel deployment does not run the private server or background simulation.
 
 ## Explore
 
@@ -71,7 +66,7 @@ The mini-map's dotted line points toward a destination; it is not a pathfinding 
 ```sh
 npm test
 npm run build
-npm run preview -- --port 5174
+npm run preview
 ```
 
 Tests cover cycling across frame rates, steering, braking, reverse, bike clearance, water boundaries, saved positions, and the actual rider rig following the player with hands and feet aligned.
@@ -96,41 +91,6 @@ Tests cover cycling across frame rates, steering, braking, reverse, bike clearan
 - Buildings, props, city layout, palm geometry, terrain, and interface were created for this project.
 
 Three.js is MIT licensed. Vite is MIT licensed. This is an original environment; no GTA assets are used.
-
-
-## Shared online world
-
-Run the game with `npm run dev` and, in a second terminal, run `npm run multiplayer`. On this Mac, prefix each command with `PATH=/opt/homebrew/opt/node@22/bin:$PATH` if needed. The local client connects to `ws://127.0.0.1:8787/coop` automatically. Porto Sol has one public room: every visitor joins it automatically, with no room code, invite link, or **Ride together** action.
-
-Players land on foot with no bicycle. Porto Cycle House (map marker 10, beside the café) provides a bicycle when the player presses F at its entrance. X dismounts or remounts an already-collected bicycle; it cannot summon a new one. Resetting or reloading starts on foot again. Other online players appear in the world and as blue dots on the map. Any player at the current objective can advance the shared quest for everyone. Riders do not collide with each other.
-
-The normal HUD shows the map and a small top-right menu button. World settings, wardrobe, quest details, destinations, pickups and controls are inside that menu. Brief contextual interaction prompts still appear near objectives.
-
-Every Porto Sol page load opens directly into a third-person balloon journey with the normal interface hidden. After ten seconds, **Drop to island** and piloting become available. A/D turn with angular inertia, W adds game-assisted forward thrust, and S slows relative to the wind rather than reversing. Wind and drag continue carrying the balloon when controls are released. Drag to orbit the camera. The seven-second parachute descent lands at the selected location, drifting to nearby clear ground if necessary. The balloon has a paneled fabric envelope, woven basket, steering wheel and twin flickering burner flames; the rider holds the wheel. The parachute has raised fabric panels, reinforced cords and a wearable pack/harness. Flight stages and landing locations are visible to other connected players. The entrance also runs offline; multiplayer connection failures do not block it. Reloading replays the journey; a network reconnection keeps the current flight stage.
-
-Porto Sol now spans 543 × 758 world units, approximately 2.97 times its previous playable area. Vila Poente, Parque das Oliveiras and Costa Dourada add connected roads, 26 buildings, pitched roofs, planted park paths and a coastal promenade. Shared movement bounds, balloon limits, server validation and map framing use the enlarged island. AI-generated olive, cypress, oleander and grass cutouts are rendered as instanced crossed-plane vegetation; nearby architecture remains 3D. The original generated atlas and complete prompt are in `public/assets/generated/`.
-
-A dropped connection retries automatically. Disconnected riders keep their identity for one minute. A reconnect token is stored in session storage. Shared world state is held in memory, so a server restart resets its progress. The server validates finite positions, quest order, and the acting rider's proximity, but does not simulate movement authoritatively.
-
-### Hosting alongside Vercel
-
-The frontend remains a normal Vercel Vite deployment. Host `server/index.js` as one continuously running Node 22 service with WebSocket support. The `server` folder is self-contained, with its own dependency manifest, lockfile, and shared game rules. The frontend imports those same rules so client and server stay consistent.
-
-On Render, set **Root Directory** to `server`, **Dockerfile Path** to `./Dockerfile`, and **Docker Build Context Directory** to `.`. Set the health check path to `/health`.
-
-To build locally from the repository root, run `docker build -t elsewhere-multiplayer ./server`. Alternatively, from inside `server`, run `npm ci --omit=dev` followed by `npm start`. The existing root-level `npm run multiplayer` command also works.
-
-Set these **server** variables:
-
-- `HOST=0.0.0.0` to accept the hosting platform's traffic.
-- `PORT` to the platform's assigned port (default 8787).
-- `ALLOWED_ORIGINS=https://your-game.vercel.app` (comma-separated exact origins for any additional frontend domains). Unset accepts all origins for local development.
-
-The service provides `/health` for health checks and `/coop` for WebSocket connections. Terminate TLS at the hosting platform. Run **one instance**: rooms currently live in one process, without shared storage or multi-instance routing.
-
-Set **Vercel's** public build variable `VITE_COOP_URL=wss://your-server-domain/coop`, then redeploy the frontend. This is a public endpoint, not a secret. `.env.example` documents it. A production site without this setting remains solo-only and explains that the shared world is not configured. Players on different computers need the same reachable hosted server and frontend URL.
-
-`npm test` includes a real multi-client WebSocket test that shares positions, admits additional riders, completes all quest steps, and reconnects with the completed quest intact.
 
 
 ## Mumbai lanes (world 002)
@@ -291,3 +251,84 @@ camera proxy, runner speed/jumping, walking/animation/co-op positions, elevated
 parachute landing, and urban saved positions. These same gameplay failures were
 reproduced against the unchanged Git HEAD. The sandbox additionally blocks the
 WebSocket integration test; it passes when local listening is allowed.
+
+
+## Private persistent resident
+
+Run `npm start` (builds automatically) and open
+`http://localhost:8788`. The access code is **279279**, checked on the server;
+HTTP-only session cookies protect both game assets and the saved-life API.
+Login attempts are limited. Sessions expire after seven days and require login
+again after a server restart. Use this private server rather than a public static
+host for the protected game.
+
+The first authenticated city load supplies collision geometry. After that, the
+server independently advances the balloon, parachute landing, and a walking/rest
+routine between city landmarks, including Casa Aurora. The browser observes the
+same resident on every reload and across tabs. The intention bubble and activity
+history reflect actual server actions. With `GROQ_API_KEY` configured, Groq chooses the resident's next destination or
+rest activity using the current location, ongoing goal, recent events and chat.
+The thought bubble shows its chosen intention. A chat panel lets you ask about
+its activity and suggest future goals. Replies do not directly execute actions.
+Without a key, the existing rules-based routine remains available and the UI
+labels it accordingly. Semantic memory and autonomous construction are not yet
+implemented.
+
+State, route, arrival, and the last 500 activity entries are atomically saved every
+five seconds and on graceful shutdown to `.private-data/resident.json`. Keep that
+directory on a persistent disk and back it up. Set `PRIVATE_DATA_DIR` to choose a
+persistent volume. Do not run multiple server instances against the same save.
+Corrupt or incompatible saves stop startup rather than silently resetting life.
+No Supabase project is connected yet.
+
+The character keeps acting with the browser closed **while this server is
+running**. A stopped server or sleeping computer pauses the simulation; restarting
+resumes saved progress and records the interruption without inventing activities.
+For continuous operation, deploy the private server on an always-on Node host
+with a persistent volume. Set `HOST=0.0.0.0` for hosting and `COOKIE_SECURE=true`
+behind HTTPS. `PORT` defaults to 8788. `PRIVATE_ACCESS_CODE` overrides the code.
+All standard launch commands use this private server.
+
+
+## Groq connection
+
+Put `GROQ_API_KEY=your_key` in the root `.env` (ignored by Git), then run
+`npm start`. The private server loads this file; the browser never receives the
+key. The default `GROQ_MODEL` is `openai/gpt-oss-20b` hosted by Groq. Override
+`GROQ_MODEL` with a model supporting strict JSON schema outputs. See
+[Groq structured outputs](https://console.groq.com/docs/structured-outputs).
+
+`npm run groq:check` makes one real test request and reports the selected action.
+It does not start the game server or change the saved life.
+
+The server asks for a decision only when landed and finished walking/resting,
+with at least five seconds between successful requests. One model request runs
+at a time, including chat. On limits or failures, the resident waits and the UI
+shows the error; retries back off and honor Groq's Retry-After header. Each provider call times out after 15 seconds, then immediately tries the other configured API. Quotas still depend on your Groq account.
+
+The model can choose only validated destinations or a 15–180 second rest. All
+movement and collision checks remain in the game simulation. The resident saves
+its goal, activity history and last 100 chat messages locally on the server.
+Recent events and conversation are included as context; no Supabase/vector
+storage is connected yet. Existing saved lives resume their current activity
+before asking Groq for the next one.
+
+
+### Mistral backup and continuous activity
+
+Set `MISTRAL_API_KEY` in the ignored root `.env`; optionally set `MISTRAL_MODEL`
+(default `mistral-small-latest`). Restart the server once to load changed keys.
+Groq is initially preferred. On a timeout, network failure, provider error or
+invalid decision, the same request immediately tries Mistral. The last successful
+provider remains preferred; if it fails, the client can switch back to the other
+provider once its cooldown has expired. Each has an independent cooldown that
+respects Retry-After. The activity panel shows the provider serving requests.
+Both providers use the same saved state, conversation and action validation.
+
+If neither API is available, the character continues its local walking/rest
+routine. It tries AI again at an activity boundary after the retry cooldown;
+rendering, simulation and persistence keep running throughout. Chat reports
+unavailability instead of inventing an AI reply. `npm run groq:check -- --mistral`
+tests only Mistral; `npm run groq:check -- --fallback` tests the combined client.
+Mistral's initial live check returned HTTP 429; the backup cannot supply decisions
+until that account's quota or access permits requests.
