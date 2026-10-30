@@ -1,3 +1,4 @@
+import {TRAINING_ACTIONS} from './shared/training-scene.js';
 import {executionAnswer} from './execution-replies.js';
 import {parseHumanCommand} from './human-command.js';
 import {commandContext} from './resident-commands.js';
@@ -21,6 +22,7 @@ import {remember,applyResidentDecision} from './resident.js';
 export const DEFAULT_GROQ_MODEL='openai/gpt-oss-20b';
 export function residentContext(s){ensureMind(s);recordObservation(s,s.updatedAt||Date.now());return {
   commands:commandContext(s),
+  verifiedTrainingSkills:(s.training?.skills||[]).map(({name,steps,trials,safetyCases})=>({name,steps,trials,safetyCases,source:'verified isolated practice; recheck live requirements before reuse'})),
   humanActionConstraints:humanActionConstraints(s.messages),
   bicycle:{mode:s.player.mode,owned:s.player.mode==='cycling'||!!s.player.bike,pickup:'Porto Cycle House',action:'collect_bicycle'},
   perception:perception(s),needs:Object.fromEntries(Object.entries(s.needs).map(([k,v])=>[k,Math.round(v)])),mood:s.mood,money:s.wallet,
@@ -32,6 +34,7 @@ export function residentContext(s){ensureMind(s);recordObservation(s,s.updatedAt
   measuredEffects:retrieveEffects(s),mechanics:EFFECT_FACTS,needAwareness:needAwareness(s),task:s.task||null,
   lessonsForCurrentNeeds:relevantLessons(s),
   memory:cachedMemory(s),recentEvents:s.events.slice(-4).map(e=>e.message),
+  ...(s.trainingLab?{trainingLab:true,trainingMemory:s.trainingLessons||[]}:{}),
   places:RESIDENT_PLACES.map(({id,name})=>({id,name})),
   conversation:(s.messages||[]).slice(-6).map(({role,content})=>({role,content:content.slice(0,400)}))
 };}
@@ -123,10 +126,13 @@ export function createResidentBrain({client=createResilientClient(),now=()=>Date
     const complete=async(context,text)=>{try{return await client.complete(context,text,abort.signal);}finally{requestAttempts.push(...(client.attempts||(client.lastAttempt?[client.lastAttempt]:[])));}};
     const chat=message.startsWith('Chat with the human.');
     const constraints=humanActionConstraints(s.messages,chat?message.slice('Chat with the human. Their message: '.length):'');
-    try{const context={...compactContext(residentContext(s),{chat}),humanActionConstraints:constraints};let decision=await complete(context,message);
+    try{const context={...compactContext(residentContext(s),{chat}),humanActionConstraints:constraints};
+      if(s.trainingLab){context.capabilities=TRAINING_ACTIONS;context.actionSupport=Object.fromEntries(TRAINING_ACTIONS.map(a=>[a,ACTION_SUPPORT[a]]));context.places=context.places.filter(p=>p.id==='cafe');context.perception.nearbyPlaces=context.perception.nearbyPlaces.filter(p=>p.id==='cafe');context.commands.npcs=[];context.commands.story=null;context.commands.quest=null;}
+      let decision=await complete(context,message);
       const required=requestedObjective(message);
       const promisedActionIssue=d=>chat&&d.changePlan!==true&&/\b(?:I am|I'm|I will|I'll)\s+(?:now\s+)?(?:dismounting|dismount|getting off|getting down|sitting|sit down|eating|eat|drinking|drink)\b/i.test(d.reply||'')?'An action promise with changePlan=false executes nothing. Execute the requested action or explain the actual blocker; do not claim movement, a pose or consumption.':null;
       let issue=promisedActionIssue(decision)||humanActionIssue(decision,constraints,{chat})||objectiveIssue(decision,required)||(message.includes(PHONE_SEARCH_REQUEST)&&decision.action==='phone'&&decision.changePlan!==true?'You selected a phone search for an explicit use-phone request but changePlan=false will not execute it. Set changePlan=true if accepting the phone task; otherwise decline clearly without promising playback.':message.startsWith('Chat with the human.')&&decision.changePlan!==true?null:decisionIssue(s,decision));
+      if(issue&&s.trainingLab){s.trainingProposal={decision,issue};throw new GroqError('Training proposal rejected: '+issue,{retryMs:5000,kind:'decision'});}
       if(issue){
         if(requestGeneration!==generation||s.paused||stopped)throw new GroqError('Request cancelled.',{retryMs:0});
         // Human targets survive repair. An invented physical benefit from a
@@ -145,7 +151,7 @@ export function createResidentBrain({client=createResilientClient(),now=()=>Date
     catch(error){if(requestGeneration!==generation||s.paused||stopped)throw new GroqError('Game paused or request cancelled.',{retryMs:0});s.ai.connected=false;s.ai.error=error.message;s.ai.failureKind=error.kind||'provider';if(error.kind==='decision')nextAt=now()+error.retryMs;else{failures++;nextAt=now()+Math.max(error.retryMs||60000,Math.min(900000,30000*2**Math.min(failures,5)));}throw error;}
     finally{recordTelemetry(s.ai,{attempts:requestAttempts,diagnostics:client.diagnostics});s.ai.retryAt=nextAt;busy=false;}
   }
-  return {initialize,setPaused(s,paused){
+  return {initialize,async trainingDecision(s,message){if(!s.trainingLab)throw Error('Training requires an isolated resident.');s.ai.provider=client.provider;s.ai.model=client.model;return request(s,message);},setPaused(s,paused){
     generation++;abort.abort();abort=new AbortController();failures=0;s.paused=paused;s.updatedAt=now();s.player.speed=0;s.player.moving=false;
     s.ai.connected=false;s.ai.status=paused?'manually_paused':'connecting';s.ai.error=null;s.ai.failureKind=null;
     if(!paused)nextAt=now();

@@ -1,3 +1,4 @@
+import {buildCafeTable} from './cafe-table.js';
 import {SERVICES} from '../server/shared/services.js';
 import {SettlingWorld} from './settling-world.js';
 import {WelcomeWorld,buildFirstHome} from './welcome-world.js';
@@ -374,16 +375,7 @@ export class World {
     this.sign('PORTO SOL', 38, 2.4, 54, 3.3, .6, 0, '#294442');
     this.box(.12, 2.7, .12, 36.5, 1.35, 54, this.m.dark); this.box(.12, 2.7, .12, 39.5, 1.35, 54, this.m.dark);
   }
-  table(x, z) {
-    this.cylinder(.7, .7, .09, x, .79, z, this.m.teak, 20); this.cylinder(.05, .08, .76, x, .38, z, this.m.dark, 8);
-    this.cylinder(.34, .34, .06, x, .035, z, this.m.dark, 12);
-    for (const dz of [-1.2, 1.2]) {
-      this.interactionObjects?.push({id:`chair:${x}:${z}:${dz}`,name:'Café chair',type:'chair',x,y:.52+(this.elevationOffset||0),z:z+dz,yaw:dz>0?0:Math.PI,approach:{x:x+1.4,z:z+dz},affordances:['sit']});
-      this.box(.62, .08, .6, x, .48, z + dz, this.m.teak); this.box(.64, .7, .065, x, .8, z + dz + Math.sign(dz) * .25, this.m.teak);
-      for (const dx of [-.23, .23]) for (const q of [-.2, .2]) this.box(.045, .47, .045, x + dx, .23, z + dz + q, this.m.dark); this.obstacle(x, z + dz, .65, .6);
-    }
-    this.cylinder(.07, .09, .2, x, .93, z, this.m.trim, 8); this.obstacle(x, z, 1.4, 1.4);
-  }
+  table(x,z){buildCafeTable(this,x,z);}
   umbrella(x, z, mat) {
     this.cylinder(.035, .035, 2.8, x, 1.4, z, this.m.teak, 8);
     const cone = new T.ConeGeometry(2, .55, 8, 1, true); this.mesh(cone, mat, x, 2.85, z);

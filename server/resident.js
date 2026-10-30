@@ -155,4 +155,4 @@ export function stepResident(s,dt,now=Date.now()) {
     if(result.error){invalidatePlan(s,result.error);s.thought=result.error;s.rest=10;remember(s,result.error,now);}else if(next.action==='collect_bicycle')remember(s,'Collected and mounted a loan bicycle at Porto Cycle House.',now);s.route=[];s.visit++;p.moving=false;p.speed=0;
   }
 }
-export function residentSnapshot(s){const {obstacles,route,...snapshot}=s;return {...snapshot,commandVersion:2,capabilities:ACTIVITY_ACTIONS,initialized:!!obstacles,mode:s.ai?(s.ai.connected===true?'ai':'paused'):'routine'};}
+export function residentSnapshot(s){const {obstacles,route,training,...snapshot}=s;return {...snapshot,...(training?{trainingSummary:{attempts:training.reports?.length||0,skills:training.skills?.map(({id,name,verifiedAt})=>({id,name,verifiedAt}))||[]}}:{}),commandVersion:2,capabilities:ACTIVITY_ACTIONS,initialized:!!obstacles,mode:s.ai?(s.ai.connected===true?'ai':'paused'):'routine'};}

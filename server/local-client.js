@@ -8,6 +8,7 @@ export function createLocalClient({url=process.env.LOCAL_AI_URL||'http://127.0.0
  const tracker=trackedProviderFetch(fetchImpl,'Mac LM Studio',model);return {provider:'Mac LM Studio',model,configured:true,get lastAttempt(){return tracker.latest;},async complete(context,message,signal){
   const outputSchema=structuredClone(RESIDENT_DECISION_SCHEMA),required=requestedObjective(message);
   outputSchema.properties.nextSteps.maxItems=1;
+  if(context.trainingLab)for(const step of [outputSchema,outputSchema.properties.nextSteps.items])step.properties.action.enum=step.properties.action.enum.filter(a=>context.capabilities.includes(a));
   const constraints=context.humanActionConstraints||humanActionConstraints(context.conversation,message.startsWith('Chat with the human.')?message.slice('Chat with the human. Their message: '.length):'');
   if(!constraints.phoneAllowed){
     for(const step of [outputSchema,outputSchema.properties.nextSteps.items])step.properties.action.enum=step.properties.action.enum.filter(action=>action!=='phone');

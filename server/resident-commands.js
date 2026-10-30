@@ -49,7 +49,7 @@ function owned(s){return s.player.mode==='cycling'||!!s.player.bike;}
 export function commandContext(s){
  const life=s.life||restoreLife(null),step=lifeStep(life),quest=s.parcelQuest||restoreQuest(null),stop=activeStop(quest);
  return {preferences:s.preferences||{},execution:{last:s.lastCommand||null,task:s.commandTask||null},body:{mode:s.player.mode,parkedBicycle:s.player.bike||null,pose:s.player.interactionPose?.kind,awaitingInstruction:!!s.awaitingInstruction},
- services:SERVICES.map(({id,name,approach,affordances})=>({id,name,...approach,affordances})),npcs:NPCS,
+ services:SERVICES.filter(o=>(s.objects||[]).some(x=>x.id===o.id)).map(({id,name,approach,affordances})=>({id,name,...approach,affordances})),npcs:NPCS,
  story:step?{id:step.id,place:step.place,x:step.x,z:step.z,choices:step.choices.map((c,i)=>({index:i,label:c.label})),items:life.items,friends:life.friends}: {complete:true},
  quest:stop?{id:stop.id,objective:stop.objective,x:stop.x,z:stop.z}: {complete:true},
  appearance:s.player.look||{outfit:'original',helmet:true},arcade:{coins:s.arcade?.pickups?.coins||0,nitro:s.arcade?.pickups?.nitro||0,skyway:s.skyway?{running:s.skyway.running,distance:s.skyway.distance,lives:s.skyway.lives,lane:s.skyway.lane}:null}};
@@ -230,7 +230,7 @@ export function applyCommand(s,d,now,route){
 
 // Substep input physics; the host ticks at 10 Hz while the movement APIs cap dt.
 export function stepCommands(s,dt,now){
- const p=s.player,a=s.arcade||s.player.mode==='cycling'?arcade(s):null;
+ const p=s.player,a=s.trainingLab?null:s.arcade||s.player.mode==='cycling'?arcade(s):null;
  if(s.settling&&!s.skyway){const n=Math.max(1,Math.ceil(dt/.05));for(let i=0;i<n;i++)stepPlayer(p,{forward:0},dt/n,s.obstacles);if(p.grounded)delete s.settling;return true;}
  if(s.skyway){
   const ride=s.skyway,random=(a||arcade(s)).random;ride.random=random;

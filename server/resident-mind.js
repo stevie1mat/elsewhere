@@ -50,7 +50,7 @@ export function startActivity(s,d,place,now){
 export function finishActivity(s,now){
   if(!s.activity)return null;
   const a=s.activity;s.activity=null;if(a.kind==='phone'){delete s.player.phone;if(s.media){s.media.endedAt=now;s.media.playback='stopped';}}
-  if(a.kind==='eat'&&a.executionMode==='service_consumption'){delete s.mealOrder;delete s.player.carriedMeal;}
+  if(a.kind==='eat'&&a.executionMode==='service_consumption'){s.thought='Finished the meal.';delete s.mealOrder;delete s.player.carriedMeal;}
   delete s.player.consuming;delete s.player.exercising;
   if(a.kind==='work')s.wallet+=8;
   learnOutcome(s,a,now);recordObservation(s,now);

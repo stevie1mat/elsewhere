@@ -4,8 +4,22 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
-    {"source": "/dashboard", "destination": "/index.html"},
-    {"source": "/dashboard/", "destination": "/index.html"}
+    {
+      "source": "/dashboard",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/dashboard/",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/training",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/training/",
+      "destination": "/index.html"
+    }
   ],
   "functions": {
     "api/**/*.js": {
@@ -13,7 +27,15 @@
     }
   },
   "headers": [
-    {"source": "/dashboard", "headers": [{"key": "Cache-Control", "value": "no-store, max-age=0"}]},
+    {
+      "source": "/dashboard",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, max-age=0"
+        }
+      ]
+    },
     {
       "source": "/",
       "headers": [
@@ -34,6 +56,15 @@
     },
     {
       "source": "/story-preview.html",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, max-age=0"
+        }
+      ]
+    },
+    {
+      "source": "/training",
       "headers": [
         {
           "key": "Cache-Control",

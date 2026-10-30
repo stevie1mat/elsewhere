@@ -23,7 +23,8 @@ async function start(){
     if(!response.ok){let message='The hosted game server is unavailable.';try{message=(await response.json()).error||message;}catch{}throw Error(message);}
     window.portoResident=await response.json();
     if(location.search)history.replaceState(null,'',location.pathname);
-    if(/^\/dashboard\/?$/.test(location.pathname)){
+    if(/^\/training\/?$/.test(location.pathname)){const {mountTraining}=await import('./training.js');mountTraining();}
+    else if(/^\/dashboard\/?$/.test(location.pathname)){
       const {mountDashboard}=await import('./dashboard.js');mountDashboard(window.portoResident);
     }else await import('./main.js');
   }catch(error){
