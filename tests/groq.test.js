@@ -84,3 +84,17 @@ test('duration bounds reach the provider schema and rejection names the exact vi
  await assert.rejects(client.complete({},'Reconnect'),/seconds must be an integer from 15 to 180/);
  const properties=body.response_format.json_schema.schema.properties;assert.equal(properties.seconds.minimum,15);assert.equal(properties.seconds.maximum,180);assert.equal(properties.nextSteps.items.properties.seconds.minimum,15);
 });
+test('a complete failed_generation decision is validated locally without another paid request',async()=>{
+ let calls=0;const client=createGroqClient({apiKey:'secret',fetchImpl:async()=>{calls++;return Response.json({error:{code:'json_validate_failed',failed_generation:JSON.stringify(decision)}},{status:400});}});
+ assert.deepEqual(await client.complete({},'Decide'),decision);assert.equal(calls,1);assert.equal(client.attempts[0].status,'recovered');assert.ok(!JSON.stringify(client.attempts).includes('failed_generation'));
+});
+test('invalid failed_generation gets only one JSON-mode retry and all attempts remain counted',async()=>{
+ const bodies=[];const client=createGroqClient({apiKey:'secret',fetchImpl:async(u,o)=>{bodies.push(JSON.parse(o.body));return bodies.length===1?Response.json({error:{code:'json_validate_failed',failed_generation:'incomplete and invalid'}},{status:400}):Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(decision)}}]});}});
+ assert.deepEqual(await client.complete({},'Decide'),decision);assert.equal(bodies.length,2);assert.equal(bodies[0].response_format.type,'json_schema');assert.equal(bodies[1].response_format.type,'json_object');assert.equal(client.attempts.length,2);
+});
+test('JSON recovery never retries a rate limit or executes partial/invalid output',async()=>{
+ let calls=0;const rate=createGroqClient({apiKey:'secret',fetchImpl:async()=>{calls++;return Response.json({error:{code:'rate_limit_exceeded'}},{status:429,headers:{'retry-after':'90'}});}});
+ await assert.rejects(rate.complete({},'Decide'),e=>e.status===429&&e.retryMs===90000);assert.equal(calls,1);
+ calls=0;const invalid=createGroqClient({apiKey:'secret',fetchImpl:async()=>{calls++;return Response.json({error:{code:'json_validate_failed',failed_generation:JSON.stringify({...decision,action:'execute_code'})}},{status:400});}});
+ await assert.rejects(invalid.complete({},'Decide'),/JSON recovery/);assert.equal(calls,2);
+});

@@ -66,27 +66,34 @@ export class GroqError extends Error {
   constructor(message,{status=503,retryMs=60000}={}){super(message);this.status=status;this.retryMs=retryMs;}
 }
 export function createGroqClient({apiKey=process.env.GROQ_API_KEY,model=process.env.GROQ_MODEL||DEFAULT_GROQ_MODEL,fetchImpl=fetch}={}){
-  const configured=!!apiKey?.trim(),tracker=trackedProviderFetch(fetchImpl,'Groq',model,[apiKey]);
-  return {get lastAttempt(){return tracker.latest;},configured,model,provider:'Groq',async complete(context,message,signal){
-    if(!configured)throw new GroqError('Groq is not configured. Add GROQ_API_KEY to the server .env.');
-    let response;
-    try{response=await tracker.fetch('https://api.groq.com/openai/v1/chat/completions',{
-      method:'POST',headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},
-      signal:signal?AbortSignal.any([signal,AbortSignal.timeout(15000)]):AbortSignal.timeout(15000),
-      body:JSON.stringify({model,...(model.startsWith('openai/gpt-oss-')?{reasoning_effort:'low'}:{}),temperature:.7,max_completion_tokens:1024,response_format:{type:'json_schema',json_schema:{name:'resident_decision',strict:true,schema}},messages:[{role:'system',content:SYSTEM},{role:'user',content:JSON.stringify({world:context,request:message})}]})
-    });}catch{throw new GroqError('Groq could not be reached. Retrying shortly.');}
-    if(!response.ok){
-      const retry=response.headers.get('retry-after'),numeric=Number(retry);
-      const retryMs=retry?(Number.isFinite(numeric)?numeric*1000:Date.parse(retry)-Date.now()):60000;
-      const message=response.status===401?'Groq rejected the API key. Check the server configuration.':response.status===429?'Groq usage limit reached. Waiting before retrying.':`Groq request failed (${response.status}). Check model availability and account limits.`;
-      // Do not expose provider response bodies, request headers or secrets.
-      throw new GroqError(message,{status:response.status,retryMs:Math.max(30000,Number.isFinite(retryMs)?retryMs:60000)});
+  const configured=!!apiKey?.trim(),tracker=trackedProviderFetch(fetchImpl,'Groq',model,[apiKey]);let attempts=[];
+  return {get lastAttempt(){return tracker.latest;},get attempts(){return attempts;},configured,model,provider:'Groq',async complete(context,message,signal){
+    attempts=[];if(!configured)throw new GroqError('Groq is not configured. Add GROQ_API_KEY to the server .env.');
+    for(let pass=0;pass<2;pass++){
+      const jsonOnly=pass===1;let response;
+      try{response=await tracker.fetch('https://api.groq.com/openai/v1/chat/completions',{
+        method:'POST',headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},
+        signal:signal?AbortSignal.any([signal,AbortSignal.timeout(15000)]):AbortSignal.timeout(15000),
+        body:JSON.stringify({model,...(model.startsWith('openai/gpt-oss-')?{reasoning_effort:'low'}:{}),temperature:jsonOnly ? 0.2 : 0.7,max_completion_tokens:1024,
+          response_format:jsonOnly?{type:'json_object'}:{type:'json_schema',json_schema:{name:'resident_decision',strict:true,schema}},
+          messages:[{role:'system',content:SYSTEM+(jsonOnly?'\nThe structured decoder failed. Return ONLY one complete JSON decision matching this schema. No markdown. '+JSON.stringify(schema):'')},{role:'user',content:JSON.stringify({world:context,request:message})}]})
+      });}catch{if(tracker.latest)attempts.push({...tracker.latest});throw new GroqError('Groq could not be reached. Retrying shortly.');}
+      const attempt={...tracker.latest};attempts.push(attempt);
+      if(!response.ok){
+        let data;try{data=await response.json();}catch{}
+        if(!jsonOnly&&response.status===400&&data?.error?.code==='json_validate_failed'){
+          // Recover only a complete JSON object that passes all local action validation.
+          // Never extract partial JSON or retain raw failed_generation/reasoning text.
+          try{const decision=validateDecision(JSON.parse(data.error.failed_generation));attempt.status='recovered';attempt.error=null;return decision;}catch{}
+          continue;
+        }
+        const retry=response.headers.get('retry-after'),numeric=Number(retry),retryMs=retry?(Number.isFinite(numeric)?numeric*1000:Date.parse(retry)-Date.now()):60000;
+        const text=response.status===401?'Groq rejected the API key. Check the server configuration.':response.status===429?'Groq usage limit reached. Waiting before retrying.':response.status===400?'Groq could not produce a valid decision after JSON recovery.':`Groq request failed (${response.status}). Check model availability and account limits.`;
+        throw new GroqError(text,{status:response.status,retryMs:Math.max(30000,Number.isFinite(retryMs)?retryMs:60000)});
+      }
+      try{const data=await response.json(),choice=data.choices?.[0];if(choice?.finish_reason!=='stop')throw Error('Incomplete response');return validateDecision(JSON.parse(choice.message.content));}
+      catch(error){attempt.status='error';attempt.error=error instanceof SyntaxError?'Groq returned invalid JSON.':error.message==='Incomplete response'?'Groq response ended before a complete decision.':'Groq decision rejected: '+error.message;throw new GroqError(attempt.error);}
     }
-    try{
-      const data=await response.json(),choice=data.choices?.[0];
-      if(choice?.finish_reason!=='stop')throw Error('Incomplete response');
-      return validateDecision(JSON.parse(choice.message.content));
-    }catch(error){throw new GroqError(error instanceof SyntaxError?'Groq returned invalid JSON.':error.message==='Incomplete response'?'Groq response ended before a complete decision.':'Groq decision rejected: '+error.message);}
   }};
 }
 export function createMistralClient({apiKey=process.env.MISTRAL_API_KEY,model=process.env.MISTRAL_MODEL||'mistral-small-latest',fetchImpl=fetch}={}){
@@ -124,8 +131,8 @@ export function createResilientClient({clients=[createGroqClient(),createMistral
         if(signal?.aborted)throw new GroqError('Request cancelled.');
         const index=(active+offset)%available.length,client=available[index],until=cooldowns.get(index)||0;
         if(until>now()){earliest=Math.min(earliest,until);continue;}
-        try{const result=await client.complete(context,message,signal);if(client.lastAttempt)attempts.push({...client.lastAttempt});health.set(index,{status:'connected',error:null});active=index;cooldowns.delete(index);return result;}
-        catch(error){if(client.lastAttempt)attempts.push({...client.lastAttempt,status:'error',error:client.lastAttempt.error||error.message});health.set(index,{status:'unavailable',error:client.lastAttempt?.error||error.message});if(signal?.aborted)throw new GroqError('Request cancelled.');const until=now()+Math.max(30000,error.retryMs||60000);cooldowns.set(index,until);earliest=Math.min(earliest,until);}
+        try{const result=await client.complete(context,message,signal);if(client.attempts?.length)attempts.push(...client.attempts);else if(client.lastAttempt)attempts.push({...client.lastAttempt});health.set(index,{status:'connected',error:null});active=index;cooldowns.delete(index);return result;}
+        catch(error){if(client.attempts?.length)attempts.push(...client.attempts);else if(client.lastAttempt)attempts.push({...client.lastAttempt,status:'error',error:client.lastAttempt.error||error.message});health.set(index,{status:'unavailable',error:error.message});if(signal?.aborted)throw new GroqError('Request cancelled.');const until=now()+Math.max(30000,error.retryMs||60000);cooldowns.set(index,until);earliest=Math.min(earliest,until);}
       }
       throw new GroqError('AI unavailable. '+available.map((c,i)=>c.provider+': '+(health.get(i)?.error||'waiting to retry')).join(' · '),{retryMs:Number.isFinite(earliest)?Math.max(1000,earliest-now()):60000});
     }
