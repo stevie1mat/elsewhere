@@ -1,4 +1,5 @@
 import './dashboard.css';
+import './dashboard-theme.css';
 import {dashboardModel,escapeHtml as e,number as n,pretty,placeName,duration,researchSnapshot,LANDMARKS} from './dashboard-data.js';
 import {downloadAiCsv} from './ai-csv.js';
 import {residentChatRequest} from './resident-chat-request.js';
