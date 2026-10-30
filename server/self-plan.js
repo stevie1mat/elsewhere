@@ -1,5 +1,7 @@
+import {installObjective} from './task-verification.js';
 // A model-written program over the game's action API, not executable JavaScript.
-export function installPlan(s,decision,now){
+export function installPlan(s,decision,now,{replaceTask=false}={}){
+  installObjective(s,decision,now,replaceTask);
   s.script={createdAt:now,goal:decision.goal,successCriterion:decision.successCriterion||decision.goal,status:'running',cursor:1,
     steps:[{objectId:decision.objectId,verb:decision.verb,action:decision.action,destination:decision.destination,seconds:Math.max(60,decision.seconds),intention:decision.intention,condition:{need:'none',min:0,max:100}},...(decision.nextSteps||[]).map(step=>({...step,seconds:Math.max(60,step.seconds)}))]};
 }

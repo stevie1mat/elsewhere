@@ -1,3 +1,5 @@
+import {recordEffect} from './experience.js';
+import {verifyTask} from './task-verification.js';
 import {recordProgress,contextualOutcome} from './learning-progress.js';
 import {perceivedObjects} from './object-perception.js';
 import {LANDMARKS} from './shared/movement.js';
@@ -23,9 +25,9 @@ export function learnOutcome(s,activity,now){
   const count=old.count+1;
   s.learning.preferences[key]={count,meanReward:Math.round((old.meanReward+(reward-old.meanReward)/count)*1000)/1000,lastAt:now};
   s.learning.totalOutcomes++;
-  const result={at:now,activity:activity.kind,place:activity.place,source:'measured simulation outcome',before:b,after,moneyChange,reward:Math.round(reward*1000)/1000};
+  const result={at:now,activity:activity.kind,place:activity.place,source:'measured simulation outcome',before:b,after,moneyChange,duration:activity.total,executionMode:activity.executionMode,reward:Math.round(reward*1000)/1000};
   s.outcomes??=[];s.outcomes.push(result);s.outcomes=s.outcomes.slice(-12);
-  contextualOutcome(s,activity,result);recordProgress(s,result);
+  contextualOutcome(s,activity,result);recordProgress(s,result);recordEffect(s,result);verifyTask(s,result,now);
   return result;
 }
 export function cachedMemory(s){
