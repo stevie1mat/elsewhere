@@ -27,7 +27,8 @@ export function mountResidentPhone(){
   }catch(e){playback.textContent=e.message;report('blocked',m.id);}finally{open.disabled=!active()||!snapshot?.media?.selected;}
  };
  ask.onclick=async()=>{if(askBusy)return;askBusy=true;ask.disabled=true;status.textContent='Asking the resident…';try{const r=await residentChatRequest(PHONE_SEARCH_REQUEST,()=>{status.textContent='Resident is choosing on your Mac…';});const data=await r.json();status.textContent=data.reply||data.error||'Request finished.';}catch{status.textContent='Cannot reach the game server.';}finally{askBusy=false;ask.disabled=!active()&&(snapshot?.paused||snapshot?.ai?.connected!==true);}};
- let signature='';return {update(s){snapshot=s;const m=s.media;badge.textContent=`📱 Phone · ${s.mood||'settling in'}${s.player.phone?' · in hand':''}`;
+ let lastControl=null;let signature='';return {update(s){snapshot=s;const m=s.media;badge.textContent=`📱 Phone · ${s.mood||'settling in'}${s.player.phone?' · in hand':''}`;
+ if(m?.control&&m.control.id!==lastControl){lastControl=m.control.id;if(m.control.verb==='play'&&active())void open.onclick();else if(m.control.verb==='pause')player?.pauseVideo?.();else if(m.control.verb==='stop')stop('paused');}
  if(player&&(!active()||playingId!==m?.id||document.hidden))stop('paused');
  ask.disabled=askBusy||!s.ai?.connected||s.paused;ask.textContent=askBusy?'Resident is choosing…':s.paused?'Resume life & AI to use phone':!s.ai?.connected?'Waiting for AI connection':'Ask resident to choose a video';open.disabled=!active()||!m?.selected;open.hidden=!m?.selected;
  const key=JSON.stringify([s.mood,s.paused,s.ai?.connected,s.activity?.kind,m,s.mediaHistory]);if(key===signature)return;signature=key;

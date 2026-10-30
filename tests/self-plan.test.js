@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {installPlan,nextPlanStep,invalidatePlan} from '../server/self-plan.js';
 import {createResident,stepResident} from '../server/resident.js';
 import {createResidentBrain,validateDecision} from '../server/groq.js';
-const plan={action:'rest',destination:'garden',seconds:60,intention:'Think about what to do.',goal:'Find a quiet place I enjoy.',reply:'I will try a walk.',changePlan:true,successCriterion:'Visit a different park and compare how I feel.',nextSteps:[{action:'visit',destination:'palms',seconds:60,intention:'Try another park.',condition:{need:'energy',min:30,max:100}}]};
+const plan={action:'rest',destination:'here',seconds:60,intention:'Think about what to do.',goal:'Find a quiet place I enjoy.',reply:'I will try a walk.',changePlan:true,successCriterion:'Visit a different park and compare how I feel.',nextSteps:[{action:'visit',destination:'palms',seconds:60,intention:'Try another park.',condition:{need:'energy',min:30,max:100}}]};
 test('a model-written plan persists and checks its own next-step condition',()=>{
  const s=createResident();s.needs={energy:60};installPlan(s,plan,1000);const restored=JSON.parse(JSON.stringify(s));
  assert.equal(nextPlanStep(restored).destination,'palms');assert.equal(restored.script.cursor,2);assert.equal(nextPlanStep(restored),null);assert.equal(restored.script.status,'completed');

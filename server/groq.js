@@ -1,3 +1,5 @@
+import {parseHumanCommand} from './human-command.js';
+import {commandContext} from './resident-commands.js';
 import {validateDecision,RESIDENT_PLACES,RESIDENT_DECISION_SCHEMA as schema,RESIDENT_SYSTEM_PROMPT as SYSTEM} from './decision-contract.js';
 export {validateDecision,RESIDENT_PLACES} from './decision-contract.js';
 import {PHONE_SEARCH_REQUEST} from './shared/phone-request.js';
@@ -17,6 +19,7 @@ import {remember,applyResidentDecision} from './resident.js';
 
 export const DEFAULT_GROQ_MODEL='openai/gpt-oss-20b';
 export function residentContext(s){ensureMind(s);recordObservation(s,s.updatedAt||Date.now());return {
+  commands:commandContext(s),
   humanActionConstraints:humanActionConstraints(s.messages),
   bicycle:{mode:s.player.mode,owned:s.player.mode==='cycling'||!!s.player.bike,pickup:'Porto Cycle House',action:'collect_bicycle'},
   perception:perception(s),needs:Object.fromEntries(Object.entries(s.needs).map(([k,v])=>[k,Math.round(v)])),mood:s.mood,money:s.wallet,
@@ -145,9 +148,9 @@ export function createResidentBrain({client=createResilientClient(),now=()=>Date
     s.ai.connected=false;s.ai.status=paused?'manually_paused':'connecting';s.ai.error=null;s.ai.failureKind=null;
     if(!paused)nextAt=now();
   },async update(s){
-    if(stopped||s.paused||chatWaiting||!client.configured||busy||now()<nextAt||!s.obstacles)return;
+    if(stopped||s.paused||s.manualCommand||s.awaitingInstruction||chatWaiting||!client.configured||busy||now()<nextAt||!s.obstacles)return;
     const updateGeneration=generation;const reconnecting=s.ai.connected!==true;
-    if(!reconnecting&&(s.arrival.phase!=='landed'||s.route.length||s.rest>0||s.pendingDecision))return;
+    if(!reconnecting&&(s.arrival.phase!=='landed'||s.route.length||s.rest>0||s.motionCommand||s.pendingDecision))return;
     if(!reconnecting){const step=nextPlanStep(s);if(step&&!humanActionIssue(step,humanActionConstraints(s.messages))){s.pendingDecision=step;s.ai.goal=step.goal;s.ai.planStepsReused=(s.ai.planStepsReused||0)+1;remember(s,`Continuing my plan: ${step.intention}`,now());return;}if(step)invalidatePlan(s,'Saved plan conflicts with the latest human action constraints.');}
     s.ai.status=reconnecting?'connecting':'thinking';s.ai.fallback=false;
     if(reconnecting){s.player.speed=0;s.player.moving=false;}
@@ -156,7 +159,7 @@ export function createResidentBrain({client=createResilientClient(),now=()=>Date
       if(stopped||s.paused||updateGeneration!==generation)return;
       recordWorldRequests(s,decision.assetRequests,now());
       s.ai.status='ready';s.ai.fallback=false;
-      if(reconnecting&&(s.arrival.phase!=='landed'||s.route.length||s.rest>0||s.pendingDecision))return;
+      if(reconnecting&&(s.arrival.phase!=='landed'||s.route.length||s.rest>0||s.motionCommand||s.pendingDecision))return;
       installPlan(s,decision,now());
       s.pendingDecision={...decision,seconds:Math.max(60,decision.seconds)};s.ai.goal=decision.goal;s.ai.lastDecisionAt=now();
       if(decision.reply.includes('?')&&(!s.ai.lastQuestionAt||now()-s.ai.lastQuestionAt>=300000)){s.messages.push({role:'assistant',content:decision.reply,at:now()});s.messages=s.messages.slice(-100);s.ai.lastQuestionAt=now();}
@@ -165,7 +168,16 @@ export function createResidentBrain({client=createResilientClient(),now=()=>Date
   },async chat(s,message){
     if(stopped)throw new GroqError('Server is stopping.');
     if(s.paused)throw new GroqError('Game paused. Resume to use AI.',{retryMs:0});
+    const direct=parseHumanCommand(s,message);
+    if(direct){
+      if(s.arrival.phase!=='landed'||!s.obstacles)return 'Let me finish landing and load the city before executing that command.';
+      const command=validateDecision(direct);generation++;abort.abort();abort=new AbortController();
+      const result=applyResidentDecision(s,command,now());const reply=result.error||result.message||s.thought;
+      if(!result.error){installPlan(s,command,now(),{replaceTask:true});s.awaitingInstruction=command.action==='stop';if(s.script)s.script.status='cancelled';delete s.pendingDecision;s.ai.goal=command.goal;s.manualCommand=true;s.commandRequest={action:command.action,at:now()};}
+      s.messages.push({role:'user',content:message,at:now()},{role:'assistant',content:reply,at:now(),source:'command executor'});s.messages=s.messages.slice(-100);return reply;
+    }
     if(!client.configured)throw new GroqError('AI chat is not configured on the server.',{retryMs:0});
+    s.manualCommand=false;
     const recall=groundedRecall(s,message);
     if(recall&&s.ai.connected===true){s.messages.push({role:'user',content:message,at:now()},{role:'assistant',content:recall,at:now()});s.messages=s.messages.slice(-100);s.ai.localRecallHits=(s.ai.localRecallHits||0)+1;return recall;}
     let decision;chatWaiting++;
@@ -189,7 +201,7 @@ export function createResidentBrain({client=createResilientClient(),now=()=>Date
       else{
         const result=applyResidentDecision(s,decision,now());
         if(result.error)reply=result.error;
-        else{installPlan(s,decision,now(),{replaceTask:true});delete s.pendingDecision;s.ai.goal=decision.goal;s.ai.fallback=false;s.ai.status='ready';remember(s,`Changed activity after your request: ${decision.action} · ${s.destination||'here'}.`,now());}
+        else{if(result.message)reply=result.message;s.awaitingInstruction=decision.action==='stop';installPlan(s,decision,now(),{replaceTask:true});delete s.pendingDecision;s.ai.goal=decision.goal;s.ai.fallback=false;s.ai.status='ready';remember(s,`Changed activity after your request: ${decision.action} · ${s.destination||'here'}.`,now());}
       }
     }
     ensureMind(s);s.needs.social=Math.max(0,s.needs.social-8);

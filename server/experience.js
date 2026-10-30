@@ -17,7 +17,7 @@ export const EFFECT_FACTS={
  rest:{energyPerSecond:.132,stressPerSecond:-.18,requires:'Standing rest or seated object interaction'},
  sleep:{energyPerSecond:.692,stressPerSecond:-.18,requires:'Usable bed and lying interaction'},
  work:{energyPerSecond:-.088,moneyOnCompletion:8,physical:false},
- drinking:{available:false},eating:{available:false},
+ drinking:{available:true,requires:'Registered cafe-water service',thirstPerSecond:-3},eating:{available:true,requires:'Registered cafe-meal service and €4',hungerPerSecond:-.95,thirstPerSecond:-.8},
  interpretation:'These are simulation mechanics, not lived sensations. Energy caps at 100. A low total reward does not mean every individual effect failed. Do not describe a work shift as energy recovery.'
 };
-export function needAwareness(s){return {values:s.needs,unresolved:['hunger','thirst','social'].filter(k=>s.needs[k]>=70).map(metric=>({metric,value:Math.round(s.needs[metric]),status:metric==='social'?'No implemented NPC social interaction':'No usable consumption interaction',choice:'Explain the limitation; decide whether to request a capability. No automatic asset request is created.'}))};}
+export function needAwareness(s){return {values:s.needs,unresolved:['hunger','thirst','social'].filter(k=>s.needs[k]>=70).map(metric=>({metric,value:Math.round(s.needs[metric]),status:metric==='social'?'Greet a registered NPC with talk/hello':(s.objects||[]).some(o=>o.affordances?.includes(metric==='thirst'?'drink':'eat'))?'Use the registered cafe consumption service':'No usable consumption interaction registered; load the updated city',choice:'Choose an available action and verify its measured result.'}))};}

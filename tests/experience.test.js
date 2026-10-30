@@ -6,7 +6,7 @@ import {retrieveEffects,needAwareness} from '../server/experience.js';
 import {installPlan} from '../server/self-plan.js';
 import {validateDecision,residentContext} from '../server/groq.js';
 const person=()=>{const s=createResident();s.obstacles=[];s.arrival.phase='landed';s.ai={enabled:true,connected:true};s.player.x=40;s.player.z=7;ensureMind(s);s.objects=[{id:'seat',name:'Bench',type:'bench',x:40,y:.59,z:10,yaw:0,approach:{x:40,z:8.7},affordances:['sit']}];return s;};
-const decision={action:'interact',objectId:'seat',verb:'sit',destination:'garden',goal:'Gain 10 energy while sitting',seconds:120,intention:'Recover energy on a seat',reply:'I will try the seat.',objective:{metric:'energy',direction:'increase',amount:10,interaction:'sit'}};
+const decision={action:'interact',objectId:'seat',verb:'sit',destination:'here',goal:'Gain 10 energy while sitting',seconds:120,intention:'Recover energy on a seat',reply:'I will try the seat.',objective:{metric:'energy',direction:'increase',amount:10,interaction:'sit'}};
 test('negative combined reward does not erase successful energy recovery evidence',()=>{
  const s=person();s.outcomes=[{activity:'rest',place:'Bench',at:1,reward:-.02,before:{energy:71,thirst:84},after:{energy:87,thirst:87},duration:120,executionMode:'object_interaction'}];
  const effects=retrieveEffects(s);assert.equal(effects[0].meanChanges.energy,16);assert.equal(effects[0].meanChanges.thirst,3);assert.equal(retrieveEffects(s)[0].trials,1);assert.equal(effects[0].lastExample.before.energy,71);

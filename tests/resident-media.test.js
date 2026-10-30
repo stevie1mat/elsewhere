@@ -8,7 +8,7 @@ import * as T from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {Explorer} from '../src/explorer.js';
 const person=()=>{const s=createResident();s.obstacles=[];s.arrival.phase='landed';s.ai={connected:true,enabled:true};return s;};
-const d={action:'phone',mediaQuery:'piano improvisation',destination:'cafe',seconds:120,intention:'I want to explore piano music',goal:'Explore music',reply:'I will search for piano music.'};
+const d={action:'phone',mediaQuery:'piano improvisation',destination:'here',seconds:120,intention:'I want to explore piano music',goal:'Explore music',reply:'I will search for piano music.'};
 const video={type:'video',videoId:'abcdefghijk',title:'Piano',author:'Artist'};
 test('phone query is model authored and validated; use produces no invented listening or energy benefit',()=>{
  const s=person();assert.equal(validateDecision(d).mediaQuery,d.mediaQuery);assert.throws(()=>validateDecision({...d,mediaQuery:''}));assert.equal(applyResidentDecision(s,d,1).started,true);assert.equal(s.player.phone,true);assert.equal(s.media.playback,'not_started');const energy=s.needs.energy;stepResident(s,1,2);assert.ok(s.needs.energy<energy);assert.equal(s.worldRequests,undefined);
@@ -33,7 +33,7 @@ test('all failed instances produce visible failure without fake videos or endles
 test('real character holds a human-scale phone; pose and prop disappear when phone action stops',async()=>{
  const data=await readFile(new URL('../public/assets/people/traveler-man.glb',import.meta.url));const gltf=await new GLTFLoader().parseAsync(data.buffer.slice(data.byteOffset,data.byteOffset+data.byteLength),'');const e=new Explorer(gltf.scene,gltf.animations[0]);const s=person();applyResidentDecision(s,d,1);e.update(s.player,0);assert.equal(e.phone.visible,true);
  const size=new T.Box3().setFromObject(e.phone).getSize(new T.Vector3());assert.ok(size.length()>.1&&size.length()<.3);const hand=e.walker.getObjectByName('Bip01_R_Hand').getWorldPosition(new T.Vector3());assert.ok(e.phone.getWorldPosition(new T.Vector3()).distanceTo(hand)<.1);
- applyResidentDecision(s,{action:'observe',destination:'cafe',seconds:15,intention:'Observe'},2);e.update(s.player,0);assert.equal(e.phone.visible,false);
+ applyResidentDecision(s,{action:'observe',destination:'here',seconds:15,intention:'Observe'},2);e.update(s.player,0);assert.equal(e.phone.visible,false);
 });
 test('the exact phone button request reaches the AI planner instead of sensory recall, and starts a search',async()=>{
  const {PHONE_SEARCH_REQUEST}=await import('../server/shared/phone-request.js');const {createResidentBrain}=await import('../server/groq.js');const {groundedRecall}=await import('../server/cognition.js');

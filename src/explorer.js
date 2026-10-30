@@ -1,3 +1,4 @@
+import {createConsumptionProps,applyConsumptionPose} from './consumption-pose.js';
 import {createPhone,applyPhonePose} from './phone-pose.js';
 import {applyObjectPose} from './object-poses.js';
 import * as T from 'three';
@@ -113,6 +114,7 @@ export class Explorer {
     this.runAction=this.mixer.clipAction(RUN_CLIP).setEffectiveWeight(0).play();
     this.flightPose=new PoseOverride(this.walker);
     this.group.add(this.cycle.group,this.walker);this.walker.visible=false;
+    this.consumptionProps=createConsumptionProps(this.walker);this.consumptionClock=0;
     this.applyLook(DEFAULT_LOOK);
   }
   applyLook(value) { this.look=normalizeLook(value);this.applyRidingLook(this.look);this.applyWalkingLook(this.look);for(const key of ['helmet','backpack','sunglasses'])this.cycle.rider.getObjectByName(key).visible=this.look[key]; }
@@ -169,6 +171,8 @@ export class Explorer {
       this.walker.position.set(p.x,p.y||0,p.z);this.walker.rotation.set(0,Math.PI-p.yaw,0,'YXZ');
       if(!applyObjectPose(this.walker,p.interactionPose))this.footContact.align(p);
       applyPhonePose(this.walker,this.phone,p.phone===true);
+      this.consumptionClock+=dt;applyConsumptionPose(this.walker,this.consumptionProps,p.consuming,this.consumptionClock);
+      if(p.exercising){const bend=(Math.sin(this.consumptionClock*3)+1)*.1;this.walker.position.y-=bend;for(const side of ['L','R']){const thigh=this.walker.getObjectByName('Bip01_'+side+'_Thigh');if(thigh)thigh.rotation.x+=bend*2;}}
       if(p.swimming){
         this.swimClock=(this.swimClock||0)+Math.min(.1,dt);
         const effort=Math.min(1,Math.abs(p.speed)/1.6),stroke=this.swimClock*(2+effort*2);

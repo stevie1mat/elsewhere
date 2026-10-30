@@ -47,6 +47,9 @@ export function mountResidentView({initial,player,arrival,welcome,getWorld,onLoc
   diagnostics.querySelector('header button').onclick=()=>{diagnostics.hidden=true;connection.setAttribute('aria-expanded','false');connection.focus();};
   const playback=document.createElement('div');playback.id='resident-playback';
   playback.innerHTML='<button id="resident-pause" type="button">Ⅱ Pause life & AI</button><button id="resident-restart" type="button" title="Reconnect AI and continue the saved life">↻ Restart AI</button><span id="resident-pause-status" role="status"></span>';
+  const commands=document.createElement('details');commands.className='resident-command-controls';const summary=document.createElement('summary');summary.textContent='Resident actions';commands.append(summary);const commandStatus=document.createElement('p');commandStatus.setAttribute('role','status');
+  for(const [label,message] of [['Stop','stop'],['Stand up','stand up'],['Get off bicycle','get off the bike'],['Get on bicycle','get on the bike'],['Collect bicycle','collect the bicycle'],['Drink water','drink water'],['Eat a meal · €4','eat a meal'],['Look around','look around']]){const button=document.createElement('button');button.type='button';button.textContent=label;button.dataset.residentCommand=message;button.onclick=async()=>{if(button.dataset.busy)return;button.dataset.busy='true';button.disabled=true;commandStatus.textContent='Executing…';try{const response=await residentChatRequest(message);const data=await response.json();if(!response.ok)throw Error(data.error||'Command failed.');commandStatus.textContent=data.reply||'Command accepted.';await sync();}catch(error){commandStatus.textContent=error.message;}finally{delete button.dataset.busy;button.disabled=snapshot.paused;}};commands.append(button);}
+  commands.append(commandStatus);playback.append(commands);
   let controlBusy=false;
   async function control(action){
     if(controlBusy)return;controlBusy=true;for(const b of playback.querySelectorAll('button'))b.disabled=true;
@@ -83,6 +86,7 @@ export function mountResidentView({initial,player,arrival,welcome,getWorld,onLoc
   const learningView=mountLearningView();const phoneView=mountResidentPhone();mountResidentSidebar();
   const motion=new ResidentMotion(initial.player,performance.now());
   function apply(next){motion.receive(next.player,performance.now(),{snap:next.arrival.phase!==snapshot.arrival.phase||next.arrival.phase!=='landed'});snapshot=next;phoneView.update(next);Object.assign(arrival,next.arrival);Object.assign(welcome,next.welcome);receivedAt=Date.now();
+    for(const button of commands.querySelectorAll('button'))button.disabled=next.paused||button.dataset.busy==='true';
     learningView.update(next);showConnection(next.ai);renderDiagnostics(next);playback.querySelector('#resident-pause').textContent=next.paused?'▶ Resume life & AI':'Ⅱ Pause life & AI';playback.querySelector('#resident-pause-status').textContent=next.paused?'Paused · no new AI requests or memories':'';
     document.body.classList.toggle('arriving',next.arrival.phase!=='landed');
     document.querySelector('#arrival-title').textContent=next.arrival.phase==='parachute'?'Coming in to land.':'Your island is on the horizon.';
@@ -103,7 +107,7 @@ export function mountResidentView({initial,player,arrival,welcome,getWorld,onLoc
     for(const node of panel.querySelectorAll('[data-node]'))node.classList.toggle('is-active',node.dataset.node===(next.ai?.status==='thinking'?'planner':'action'));
     const messages=JSON.stringify(next.messages||[]);
     if(messages!==lastMessages){lastMessages=messages;const list=panel.querySelector('#resident-messages');list.replaceChildren();for(const message of (next.messages||[]).slice(-12)){const p=document.createElement('p'),name=document.createElement('strong');name.textContent=message.role==='user'?'You: ':'Resident: ';p.append(name,document.createTextNode(message.content));list.append(p);}list.scrollTop=list.scrollHeight;}
-    panel.querySelector('#resident-chat-form button').disabled=next.paused||!next.ai?.enabled||chatBusy;
+    panel.querySelector('#resident-chat-form button').disabled=next.paused||chatBusy;
     const signature=JSON.stringify(next.events);
     if(signature!==lastEvents){lastEvents=signature;const list=panel.querySelector('#resident-history');list.replaceChildren();
       for(const event of [...next.events].reverse().slice(0,80)){const li=document.createElement('li'),time=document.createElement('time');time.dateTime=new Date(event.at).toISOString();time.textContent=new Date(event.at).toLocaleString();li.append(time,document.createTextNode(event.message));list.append(li);}
@@ -131,7 +135,7 @@ export function mountResidentView({initial,player,arrival,welcome,getWorld,onLoc
         }
         input.value='';error.textContent='';await sync();break;
       }
-    }catch(e){error.textContent=e.message;}finally{chatBusy=false;input.disabled=false;button.disabled=snapshot.paused||!snapshot.ai?.enabled;button.textContent='Send';}
+    }catch(e){error.textContent=e.message;}finally{chatBusy=false;input.disabled=false;button.disabled=snapshot.paused;button.textContent='Send';}
 
   };
   apply(initial);Object.assign(player,initial.player);
@@ -150,9 +154,9 @@ export function mountResidentView({initial,player,arrival,welcome,getWorld,onLoc
   const interval=setInterval(sync,400);sync();window.addEventListener('pagehide',()=>clearInterval(interval),{once:true});
   const marker=document.createElement('button');marker.type='button';marker.id='resident-marker';marker.setAttribute('aria-label','Move camera close to your resident');marker.onclick=onLocate;marker.innerHTML='<span aria-hidden="true">◆</span> YOUR RESIDENT';document.querySelector('#app').append(marker);
   const point=new THREE.Vector3();
-  return {get paused(){return snapshot.paused===true;},update(camera){
+  return {get snapshot(){return snapshot;},get paused(){return snapshot.paused===true;},update(camera){
     // Never advance the saved life in the browser: all tabs observe one server state.
-    const pitch=player.pitch;Object.assign(player,motion.sample(performance.now()));player.pitch=pitch;if(!snapshot.player.phone)delete player.phone;if(!snapshot.player.interactionPose)delete player.interactionPose;player.arrival=arrival;
+    const pitch=player.pitch;Object.assign(player,motion.sample(performance.now()));player.pitch=pitch;if(!snapshot.player.phone)delete player.phone;if(!snapshot.player.interactionPose)delete player.interactionPose;if(!snapshot.player.consuming)delete player.consuming;if(!snapshot.player.exercising)delete player.exercising;player.arrival=arrival;
     if(Date.now()-receivedAt>3000){player.speed=0;player.moving=false;showConnection(snapshot.ai,true);}
   },render(camera,pose){
     const rect=document.querySelector('#viewport').getBoundingClientRect(),width=rect.width,height=rect.height;

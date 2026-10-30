@@ -1,11 +1,6 @@
 import {expandOutskirts,OUTSKIRT_ROADS} from './porto-outskirts.js';
-export const PORTO_ROADS = [
-  {x:-24,z:-30,w:15,d:458}, {x:-88,z:40,w:301,d:14},
-  {x:-142,z:-30,w:14,d:458}, {x:-88,z:-158,w:301,d:14},
-  {x:-88,z:136,w:301,d:14}, {x:-218,z:-30,w:12,d:458},
-  {x:-88,z:-232,w:301,d:12},
-  ...OUTSKIRT_ROADS,
-];
+import {PORTO_ROADS} from '../server/shared/roads.js';
+export {PORTO_ROADS};
 
 export function expandPorto(w) {
   for(const road of PORTO_ROADS.slice(2,7)){

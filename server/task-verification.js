@@ -3,7 +3,7 @@ export const objectiveSchema={type:'object',additionalProperties:false,required:
 export function validateObjective(o){if(o===undefined)return;if(!o||!metrics.includes(o.metric)||!['increase','decrease'].includes(o.direction)||!Number.isInteger(o.amount)||o.amount<0||o.amount>100||!['none','sit','lie_down'].includes(o.interaction))throw Error('Invalid measurable objective.');}
 const value=(s,metric)=>metric==='money'?s.wallet:s.needs[metric];
 export function installObjective(s,d,now,replace=false){
- const o=d.objective;if(!o||o.metric==='none')return;
+ const o=d.objective;if(!o||o.metric==='none'){if(replace&&s.task?.status==='active'){s.taskHistory??=[];s.taskHistory.push({...s.task,status:'superseded',endedAt:now});s.taskHistory=s.taskHistory.slice(-30);delete s.task;}return;}
  if(s.task?.status==='active'&&!replace)return;
  if(s.task){s.taskHistory??=[];s.taskHistory.push({...s.task,...(s.task.status==='active'?{status:'superseded',endedAt:now}:{})});s.taskHistory=s.taskHistory.slice(-30);}
  const baseline=value(s,o.metric),target=baseline+(o.direction==='increase'?o.amount:-o.amount);

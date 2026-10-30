@@ -1,3 +1,4 @@
+import {PickupDisplay} from './road-pickups.js';
 import {createSpectatorCamera} from './spectator-camera.js';
 import {mountResidentView} from './resident-view.js';
 import {lifeStep} from './settling-story.js';
@@ -206,14 +207,14 @@ function showCheckpointVictory(ride){
   clearTimeout(checkpointBannerTimer);checkpointBanner.hidden=false;
   checkpointBannerTimer=setTimeout(hideCheckpointVictory,3200);
 }
-function beginSkyway(){
+function beginSkyway(){if(residentSession)return;
   if(!skyway||airborne()||modalOpen())return;
   if(!skyRide&&Math.hypot(player.x-SKYWAY_GATE.x,player.z-SKYWAY_GATE.z)>SKYWAY_GATE.radius)return;
   if(!skyRide)skyReturn={...player};
   hideCheckpointVictory();bankSkyway();skyRide=createRide(Math.random,adventureUpgrades(adventure));releaseKeys();player.mode='cycling';player.bike=null;orbitYaw=0;player.pitch=.25;
   toast('Skyway Ride · Auto-pedal · A/D switch lanes · Space jump · Shield absorbs one hit');
 }
-function exitSkyway(){if(!skyRide)return;hideCheckpointVictory();bankSkyway();skyBest=Math.max(skyBest,skyRide.score);storage.set('skyway-best',skyBest);skyRide=null;Object.assign(player,skyReturn);skyReturn=null;world.cyclist.group.position.y=0;skyway.update(null,0);releaseKeys();refreshTravel();}
+function exitSkyway(){if(residentSession)return;if(!skyRide)return;hideCheckpointVictory();bankSkyway();skyBest=Math.max(skyBest,skyRide.score);storage.set('skyway-best',skyBest);skyRide=null;Object.assign(player,skyReturn);skyReturn=null;world.cyclist.group.position.y=0;skyway.update(null,0);releaseKeys();refreshTravel();}
 $('#skyway-start').onclick=beginSkyway;$('#skyway-exit').onclick=exitSkyway;
 skyHUD.querySelectorAll('[data-sky-key]').forEach(b=>b.onclick=()=>{if(skyRide)rideInput(skyRide,b.dataset.skyKey);});
 const savedDiscoveries=storage.get('discoveries');
@@ -435,6 +436,15 @@ function initialize(){
         if(!isUrban&&world.pickups?.collected.coin>previousCoins)progressAdventure({coins:adventure.coins+world.pickups.collected.coin-previousCoins});
 
       }
+      if(residentView){
+        const resident=residentView.snapshot;if(resident.player.look)characterLook=resident.player.look;
+        if(resident.player.paintColor!==undefined&&world.cyclist?.cycle){world.cyclist.cycle.paintColor=resident.player.paintColor;world.cyclist.cycle.frameMaterial.color.set(resident.player.paintColor);}
+        if(resident.arcade?.pickups&&world.pickups){const incoming=resident.arcade.pickups,key=incoming.items.map(i=>i.type).join(',');if(world.residentPickupKey!==key){for(const m of world.pickupDisplay.models)m.group.removeFromParent();Object.assign(world.pickups,incoming);world.pickupDisplay=new PickupDisplay(scene,world.pickups);world.residentPickupKey=key;}else Object.assign(world.pickups,incoming);}
+        if(resident.arcade?.combat&&world.combat)Object.assign(world.combat,resident.arcade.combat);
+        if(resident.life)world.lifeWorld?.update(resident.life,true);
+        if(resident.parcelQuest)world.questStage=resident.parcelQuest.stage;
+        if(skyway){skyway.group.visible=!!resident.skyway;if(resident.skyway)skyway.update(resident.skyway,elapsed);}
+      }
       if(world.cyclist?.applyLook&&world.cyclist.look!==characterLook){world.cyclist.applyLook(characterLook);characterLook=world.cyclist.look;}
       if(world.updateCombat(player,active&&!skyRide&&!residentSession?dt:0))toast(`Hit! Rival staggered · ${world.combat.hits} hits`);
       if(world.combat?.incoming)toast(world.combat.incoming);
@@ -444,7 +454,7 @@ function initialize(){
       const arrivalView=world.setLocalArrival(arrival,player);
       updateWelcome(active?dt:0);
       if(skyRide){world.cyclist.cycle.group.position.y=.015;world.cyclist.group.position.y=player.y;world.cyclist.cycle.group.rotateX(-player.slope);world.cyclist.cycle.group.rotateZ(-Math.max(-.16,Math.min(.16,skyRide.laneVelocity*.1)));}
-      if(skyway)skyway.group.visible=!!skyRide;
+      if(skyway)skyway.group.visible=!!(skyRide||residentView?.snapshot.skyway);
       if(spectatorCamera){spectatorCamera.update(arrivalView,arrival.phase);}else{
       // Orbit around the visible rider; the bike's heading is independent of the mouse.
       const insideHome=!isUrban&&player.x>14&&player.x<23.6&&player.z>-88&&player.z<-78;

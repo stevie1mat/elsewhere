@@ -1,3 +1,4 @@
+import {parseHumanCommand} from './human-command.js';
 import {createMacWorkerBroker,routeResidentClient} from './mac-worker.js';
 import {createMediaService} from './resident-media.js';
 import {validateObjects} from './object-perception.js';
@@ -102,6 +103,9 @@ export function createPrivateServer({code=process.env.PRIVATE_ACCESS_CODE||'2792
       if(url.pathname==='/api/resident/chat'&&req.method==='POST'){
         const input=await body(req);
         if(typeof input.message!=='string'||!input.message.trim()||input.message.length>1200){json(res,400,{error:'Enter a message of up to 1200 characters.'});return;}
+        if(parseHumanCommand(state,input.message.trim())){
+          try{const reply=await brain.chat(state,input.message.trim());save();void writeCloud();json(res,200,{reply,messages:state.messages});}catch(error){json(res,409,{error:error.message});}return;
+        }
         if(mac.enabled){
           if(state.paused){json(res,409,{error:'Game paused. Resume to chat.'});return;}
           if(localChat&&state.ai.chatTask?.status==='thinking'){if(localChat.message===input.message.trim()){json(res,202,{pending:true,jobId:localChat.id});return;}json(res,429,{error:'Another local chat is being processed.',retryAfterMs:2000});return;}

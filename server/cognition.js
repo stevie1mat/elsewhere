@@ -41,7 +41,7 @@ export function cachedMemory(s){
 }
 export function groundedRecall(s,message){
   // Action requests must reach the planner even if they also mention seeing/hearing.
-  if(/\b(search|play|listen|watch)\b|\buse\b.{0,40}\bphone\b/i.test(message))return null;
+  if(/\b(search|play|listen|watch|sit|sleep|stand|mount|dismount|collect|take|stop|cancel|eat|drink|run|jump|swim|ride|buy|deliver|choose|turn|scan)\b|\buse\b.{0,40}\bphone\b/i.test(message))return null;
   if(!/\b(see|saw|seen|hear|heard|smell|smelled|notice|noticed|observe|observed)\b/i.test(message)||/\b(go|walk|visit|head|take me)\b/i.test(message))return null;
   const earlier=/\b(earlier|before|previous|last)\b/i.test(message),observation=earlier?s.observations?.at(-1):null,p=observation||perception(s);
   const places=(p.nearbyPlaces||[]).map(x=>`${x.name} (${x.metres}m away)`).join(', ');

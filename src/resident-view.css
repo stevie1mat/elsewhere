@@ -26,3 +26,5 @@
 
 #ai-daily-usage{padding:16px;margin:16px 0;border:1px solid #8ae2b255;border-radius:14px;background:#8ae2b20b}#ai-daily-usage h3{margin:0 0 10px;color:#c7ebc5}#ai-daily-usage strong{font-size:18px}#ai-daily-usage p{font-size:12px;overflow-wrap:anywhere}#ai-daily-history{font-size:12px}
 #resident-ai-connection[data-state=attention] .ai-connection-dot{background:#e5c58e;box-shadow:0 0 9px #e5c58e55}
+
+.resident-command-controls{width:100%;margin-top:10px}.resident-command-controls summary{cursor:pointer;padding:8px 0}.resident-command-controls button{margin:3px;padding:8px 10px;font:inherit}.resident-command-controls p{font-size:12px;line-height:1.5;overflow-wrap:anywhere}

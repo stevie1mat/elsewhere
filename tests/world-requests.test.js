@@ -15,5 +15,5 @@ test('known abilities and places are not requested as missing; visual absence re
 });
 test('world request output is bounded and validated with the model decision',()=>{
  validateWorldRequests([request]);assert.throws(()=>validateWorldRequests([request,request]));assert.throws(()=>validateWorldRequests([{...request,reason:'a'.repeat(181)}]));
- const d=validateDecision({action:'rest',destination:'home',seconds:60,goal:'Relax',intention:'Rest a moment.',reply:'I have an idea.',assetRequests:[request]});assert.equal(d.assetRequests[0].name,'Read a book');
+ const d=validateDecision({action:'rest',destination:'here',seconds:60,goal:'Relax',intention:'Rest a moment.',reply:'I have an idea.',assetRequests:[request]});assert.equal(d.assetRequests[0].name,'Read a book');
 });

@@ -1,3 +1,4 @@
+import {SERVICES} from '../server/shared/services.js';
 import {SettlingWorld} from './settling-world.js';
 import {WelcomeWorld,buildFirstHome} from './welcome-world.js';
 import {buildPortoBuilding} from './architecture.js';
@@ -350,7 +351,12 @@ export class World {
       this.box(.08,.42,.12,x+.19,.32,z-.62,this.m.chrome);
     }
     this.building(14, -48, 20, 23, 10.7, this.m.sage, 'LIVRARIA');
-    if(this.location==='porto')buildFirstHome(this);
+    if(this.location==='porto'){buildFirstHome(this);
+      for(const service of SERVICES){this.interactionObjects?.push({...service,approach:{...service.approach}});const x=service.x+1.2,z=service.z;this.box(.65,.06,.65,x,.85,z,this.m.wood);this.box(.12,.85,.12,x,.425,z,this.m.wood);
+        const material=new T.MeshStandardMaterial({color:service.type==='drink'?0xa9dae3:0xe9c48e,roughness:.5});
+        const prop=new T.Mesh(service.type==='drink'?new T.CylinderGeometry(.1,.08,.23,12):new T.SphereGeometry(.18,12,8,0,Math.PI*2,0,Math.PI/2),material);prop.position.set(x,1,z);this.scene.add(prop);
+        this.sign(service.type==='drink'?'WATER · FREE':'MEAL · €4',x,1.5,z,.95,.25);
+      }}
     else this.building(11, -83, 25, 22, 17.3, this.m.cream, 'PORTO SOL');
     this.building(9, -118, 27, 18, 14, this.m.blue, 'ATELIER');
     this.building(12, 77, 22, 31, 14, this.m.peach, 'MERCADO');

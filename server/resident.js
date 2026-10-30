@@ -1,3 +1,6 @@
+import {ACTIVITY_ACTIONS} from './action-catalog.js';
+import {applyCommand,stepCommands,dismountForAction,stopBody} from './resident-commands.js';
+import {stepPlayer} from './shared/movement.js';
 import {beginInteraction,finishInteraction} from './interaction-skills.js';
 import {executionGap} from './capability-feedback.js';
 import {invalidatePlan} from './self-plan.js';
@@ -12,8 +15,8 @@ export function remember(s,message,now) {
   s.events.push({at:now,message});s.events=s.events.slice(-500);
 }
 // One-metre A* grid fits the guesthouse doorway; a two-metre grid misses it.
-export function residentRoute(start,target,obstacles,goalRadius=2) {
-  const clear=(x,z)=>canOccupy(x,z,obstacles,.6);
+export function residentRoute(start,target,obstacles,goalRadius=2,bodyRadius=.6) {
+  const clear=(x,z)=>canOccupy(x,z,obstacles,bodyRadius);
   const edge=(a,b)=>[.25,.5,.75,1].every(t=>clear(a.x+(b.x-a.x)*t,a.z+(b.z-a.z)*t));
   const key=(x,z)=>`${x},${z}`,heap=[],parents=new Map(),costs=new Map();
   const push=node=>{heap.push(node);let i=heap.length-1;while(i>0){const p=(i-1)>>1;if(heap[p].f<=node.f)break;heap[i]=heap[p];i=p;}heap[i]=node;};
@@ -33,7 +36,7 @@ export function residentRoute(start,target,obstacles,goalRadius=2) {
     }
     for(const [dx,dz] of [[0,-1],[-1,0],[1,0],[0,1]]) {
       const x=p.x+dx,z=p.z+dz,k=key(x,z),g=p.g+1;
-      if(x<PORTO_BOUNDS.minX||x>PORTO_BOUNDS.maxX||z<PORTO_BOUNDS.minZ||z>PORTO_BOUNDS.maxZ||g>=(costs.get(k)??Infinity)||!edge(p,{x,z}))continue;
+      if(x<PORTO_BOUNDS.minX||x>117||z<PORTO_BOUNDS.minZ||z>PORTO_BOUNDS.maxZ||g>=(costs.get(k)??Infinity)||!edge(p,{x,z}))continue;
       costs.set(k,g);parents.set(k,pk);push({x,z,g,f:g+heuristic(x,z)});
     }
   }
@@ -41,6 +44,8 @@ export function residentRoute(start,target,obstacles,goalRadius=2) {
 }
 export function applyResidentDecision(s,decision,now=Date.now()){
   ensureMind(s);
+  const command=applyCommand(s,decision,now,residentRoute);if(command)return command;
+  s.awaitingInstruction=false;
   if(decision.action==='interact'||decision.action==='sleep'){
     const object=decision.action==='sleep'?(s.objects||[]).find(o=>o.type==='bed'):(s.objects||[]).find(o=>o.id===decision.objectId);
     const verb=decision.action==='sleep'?'lie_down':decision.verb;
@@ -48,36 +53,41 @@ export function applyResidentDecision(s,decision,now=Date.now()){
       const message='That usable object or affordance is unavailable. Inspect nearby objects or request the missing capability.';
       s.executionFeedback??=[];s.executionFeedback.push({at:now,action:decision.action,status:'blocked',message,source:'object registry'});s.executionFeedback=s.executionFeedback.slice(-10);return {error:message};
     }
+    const dismountError=dismountForAction(s,now);if(dismountError)return {error:dismountError};
     const start=s.player.interactionPose?.exit||s.player;
     const route=residentRoute(start,object.approach,s.obstacles, .8);
     if(!route.length)return {error:`No safe route to the approach slot for ${object.name}.`};
     if(s.player.phone){delete s.player.phone;if(s.media){s.media.endedAt=now;s.media.playback='stopped';}}
-    finishInteraction(s,now,false);
-    s.route=route;s.routeIndex=0;s.destination=object.name;s.rest=0;s.activity=null;s.activityOnArrival=null;
+    stopBody(s,now);
+    s.routeMode='walk';s.route=route;s.routeIndex=0;s.destination=object.name;s.rest=0;s.activity=null;s.activityOnArrival=null;
     s.pendingInteraction={objectId:object.id,verb,seconds:decision.seconds,intention:decision.intention};s.thought=decision.intention;return {started:true};
   }
+  if(['rest','observe','reflect','exercise','phone'].includes(decision.action)&&decision.destination&&decision.destination!=='here')return {error:'Local actions require destination=here; visit the place first.'};
   const destination=LANDMARKS.find(p=>p.id===activityDestination(decision));
   const travel=decision.action==='visit'||['sleep','eat','work','collect_bicycle'].includes(decision.action);
   if(!destination&&(travel||decision.destination!=='here'))return {error:'I do not know that place.'};
   if(decision.action==='eat'&&s.wallet<4)return {error:'I need €4 for a meal. I should earn some money first.'};
   if(decision.action==='eat'){const gap=executionGap(s,decision,now);return {error:gap.message};}
   if(travel&&Math.hypot(s.player.x-destination.x,s.player.z-destination.z)>2){
-    const route=residentRoute(s.player.interactionPose?.exit||s.player,destination,s.obstacles);
+    const route=residentRoute(s.player.interactionPose?.exit||s.player,destination,s.obstacles,2,s.player.mode==='cycling'?.95:.6);
     if(!route.length)return {error:`I couldn't find a clear walking route to ${destination.name}. I'll keep my current plan for now.`};
     if(s.player.phone){delete s.player.phone;if(s.media){s.media.endedAt=now;s.media.playback='stopped';}}
-    finishInteraction(s,now,false);delete s.pendingInteraction;
+    stopBody(s,now);s.routeMode=s.player.mode==='cycling'?'ride':'walk';
     s.route=route;s.routeIndex=0;s.destination=destination.name;s.rest=0;s.activity=null;s.activityOnArrival={...decision,destination:destination.id};s.thought=decision.intention;return {started:true};
   }
-  finishInteraction(s,now,false);delete s.pendingInteraction;
+  stopBody(s,now);
   s.route=[];s.routeIndex=0;s.activityOnArrival=null;
   return startActivity(s,decision,travel?destination:null,now);
 }
 const visits=['home','cafe','garden','bikes','home','south'];
 export function stepResident(s,dt,now=Date.now()) {
-  if(s.paused||s.ai&&s.ai.connected!==true){s.player.speed=0;s.player.moving=false;return;}
+  const manualActive=s.manualCommand&&(s.route.length||s.rest>0||s.motionCommand||s.skyway||s.settling||s.pendingDecision);
+  if(s.manualCommand&&!manualActive)s.manualCommand=false;
+  if(s.paused||s.ai&&s.ai.connected!==true&&!manualActive){s.player.speed=0;s.player.moving=false;return;}
   if(!s.obstacles)return;
-  const p=s.player,clear=(x,z)=>canOccupy(x,z,s.obstacles,.6);
-  s.updatedAt=now;ensureMind(s);if(s.arrival.phase==='landed'&&s.activity?.kind!=='eat'&&(s.activity?.kind!=='sleep'||p.interactionPose))stepMind(s,dt);
+  dt=Math.max(0,Math.min(1,dt));
+  const p=s.player,clear=(x,z)=>canOccupy(x,z,s.obstacles,p.mode==='cycling'?.95:.6);
+  s.updatedAt=now;ensureMind(s);if(s.arrival.phase==='landed'&&(s.activity?.kind!=='eat'||s.activity?.executionMode==='service_consumption')&&(s.activity?.kind!=='sleep'||p.interactionPose))stepMind(s,dt);
   if(s.arrival.phase!=='landed') {
     stepArrival(s.arrival,dt,{player:p,canLand:clear});
     if(s.arrival.phase==='balloon'&&s.arrival.elapsed>=JOURNEY_SECONDS){
@@ -86,7 +96,9 @@ export function stepResident(s,dt,now=Date.now()) {
     if(s.arrival.phase==='landed')remember(s,'Landed in Porto Sol. Next: find Casa Aurora.',now);
     return;
   }
-  if(s.activity?.kind==='eat'){const gap=executionGap(s,{action:'eat'},now);s.activity=null;s.rest=0;s.thought=gap.message;invalidatePlan(s,gap.message);remember(s,gap.message,now);return;}
+  if(stepCommands(s,dt,now))return;
+  if(s.awaitingInstruction){p.moving=false;p.speed=0;return;}
+  if(s.activity?.kind==='eat'&&s.activity?.executionMode!=='service_consumption'){const gap=executionGap(s,{action:'eat'},now);s.activity=null;s.rest=0;s.thought=gap.message;invalidatePlan(s,gap.message);remember(s,gap.message,now);return;}
   if(s.activity?.kind==='sleep'&&!p.interactionPose){const gap=executionGap(s,{action:'sleep',intention:''},now);s.activity=null;s.rest=0;s.thought=gap.message;invalidatePlan(s,gap.message);remember(s,gap.message,now);return;}
   if(s.rest>0){s.rest=Math.max(0,s.rest-dt);if(s.activity)s.activity.remaining=s.rest;p.moving=false;p.speed=0;if(s.rest===0){const event=finishActivity(s,now);if(event)remember(s,event,now);finishInteraction(s,now);}return;}
   if(!s.route.length){
@@ -95,23 +107,32 @@ export function stepResident(s,dt,now=Date.now()) {
       decision=s.pendingDecision;
       if(!decision){p.speed=0;p.moving=false;return;}
       delete s.pendingDecision;
-      if(decision.action!=='visit'){const result=applyResidentDecision(s,decision,now);if(result.error){invalidatePlan(s,result.error);s.thought=result.error;remember(s,result.error,now);s.rest=10;}if(!s.route.length)return;}
+      {const result=applyResidentDecision(s,decision,now);if(result.error){invalidatePlan(s,result.error);s.thought=result.error;remember(s,result.error,now);s.rest=10;}if(!s.route.length)return;}
     }
     const destination=LANDMARKS.find(l=>l.id===(decision?activityDestination(decision):visits[s.visit%visits.length]));
     if(!s.route.length){s.route=residentRoute(p,destination,s.obstacles);s.routeIndex=0;s.destination=destination.name;s.activityOnArrival=decision||null;}
     if(!s.route.length){invalidatePlan(s,'No walkable route to '+destination.name);s.thought=`I could not find a safe route to ${destination.name}. I'll try somewhere else.`;remember(s,s.thought,now);s.visit++;s.rest=10;return;}
     s.thought=decision?.intention||`I'm walking to ${destination.name}.`;remember(s,`Set off for ${destination.name}.`,now);
   }
-  let budget=dt*1.65;
+  const travelSpeed=p.mode==='cycling'?6:s.routeMode==='run'?4.8:1.65;
+  let budget=dt*travelSpeed;
   while(budget>0&&s.routeIndex<s.route.length){
     const next=s.route[s.routeIndex],dx=next.x-p.x,dz=next.z-p.z,d=Math.hypot(dx,dz);
     if(d<.001){s.routeIndex++;continue;}
     const distance=Math.min(budget,d),x=p.x+dx/d*distance,z=p.z+dz/d*distance;
-    if(!clear(x,z)){delete s.pendingInteraction;invalidatePlan(s,'Walking route became blocked.');s.route=[];s.rest=3;p.moving=false;p.speed=0;return;}
-    p.x=x;p.z=z;p.y=groundElevation(x,z);p.yaw=Math.atan2(dx,-dz);p.walked+=distance;p.speed=1.65;p.moving=true;budget-=distance;
+    if(!clear(x,z)){delete s.pendingInteraction;delete s.pendingCommand;if(s.commandTask){s.commandTask.status='blocked';s.commandTask.reason='Route blocked.';}invalidatePlan(s,'Walking route became blocked.');s.route=[];s.rest=3;p.moving=false;p.speed=0;return;}
+    if(p.mode==='cycling'){
+      let remaining=distance;const steps=Math.max(1,Math.ceil(dt/.05)),h=dt/steps;p.yaw=Math.atan2(dx,-dz);
+      for(let i=0;i<steps&&remaining>0;i++){const oldX=p.x,oldZ=p.z;const time=Math.min(h,remaining/Math.max(.2,p.speed+.2));stepPlayer(p,{forward:1,right:0},time,s.obstacles);const moved=Math.hypot(p.x-oldX,p.z-oldZ);remaining-=moved;}
+      const reached=Math.hypot(next.x-p.x,next.z-p.z);if(reached<.12){p.x=next.x;p.z=next.z;s.routeIndex++;}budget=0;
+      if(!p.moving){s.route=[];s.rest=3;invalidatePlan(s,'Bicycle route blocked.');return;}
+      break;
+    }
+    p.x=x;p.z=z;p.y=groundElevation(x,z);p.yaw=Math.atan2(dx,-dz);p.walked+=distance;p.speed=travelSpeed;p.moving=true;budget-=distance;
     if(distance===d)s.routeIndex++;
   }
   if(s.routeIndex===s.route.length){
+    if(s.pendingCommand){const command=s.pendingCommand;delete s.pendingCommand;s.route=[];p.speed=0;p.moving=false;const result=applyCommand(s,command,now,residentRoute);if(result?.error){s.thought=result.error;invalidatePlan(s,result.error);remember(s,result.error,now);}return;}
     if(s.pendingInteraction){
       const d=s.pendingInteraction,object=(s.objects||[]).find(o=>o.id===d.objectId);delete s.pendingInteraction;s.route=[];p.speed=0;p.moving=false;
       const result=object?beginInteraction(s,object,d.verb,d.seconds,now):{error:'The target object is no longer available.'};
@@ -126,4 +147,4 @@ export function stepResident(s,dt,now=Date.now()) {
     if(result.error){invalidatePlan(s,result.error);s.thought=result.error;s.rest=10;remember(s,result.error,now);}else if(next.action==='collect_bicycle')remember(s,'Collected and mounted a loan bicycle at Porto Cycle House.',now);s.route=[];s.visit++;p.moving=false;p.speed=0;
   }
 }
-export function residentSnapshot(s){const {obstacles,route,...snapshot}=s;return {...snapshot,initialized:!!obstacles,mode:s.ai?(s.ai.connected===true?'ai':'paused'):'routine'};}
+export function residentSnapshot(s){const {obstacles,route,...snapshot}=s;return {...snapshot,commandVersion:2,capabilities:ACTIVITY_ACTIONS,initialized:!!obstacles,mode:s.ai?(s.ai.connected===true?'ai':'paused'):'routine'};}

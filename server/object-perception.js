@@ -1,6 +1,6 @@
 import {Vision,Vector3} from './vendor/yuka.module.js';
 export function validateObjects(objects){
-  return Array.isArray(objects)&&objects.length<=1000&&new Set(objects.map(o=>o?.id)).size===objects.length&&objects.every(o=>o&&typeof o.id==='string'&&o.id.length>0&&o.id.length<=120&&typeof o.name==='string'&&o.name.length<=100&&['bench','chair','bed','food'].includes(o.type)&&['x','y','z','yaw'].every(k=>Number.isFinite(o[k])&&Math.abs(o[k])<10000)&&o.approach&&['x','z'].every(k=>Number.isFinite(o.approach[k])&&Math.abs(o.approach[k])<10000)&&Array.isArray(o.affordances)&&o.affordances.every(a=>['sit','lie_down'].includes(a)));
+  return Array.isArray(objects)&&objects.length<=1000&&new Set(objects.map(o=>o?.id)).size===objects.length&&objects.every(o=>o&&typeof o.id==='string'&&o.id.length>0&&o.id.length<=120&&typeof o.name==='string'&&o.name.length<=100&&['bench','chair','bed','food','drink'].includes(o.type)&&['x','y','z','yaw'].every(k=>Number.isFinite(o[k])&&Math.abs(o[k])<10000)&&o.approach&&['x','z'].every(k=>Number.isFinite(o.approach[k])&&Math.abs(o.approach[k])<10000)&&Array.isArray(o.affordances)&&o.affordances.every(a=>['sit','lie_down','eat','drink'].includes(a)));
 }
 export function perceivedObjects(s){
   const owner={getWorldPosition:v=>v.set(s.player.x,1.6,s.player.z),getWorldDirection:v=>v.set(Math.sin(s.player.yaw||0),0,-Math.cos(s.player.yaw||0))};

@@ -1,4 +1,5 @@
 export function beginInteraction(s,object,verb,seconds,now){
+  if(s.player.mode==='cycling')return {error:'Dismount before using furniture.'};
   const pose=verb==='sit'?'sit':verb==='lie_down'?'lie_down':null;
   if(!pose||!object.affordances.includes(verb))return {error:`${object.name} does not support ${verb}.`};
   s.player.interactionPose={groundY:s.player.y||0,kind:pose,objectId:object.id,x:object.x,y:object.y,z:object.z,yaw:object.yaw,startedAt:now,exit:{x:s.player.x,z:s.player.z}};

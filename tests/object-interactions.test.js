@@ -33,7 +33,7 @@ test('unsupported affordances preserve ongoing action; interruption is not a lea
  const s=person();applyResidentDecision(s,{action:'interact',objectId:'seat',verb:'sit',seconds:60,intention:'Sit'},0);advance(s,3);
  assert.ok(applyResidentDecision(s,{action:'interact',objectId:'seat',verb:'lie_down'},1000).error);assert.equal(s.player.interactionPose.kind,'sit');
  assert.match(applyResidentDecision(s,{action:'eat',destination:'cafe',seconds:30,intention:'Eat'},1500).error,/No usable food/);assert.equal(s.player.interactionPose.kind,'sit');
- applyResidentDecision(s,{action:'observe',destination:'garden',seconds:15,intention:'Observe'},2000);assert.equal(s.player.interactionPose,undefined);assert.equal(s.skills['bench:sit'].successes,0);assert.equal(s.skills['bench:sit'].interruptions,1);
+ applyResidentDecision(s,{action:'observe',destination:'here',seconds:15,intention:'Observe'},2000);assert.equal(s.player.interactionPose,undefined);assert.equal(s.skills['bench:sit'].successes,0);assert.equal(s.skills['bench:sit'].interruptions,1);
 });
 test('real rig seats hips at seat height and lies horizontally, restoring standing pose afterwards',async()=>{
  const data=await readFile(new URL('../public/assets/people/traveler-man.glb',import.meta.url));const gltf=await new GLTFLoader().parseAsync(data.buffer.slice(data.byteOffset,data.byteOffset+data.byteLength),'');

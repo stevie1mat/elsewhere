@@ -1,3 +1,4 @@
+import {requestedPlace} from './human-command.js';
 import {LANDMARKS} from './shared/movement.js';
 
 // Keep explicit human constraints visible even after conversation compaction.
@@ -7,10 +8,10 @@ export function humanActionConstraints(messages=[],message=''){
   if(/\b(?:don't|dont|do not|stop|no)\b[^.!?]{0,60}\b(?:youtube|phone|online)\b/i.test(text))phoneAllowed=false;
   else if(/\b(?:use|search|play|watch|listen|open)\b[^.!?]{0,60}\b(?:youtube|phone|online|video|music)\b/i.test(text))phoneAllowed=true;
  }
- const travel=/\b(?:walk|go|head|visit|find|look for|get a|take|collect|rent)\b/i.test(message)&&!/^\s*(?:where|how|why|what)\b/i.test(message)&&!/\b(?:don't|dont|do not)\s+(?:walk|go|visit)\b/i.test(message);
- const destination=travel?LANDMARKS.find(p=>message.toLowerCase().includes(p.name.toLowerCase())||
+ const travel=/\b(?:walk|go|head|visit|find|look for|get a|take|collect|pick up|rent)\b/i.test(message)&&!/^\s*(?:where|how|why|what)\b/i.test(message)&&!/\b(?:don't|dont|do not)\s+(?:walk|go|visit)\b/i.test(message);
+ const destination=travel?(requestedPlace(message)||LANDMARKS.find(p=>message.toLowerCase().includes(p.name.toLowerCase())||
   p.id==='bikes'&&/\b(?:bike|bikes|bicycle|bicycles|cycle shop)\b/i.test(message)||
-  p.id==='coast'&&/\b(?:beach|coast)\b/i.test(message)):null;
+  p.id==='coast'&&/\b(?:beach|coast)\b/i.test(message))):null;
  const collect=destination?.id==='bikes'&&/\b(?:get|take|collect|rent|pick up)\b/i.test(message);
  return {phoneAllowed,...(collect?{travelAction:'collect_bicycle'}:{}),...(destination?{travelDestination:destination.id}:{})};
 }
@@ -19,7 +20,7 @@ export function humanActionIssue(d,constraints,{chat=false}={}){
  if(!constraints.phoneAllowed&&steps.some(step=>step.action==='phone'))return 'The human explicitly prohibited phone/YouTube searches. Choose an available physical action; visit a listed landmark to walk there. Do not search videos for in-world places.';
  if(chat&&constraints.travelDestination&&!/\b(?:cannot|can't|unable|decline)\b/i.test(d.reply||'')){
   if(d.changePlan!==true)return 'Accepting this travel request requires changePlan=true so the character actually moves.';
-  if(d.action!==(constraints.travelAction||'visit')||d.destination!==constraints.travelDestination)return `The accepted travel request requires action=${constraints.travelAction||'visit'}, destination=${constraints.travelDestination} now. A local action or a promised later step does not walk there.`;
+  if(!(constraints.travelAction?d.action===constraints.travelAction:['visit','walk','run','ride'].includes(d.action))||d.destination!==constraints.travelDestination)return `The accepted travel request requires action=${constraints.travelAction||'visit'}, destination=${constraints.travelDestination} now. A local action or a promised later step does not walk there.`;
  }
  return null;
 }

@@ -3,12 +3,8 @@ import {groundElevation} from './movement.js';
 import * as T from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 
-export const OUTSKIRT_ROADS=[
-  {x:-280,z:-20,w:12,d:740},{x:-410,z:-20,w:12,d:740},
-  {x:-208,z:-330,w:540,d:12},{x:-208,z:280,w:540,d:12},
-  {x:-350,z:-158,w:240,d:14},{x:-350,z:136,w:240,d:14},
-  {x:-24,z:-325,w:15,d:150},{x:-24,z:275,w:15,d:170},
-];
+import {OUTSKIRT_ROADS} from '../server/shared/roads.js';
+export {OUTSKIRT_ROADS};
 export function expandOutskirts(w){
   // New land borders the old city without covering its streets or gardens.
   for(const [x,z,width,depth] of [[-360,-20,240,760],[-88,-330,304,140],[-88,280,304,160]]){
