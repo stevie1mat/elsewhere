@@ -356,3 +356,30 @@ packages. Existing Render settings with Root Directory `server`, Dockerfile
 `Dockerfile`, and context `.` can stay as they are. The same Dockerfile also
 accepts repository-root context with Dockerfile `server/Dockerfile`. Local
 `npm start` still builds and serves the whole game.
+
+
+## Supabase persistent life
+
+Migration: `supabase/migrations/202610300001_resident_storage.sql` creates
+`resident_saves`, `resident_events`, `resident_messages` and the atomic
+`save_resident` RPC. RLS is enabled; browser roles cannot access these tables.
+The Render server uses `SUPABASE_URL` and `SUPABASE_SECRET_KEY` (or the legacy
+`SUPABASE_SERVICE_ROLE_KEY`). Never prefix these keys with VITE_ or commit them.
+`RESIDENT_ID` defaults to `porto-main`; run only one simulation for that ID.
+
+Before simulation starts, the server loads the cloud checkpoint. Existing local
+progress migrates automatically when no newer cloud checkpoint exists. It saves
+the full checkpoint every five seconds and on graceful shutdown, retaining an
+atomic local backup. Events and conversations append idempotently in the same
+transaction and remain archived after the in-memory history limits are reached.
+An older checkpoint cannot replace a newer one. During an outage, an existing
+local life keeps running; cloud saves retry. Without either a cloud load or an
+existing local save, the server waits rather than creating a replacement life.
+The brain view and authenticated `/api/resident` response expose cloud-save
+status. Supabase persists the life across Render redeployments; it does not keep
+a sleeping Render instance running.
+
+`node scripts/check-supabase.js` verifies cloud access. The one-time
+`scripts/migrate-render-save.js` copies the current hosted snapshot into an empty
+cloud slot before redeployment; it reloads city geometry and replans the current
+walk after restore because the public snapshot excludes routes/obstacles.

@@ -19,7 +19,7 @@ export function mountResidentView({initial,player,arrival,welcome,getWorld}) {
       <g class="brain-node" data-node="action"><circle cx="554" cy="116" r="24"/><text x="554" y="121">05</text><text class="brain-label" x="554" y="160">Action</text></g>
     </svg>
     <p class="brain-caption">Live decision map · perceptions, remembered events and chosen actions. Model weights and neural activations are not exposed by the API.</p>
-    <div class="brain-facts"><article><small>PERCEPTION</small><p id="brain-perception"></p></article><article><small>CURRENT GOAL</small><p id="brain-goal"></p></article><article><small>PLANNER</small><p id="brain-planner"></p></article><article><small>CURRENT INTENTION</small><p id="resident-goal"></p></article></div>
+    <div class="brain-facts"><article><small>PERCEPTION</small><p id="brain-perception"></p></article><article><small>CURRENT GOAL</small><p id="brain-goal"></p></article><article><small>PLANNER</small><p id="brain-planner"></p></article><article><small>CURRENT INTENTION</small><p id="resident-goal"></p></article><article><small>MEMORY STORAGE</small><p id="brain-storage"></p></article></div>
     <details><summary id="brain-memory-label">Recent memories</summary><ol id="resident-history"></ol></details>
     <details id="resident-chat" open><summary>Talk to your resident</summary><div id="resident-messages" aria-live="polite"></div><form id="resident-chat-form"><label for="resident-message">Your message</label><textarea id="resident-message" rows="2" maxlength="1200" placeholder="What are you planning?" required></textarea><button type="submit">Send</button><p id="resident-chat-error" role="alert"></p></form></details>`;
   const setOpen=open=>{panel.hidden=!open;toggle.setAttribute('aria-expanded',String(open));if(open)panel.querySelector('#resident-brain-close').focus();else toggle.focus();};
@@ -35,6 +35,7 @@ export function mountResidentView({initial,player,arrival,welcome,getWorld}) {
     document.querySelector('#arrival-detail').textContent=next.thought;
     panel.querySelector('#resident-goal').textContent=next.thought;bubble.textContent='☁ '+next.thought;
     panel.querySelector('#resident-status').textContent=next.saveError?'Save failed — progress is at risk.':!next.initialized?'Preparing your city…':next.ai?.error?next.ai.error:next.mode==='ai'?(next.ai.status==='thinking'?'Choosing my next activity…':`${next.ai.provider||'AI'} connected · life saved on server`):'Routine mode · AI not configured';
+    panel.querySelector('#brain-storage').textContent=next.storage?.provider==='supabase'?(next.storage.error?'Local backup · cloud retry pending':next.storage.lastCloudSave?'Saved to Supabase · '+new Date(next.storage.lastCloudSave).toLocaleTimeString():'Connecting to Supabase…'):'Local server save';
     panel.querySelector('#brain-perception').textContent=`${next.arrival.phase==='landed'?'On foot':next.arrival.phase} · x ${Math.round(next.player.x)}, z ${Math.round(next.player.z)}`;
     panel.querySelector('#brain-goal').textContent=next.ai?.goal||'Arrive and find a place to call home.';
     panel.querySelector('#brain-planner').textContent=next.ai?.enabled?`${next.ai.provider||'AI'} · ${next.ai.model||'Connecting'}${next.ai.fallback?' · local fallback active':''}`:'Local routine';
