@@ -23,3 +23,5 @@ Only one trial/model request runs at a time. Cancel stops the practice simulatio
 ## Verification
 
 `tests/training.test.js` checks physical execution, isolation, negative cases, truthful claims, cancellation, skill promotion and phrase-shortcut bypass using explicitly injected fixtures. `tests/training-http.test.js` checks authentication and the existing server routes. Fixture passes verify engineering behavior, not real-model task competence; real model scores are collected when using the page.
+
+The Mac model uses a two-field training interface (`task`, `reply`): `eat_seated`, `dismount`, `inspect`, or `stop`. An explicit adapter maps the selected task to existing validated commands; executor preconditions still apply. Public reports include the chosen task when available. Local prompt tests verify that command guidance and correction feedback survive compaction. Instant command results are observed immediately. Restart the Mac worker after updating its local-client code.

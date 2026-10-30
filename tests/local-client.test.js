@@ -16,3 +16,8 @@ test('explicit human seat task constrains execution fields while autonomous choi
  const schema=calls[0].response_format.json_schema.schema;assert.deepEqual(schema.properties.action.enum,['interact']);assert.deepEqual(schema.properties.objectId.enum,['bench-a','bench-b']);assert.deepEqual(schema.properties.objective.properties.amount.enum,[10]);
  await c.complete(context,'Choose your next autonomous activity.');assert.ok(calls[1].response_format.json_schema.schema.properties.action.enum.includes('phone'));assert.ok(calls[1].response_format.json_schema.schema.properties.action.enum.includes('work'));
 });
+test('training sends a small task schema and retains correction evidence in the actual local prompt',async()=>{
+ let request;const c=createLocalClient({fetchImpl:async(u,o)=>{request=JSON.parse(o.body);return Response.json({choices:[{finish_reason:'stop',text:JSON.stringify({task:'eat_seated',reply:'I will collect the meal and eat seated.'})}]});}});
+ const result=await c.complete({trainingLab:true,capabilities:['eat','dismount','scan','stop'],executionFeedback:[{message:'The previous visit did not eat.'}],trainingCommands:{eat:{parameters:{value:'seated'}}}},'Have a meal.');
+ assert.deepEqual(request.response_format.json_schema.schema.properties.task.enum,['eat_seated','dismount','inspect','stop']);assert.match(request.prompt,/previous visit did not eat/);assert.match(request.prompt,/trainingCommands/);assert.equal(result.action,'eat');assert.equal(result.parameters.value,'seated');assert.equal(result.changePlan,true);assert.equal(result.objective.metric,'none');assert.equal(result.plannerTask,'eat_seated');
+});

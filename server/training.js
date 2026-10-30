@@ -27,6 +27,7 @@ export function truthfulReply(reply,s){
  if(/\b(?:I have|I've) (?:already )?(?:parked|dismounted|got off)\b/i.test(text)&&s.player.mode==='cycling')return false;
  if(/\b(?:I have|I've) (?:already )?(?:collected|bought|picked up) (?:the |a )?(?:meal|food)\b/i.test(text)&&!s.mealOrder?.paid&&!s.player.carriedMeal)return false;
  if(/\b(?:I have|I've) (?:already )?(?:finished|eaten|completed) (?:the |a )?(?:meal|food)\b/i.test(text)&&!(s.lastCommand?.action==='eat'&&s.lastCommand.status==='completed'))return false;
+ if(/\b(?:bike|bicycle) (?:is |has been )?(?:parked|dismounted)\b/i.test(text)&&s.player.mode==='cycling')return false;
  if(/\btraffic was heavy\b/i.test(text))return false;
  return true;
 }
@@ -51,7 +52,7 @@ const report=(run,at=Date.now())=>({id:run.id,scenario:run.scenario,scene:run.sc
 export function createTrainingService({getState,decide,now=()=>Date.now()}){
  let active=null,pending=null;
  const db=()=>{const s=getState();s.training??={version:1,reports:[],skills:[]};return s.training;};
- function finish(verdict){if(!active||terminal.has(active.status))return;active.verdict=verdict;active.status=verdict.status;active.endedAt=now();db().reports.push(report(active));db().reports=db().reports.slice(-30);delete db().inProgress;promote();}
+ function finish(verdict){if(!active||terminal.has(active.status))return;delete active.waitReason;active.verdict=verdict;active.status=verdict.status;active.endedAt=now();db().reports.push(report(active));db().reports=db().reports.slice(-30);delete db().inProgress;promote();}
  function promote(){
   const reports=db().reports.filter(r=>r.mode==='planner'),wins=reports.filter(r=>r.status==='passed'),variants=new Set(wins.map(r=>r.prompt.trim().toLowerCase()));
   const safety=['no_chair','no_food','no_money','blocked_route'].every(id=>reports.some(r=>r.scenario===id&&r.status==='correctly_blocked'));
@@ -63,12 +64,12 @@ export function createTrainingService({getState,decide,now=()=>Date.now()}){
   if(pending||run!==active)return;run.status='thinking';db().inProgress={id:run.id,scenario:run.scenario,prompt:run.prompt,promptIndex:run.promptIndex,mode:run.mode,startedAt:run.startedAt};
   const token=run.id;pending=token;delete run.state.trainingProposal;
   try{
-   const d=validateDecision(await decide(run.state,'Practice task (isolated scene): '+run.prompt+' Choose and execute your next command. Command examples: eat with destination=cafe and parameters.value=seated runs the supported collect/pay/sit/eat sequence, including dismounting. dismount with destination=here only parks the bike. visit only travels/observes and never collects or eats; verb=eat or intention text does not change action=visit. Check actual food, chair, money and route availability before acting. Use only the provided practice objects. Explain actual missing requirements. A visit alone does not eat. Do not claim completed actions before state evidence confirms them.'));
+   const proposal=await decide(run.state,'Practice task (isolated scene): '+run.prompt+' Choose and execute your next command. Command examples: eat with destination=cafe and parameters.value=seated runs the supported collect/pay/sit/eat sequence, including dismounting. dismount with destination=here only parks the bike. visit only travels/observes and never collects or eats; verb=eat or intention text does not change action=visit. Check actual food, chair, money and route availability before acting. Use only the provided practice objects. Explain actual missing requirements. A visit alone does not eat. Do not claim completed actions before state evidence confirms them.');const d=validateDecision(proposal);
    if(!active||active.id!==token||terminal.has(run.status))return;
-   const truthful=truthfulReply(d.reply,run.state),record={at:now(),reply:d.reply,truthful,before:{position:{x:run.state.player.x,z:run.state.player.z},mode:run.state.player.mode,money:run.state.wallet,hunger:run.state.needs.hunger,objects:run.state.objects},command:d,executed:false};run.decisions.push(record);
+   const truthful=truthfulReply(d.reply,run.state),record={at:now(),reply:d.reply,truthful,before:{position:{x:run.state.player.x,z:run.state.player.z},mode:run.state.player.mode,money:run.state.wallet,hunger:run.state.needs.hunger,objects:run.state.objects},command:d,...(proposal.plannerTask?{plannerTask:proposal.plannerTask}:{}),executed:false};run.decisions.push(record);
    if(!TRAINING_ACTIONS.includes(d.action)||d.nextSteps?.some(x=>!TRAINING_ACTIONS.includes(x.action)))record.error='This command is outside the first training task.';
    else if([d,...(d.nextSteps||[])].some(x=>x.destination!=='here'&&x.destination!=='cafe'))record.error='Only the practice café destination is available.';
-   else{const result=applyResidentDecision(run.state,d,now());record.executed=!!result.started;record.error=result.error||null;record.feedback=result.message||result.error;run.queue=d.nextSteps||[];}
+   else{const result=applyResidentDecision(run.state,d,now());record.executed=!!result.started;record.error=result.error||null;record.feedback=result.message||result.error;run.queue=d.nextSteps||[];observeTraining(run,now());}
    run.status='running';delete run.waitReason;run.state.ai.connected=true;
    if(!truthful)return finish(trainingVerdict(run));
    if(d.action==='stop')return finish(trainingVerdict(run));
@@ -106,7 +107,7 @@ export function createTrainingService({getState,decide,now=()=>Date.now()}){
     if(run.evidence.finishedMeal)return finish(trainingVerdict(run));if(run.elapsed>=90)return finish(trainingVerdict(run));return;}
    if(run.decisions.length>=5)return finish(trainingVerdict(run));
    if(run.queue.length){const command=run.queue.shift();const c=command.condition;if(c&&c.need!=='none'&&(s.needs[c.need]<c.min||s.needs[c.need]>c.max)){run.queue=[];return;}
-    const result=applyResidentDecision(s,command,now());run.decisions.push({at:now(),reply:'Executing the next authored step.',truthful:true,command,executed:!!result.started,error:result.error||null,feedback:result.message||result.error});if(result.error){run.queue=[];feedback(run,command.action,result.error);}else run.watch={record:run.decisions.at(-1),x:s.player.x,z:s.player.z,stalled:0};return;}
+    const result=applyResidentDecision(s,command,now());observeTraining(run,now());run.decisions.push({at:now(),reply:'Executing the next authored step.',truthful:true,command,executed:!!result.started,error:result.error||null,feedback:result.message||result.error});if(result.error){run.queue=[];feedback(run,command.action,result.error);}else run.watch={record:run.decisions.at(-1),x:s.player.x,z:s.player.z,stalled:0};return;}
    if(run.mode==='skill')return finish(trainingVerdict(run));void plan(run);
   }
  };

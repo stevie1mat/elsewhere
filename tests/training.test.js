@@ -59,3 +59,7 @@ test('starting during a long connection cooldown waits and retries without recor
  for(let i=0;i<1200&&service.busy;i++){time+=100;service.tick(.1);for(let j=0;j<6;j++)await Promise.resolve();}
  assert.equal(calls,2);assert.equal(service.snapshot().active.status,'passed');assert.equal(service.snapshot().reports.length,1);
 });
+test('instant dismount evidence is recorded before another model request',async()=>{
+ let calls=0;const f=fixture(async()=>++calls===1?{...meal,action:'dismount',destination:'here',reply:'I will park the bicycle.'}:{...meal,action:'stop',destination:'here',reply:'Stopping here.'});f.service.start();const result=await f.finish();assert.equal(result.active.evidence.parked,true);assert.equal(result.active.final.mode,'walking');
+ assert.equal(truthfulReply('Bike parked. Ready to eat.',createTrainingResident('normal')),false);
+});
