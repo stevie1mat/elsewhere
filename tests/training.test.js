@@ -53,3 +53,9 @@ test('rejected model proposal stays in the report and is corrected by a new mode
 test('repeated invalid proposals stop at the trial command limit without awarding success',async()=>{
  const f=fixture(async(s)=>{s.trainingProposal={decision:meal,issue:'Invalid proposal'};const e=new Error('Invalid proposal');e.kind='decision';throw e;});f.service.start();const result=await f.finish();assert.equal(result.active.status,'failed');assert.equal(result.active.decisions.length,5);assert.equal(result.skills.length,0);
 });
+test('starting during a long connection cooldown waits and retries without recording an interruption',async()=>{
+ let time=1000,calls=0;const live=createResident(0),service=createTrainingService({getState:()=>live,now:()=>time,decide:async()=>{calls++;if(calls===1){const e=new Error('AI connection is cooling down. Retrying in 33 seconds.');e.status=429;e.retryMs=33000;throw e;}return meal;}});
+ service.start();service.tick(.1);for(let i=0;i<6;i++)await Promise.resolve();assert.equal(service.snapshot().active.status,'waiting');assert.equal(service.snapshot().reports.length,0);assert.match(service.snapshot().active.waitReason,/33 seconds/);time+=32000;service.tick(.1);assert.equal(calls,1);time+=1000;
+ for(let i=0;i<1200&&service.busy;i++){time+=100;service.tick(.1);for(let j=0;j<6;j++)await Promise.resolve();}
+ assert.equal(calls,2);assert.equal(service.snapshot().active.status,'passed');assert.equal(service.snapshot().reports.length,1);
+});

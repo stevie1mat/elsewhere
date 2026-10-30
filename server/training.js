@@ -75,7 +75,7 @@ export function createTrainingService({getState,decide,now=()=>Date.now()}){
    if(record.error)feedback(run,d.action,record.error);
    else run.watch={record,x:run.state.player.x,z:run.state.player.z,stalled:0};
   }catch(error){if(active?.id!==token||terminal.has(run.status))return;
-   if(error.status===429&&error.retryMs<=10000){run.status='waiting';run.retryAt=now()+Math.max(1000,error.retryMs);run.waitReason='Waiting for the shared model connection.';}
+   if(error.status===429&&Number.isFinite(error.retryMs)&&error.retryMs>=0&&error.retryMs<=900000){run.status='waiting';run.retryAt=now()+Math.max(1000,error.retryMs);run.waitReason='Waiting for the shared model connection. Automatic retry in '+Math.max(1,Math.ceil(error.retryMs/1000))+' seconds.';}
    else{if(run.state.trainingProposal){const p=run.state.trainingProposal;run.decisions.push({at:now(),reply:p.decision.reply,command:p.decision,truthful:truthfulReply(p.decision.reply,run.state),executed:false,error:p.issue});if(error.kind==='decision'){run.queue=[];feedback(run,p.decision.action,p.issue);run.status='running';return;}}finish({status:error.kind==='decision'?'failed':'interrupted',taskCompleted:false,truthful:null,reason:error.kind==='decision'?error.message:[getState().ai?.error,error.message].filter(Boolean).filter((x,i,a)=>a.indexOf(x)===i).join(' ')});}
   }finally{if(pending===token)pending=null;}
  }
