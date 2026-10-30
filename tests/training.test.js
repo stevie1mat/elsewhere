@@ -41,3 +41,15 @@ test('invalid model proposals fail without silent automatic repair or fabricated
  let calls=0;const brain=createResidentBrain({client:{configured:true,complete:async()=>{calls++;return {...meal,action:'visit',objective:{metric:'hunger',direction:'decrease',amount:10,interaction:'none'}};}},now:()=>1000});
  const s=createTrainingResident('normal');await assert.rejects(brain.trainingDecision(s,TRAINING_PROMPTS[0]),/Training proposal rejected/);assert.equal(calls,1);assert.equal(s.trainingProposal.decision.action,'visit');brain.stop();
 });
+test('stalled visit returns measured feedback promptly and lets the planner correct itself',async()=>{
+ let calls=0;const f=fixture(async(s,message)=>{calls++;assert.match(message,/parameters.value=seated/);if(calls===1)return {...meal,action:'visit',seconds:60,objective:{metric:'none',direction:'increase',amount:0,interaction:'none'}};assert.match(s.executionFeedback.at(-1).message,/No task progress/);return meal;});
+ f.service.start();const result=await f.finish();assert.equal(result.active.status,'passed');assert.equal(calls,2);assert.equal(result.active.decisions[0].noProgress,true);assert.equal(result.active.decisions[0].command.action,'visit');assert.ok(result.active.elapsed<60);assert.equal(result.active.decisions[1].command.action,'eat');
+});
+test('rejected model proposal stays in the report and is corrected by a new model decision',async()=>{
+ let calls=0,time=1000;const live=createResident(0);const brain=createResidentBrain({client:{configured:true,complete:async(context)=>{calls++;assert.equal(context.trainingCommands.eat.parameters.value,'seated');if(calls===1)return {...meal,action:'visit',objective:{metric:'hunger',direction:'decrease',amount:10,interaction:'none'}};assert.match(context.executionFeedback.at(-1).message,/requires an eat command/);return meal;}},now:()=>time});
+ const service=createTrainingService({getState:()=>live,decide:(s,m)=>brain.trainingDecision(s,m),now:()=>time});service.start();for(let i=0;i<1500&&service.busy;i++){time+=100;service.tick(.1);for(let j=0;j<12;j++)await Promise.resolve();}
+ const result=service.snapshot();assert.equal(result.active.status,'passed');assert.equal(calls,2);assert.equal(result.active.decisions.length,2);assert.equal(result.active.decisions[0].executed,false);assert.match(result.active.decisions[0].error,/requires an eat command/);assert.equal(result.active.decisions[1].executed,true);brain.stop();
+});
+test('repeated invalid proposals stop at the trial command limit without awarding success',async()=>{
+ const f=fixture(async(s)=>{s.trainingProposal={decision:meal,issue:'Invalid proposal'};const e=new Error('Invalid proposal');e.kind='decision';throw e;});f.service.start();const result=await f.finish();assert.equal(result.active.status,'failed');assert.equal(result.active.decisions.length,5);assert.equal(result.skills.length,0);
+});

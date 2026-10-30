@@ -58,11 +58,12 @@ export function createTrainingService({getState,decide,now=()=>Date.now()}){
   if(variants.size<3||!safety||db().skills.some(s=>s.id==='seated-meal-v1'))return;
   const example=wins.at(-1);db().skills.push({id:'seated-meal-v1',name:'Park, collect food, sit and eat',verifiedAt:now(),source:'training state verification',trials:wins.length,safetyCases:4,steps:example.decisions.filter(d=>d.executed).map(d=>d.command),evidenceIds:[...wins.map(r=>r.id),...reports.filter(r=>r.status==='correctly_blocked').map(r=>r.id)]});
  }
+ function feedback(run,action,message){const s=run.state;s.executionFeedback??=[];s.executionFeedback.push({action,status:'blocked',message,at:now(),source:'training executor'});s.executionFeedback=s.executionFeedback.slice(-10);s.thought=message;}
  async function plan(run){
   if(pending||run!==active)return;run.status='thinking';db().inProgress={id:run.id,scenario:run.scenario,prompt:run.prompt,promptIndex:run.promptIndex,mode:run.mode,startedAt:run.startedAt};
-  const token=run.id;pending=token;
+  const token=run.id;pending=token;delete run.state.trainingProposal;
   try{
-   const d=validateDecision(await decide(run.state,'Practice task (isolated scene): '+run.prompt+' Choose and execute your next command. Use only the provided practice objects. Explain actual missing requirements. A visit alone does not eat. Do not claim completed actions before state evidence confirms them.'));
+   const d=validateDecision(await decide(run.state,'Practice task (isolated scene): '+run.prompt+' Choose and execute your next command. Command examples: eat with destination=cafe and parameters.value=seated runs the supported collect/pay/sit/eat sequence, including dismounting. dismount with destination=here only parks the bike. visit only travels/observes and never collects or eats; verb=eat or intention text does not change action=visit. Check actual food, chair, money and route availability before acting. Use only the provided practice objects. Explain actual missing requirements. A visit alone does not eat. Do not claim completed actions before state evidence confirms them.'));
    if(!active||active.id!==token||terminal.has(run.status))return;
    const truthful=truthfulReply(d.reply,run.state),record={at:now(),reply:d.reply,truthful,before:{position:{x:run.state.player.x,z:run.state.player.z},mode:run.state.player.mode,money:run.state.wallet,hunger:run.state.needs.hunger,objects:run.state.objects},command:d,executed:false};run.decisions.push(record);
    if(!TRAINING_ACTIONS.includes(d.action)||d.nextSteps?.some(x=>!TRAINING_ACTIONS.includes(x.action)))record.error='This command is outside the first training task.';
@@ -71,10 +72,11 @@ export function createTrainingService({getState,decide,now=()=>Date.now()}){
    run.status='running';delete run.waitReason;run.state.ai.connected=true;
    if(!truthful)return finish(trainingVerdict(run));
    if(d.action==='stop')return finish(trainingVerdict(run));
-   if(record.error){run.state.executionFeedback??=[];run.state.executionFeedback.push({action:d.action,status:'blocked',message:record.error,at:now(),source:'training executor'});run.state.thought=record.error;}
+   if(record.error)feedback(run,d.action,record.error);
+   else run.watch={record,x:run.state.player.x,z:run.state.player.z,stalled:0};
   }catch(error){if(active?.id!==token||terminal.has(run.status))return;
    if(error.status===429&&error.retryMs<=10000){run.status='waiting';run.retryAt=now()+Math.max(1000,error.retryMs);run.waitReason='Waiting for the shared model connection.';}
-   else{if(run.state.trainingProposal){const p=run.state.trainingProposal;run.decisions.push({at:now(),reply:p.decision.reply,command:p.decision,truthful:truthfulReply(p.decision.reply,run.state),executed:false,error:p.issue});}finish({status:error.kind==='decision'?'failed':'interrupted',taskCompleted:false,truthful:null,reason:error.kind==='decision'?error.message:[getState().ai?.error,error.message].filter(Boolean).filter((x,i,a)=>a.indexOf(x)===i).join(' ')});}
+   else{if(run.state.trainingProposal){const p=run.state.trainingProposal;run.decisions.push({at:now(),reply:p.decision.reply,command:p.decision,truthful:truthfulReply(p.decision.reply,run.state),executed:false,error:p.issue});if(error.kind==='decision'){run.queue=[];feedback(run,p.decision.action,p.issue);run.status='running';return;}}finish({status:error.kind==='decision'?'failed':'interrupted',taskCompleted:false,truthful:null,reason:error.kind==='decision'?error.message:[getState().ai?.error,error.message].filter(Boolean).filter((x,i,a)=>a.indexOf(x)===i).join(' ')});}
   }finally{if(pending===token)pending=null;}
  }
  if(db().inProgress){db().reports.push({...db().inProgress,status:'interrupted',verdict:{reason:'Server restarted during the trial. No success or skill was awarded.'}});delete db().inProgress;}
@@ -96,10 +98,15 @@ export function createTrainingService({getState,decide,now=()=>Date.now()}){
    const run=active;if(!run||terminal.has(run.status)||pending)return;
    if(run.status==='waiting'&&now()<run.retryAt)return;
    const s=run.state,working=s.route.length||s.rest>0||s.motionCommand||s.settling;
-   if(working){run.elapsed+=dt;s.ai.connected=true;stepResident(s,dt,now());observeTraining(run,now());if(run.evidence.finishedMeal)return finish(trainingVerdict(run));if(run.elapsed>=90)return finish(trainingVerdict(run));return;}
+   if(working){run.elapsed+=dt;s.ai.connected=true;stepResident(s,dt,now());observeTraining(run,now());
+    const w=run.watch;if(w?.record.command.action==='visit'){
+     const moved=Math.hypot(s.player.x-w.x,s.player.z-w.z);w.stalled=moved<.05?w.stalled+dt:0;if(moved>=.05){w.x=s.player.x;w.z=s.player.z;}
+     if(w.stalled>=3){const message='No task progress: visit produced no movement for three seconds and did not collect or eat food. Choose an executable next action; eat with parameters.value=seated requests a seated meal. Explain a real missing requirement if blocked.';w.record.feedback=message;w.record.noProgress=true;feedback(run,'visit',message);s.route=[];s.rest=0;s.activity=null;s.activityOnArrival=null;s.player.moving=false;s.player.speed=0;run.queue=[];delete run.watch;}
+    }
+    if(run.evidence.finishedMeal)return finish(trainingVerdict(run));if(run.elapsed>=90)return finish(trainingVerdict(run));return;}
    if(run.decisions.length>=5)return finish(trainingVerdict(run));
    if(run.queue.length){const command=run.queue.shift();const c=command.condition;if(c&&c.need!=='none'&&(s.needs[c.need]<c.min||s.needs[c.need]>c.max)){run.queue=[];return;}
-    const result=applyResidentDecision(s,command,now());run.decisions.push({at:now(),reply:'Executing the next authored step.',truthful:true,command,executed:!!result.started,error:result.error||null,feedback:result.message||result.error});if(result.error)run.queue=[];return;}
+    const result=applyResidentDecision(s,command,now());run.decisions.push({at:now(),reply:'Executing the next authored step.',truthful:true,command,executed:!!result.started,error:result.error||null,feedback:result.message||result.error});if(result.error){run.queue=[];feedback(run,command.action,result.error);}else run.watch={record:run.decisions.at(-1),x:s.player.x,z:s.player.z,stalled:0};return;}
    if(run.mode==='skill')return finish(trainingVerdict(run));void plan(run);
   }
  };
