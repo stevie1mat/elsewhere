@@ -383,3 +383,13 @@ a sleeping Render instance running.
 `scripts/migrate-render-save.js` copies the current hosted snapshot into an empty
 cloud slot before redeployment; it reloads city geometry and replans the current
 walk after restore because the public snapshot excludes routes/obstacles.
+
+
+### Chat requests change activities
+
+A chat response can now accept an activity with `changePlan: true`. The server
+validates a route before replacing the active destination and cancels the old
+rest/route. Questions and greetings leave the activity unchanged. Beach requests
+map to Costa Dourada's seaside promenade and beach access. If a destination is
+unreachable, the response explains that movement could not start; it does not
+promise to walk there. Accepted changes persist in the checkpoint and event log.

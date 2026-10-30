@@ -39,3 +39,17 @@ test('stopping the brain discards pending decisions and prevents future requests
  let resolve;const s=ready();const brain=createResidentBrain({client:{configured:true,model:'test',complete:()=>new Promise(r=>{resolve=r;})},now:()=>1000});brain.initialize(s);
  const pending=brain.update(s);brain.stop();resolve(decision);await pending;assert.equal(s.pendingDecision,undefined);assert.equal(s.events.length,0);
 });
+test('accepting a beach request replaces the home route and starts real coastal navigation',async()=>{
+ const s=ready();s.player.x=21;s.player.z=-83;s.destination='Casa Aurora';s.route=[{x:20,z:-83}];s.rest=45;
+ const brain=createResidentBrain({client:{configured:true,model:'test',complete:async()=>({...decision,changePlan:true,destination:'coast',intention:'I am heading to the coast.',reply:"Let's head to the beach!"})},now:()=>1000});brain.initialize(s);
+ assert.equal(await brain.chat(s,'Can we go to the beach?'),"Let's head to the beach!");
+ assert.equal(s.destination,'Costa Dourada');assert.equal(s.rest,0);assert.ok(s.route.length>10);assert.equal(s.thought,'I am heading to the coast.');
+ const before=s.player.z;stepResident(s,.1,1100);assert.ok(s.player.moving);assert.notEqual(s.player.z,before);brain.stop();
+});
+test('a chat question keeps the current route and a rejected route never promises movement',async()=>{
+ const s=ready();const route=[{x:47,z:65}];s.route=route;
+ let time=1000;let choice={...decision,changePlan:false};const brain=createResidentBrain({client:{configured:true,model:'test',complete:async()=>choice},now:()=>time});brain.initialize(s);
+ await brain.chat(s,'What are you doing?');assert.equal(s.route,route);
+ time+=6000;choice={...decision,changePlan:true};s.obstacles=[{minX:40,maxX:55,minZ:60,maxZ:75}];
+ const reply=await brain.chat(s,'Can we go to the garden?');assert.match(reply,/couldn't find a clear walking route/);assert.equal(s.route,route);brain.stop();
+});
