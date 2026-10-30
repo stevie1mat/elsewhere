@@ -38,6 +38,6 @@ The local adapter uses the Qwen chat template through the completion endpoint to
 
 Local tokens are counted for research but do not consume Groq/Mistral quota. Model computation requires RAM, power and an awake Mac. The local service and model remain installed after stopping the worker.
 
-The reduced context and single-request limit reduce memory use. The model unloads after five idle minutes; rerun the launcher to load it again. Stop local inference if memory pressure rises or swap begins increasing.
+The reduced context and single-request limit reduce memory use. The model unloads after five idle minutes; the worker reloads it with the same low-memory settings when the next decision is needed. Stop local inference if memory pressure rises or swap begins increasing.
 
 The worker checks macOS memory pressure every five seconds. It cancels inference, unloads the model and disconnects when pressure rises or swap increases by more than 32 MB relative to startup. This polling guard cannot guarantee that no swap occurs between checks.

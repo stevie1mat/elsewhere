@@ -1,5 +1,6 @@
 import {existsSync} from 'node:fs';import {fileURLToPath} from 'node:url';import {randomUUID} from 'node:crypto';
 import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
 import {readMemory,memoryIssue} from './mac-memory.js';
 import {createLocalClient} from '../server/local-client.js';
 const env=fileURLToPath(new URL('../.env',import.meta.url));if(existsSync(env))process.loadEnvFile(env);
@@ -15,6 +16,15 @@ const baseline=readMemory();if(baseline.pressure!==1)throw Error('Mac memory pre
 const generation=new AbortController();let memoryStopped=false;
 const monitorMemory=()=>setInterval(()=>{if(memoryStopped)return;try{const issue=memoryIssue(readMemory(),baseline);if(!issue)return;console.log('Stopping local AI: '+issue+'.');}catch{console.log('Stopping local AI: memory monitoring failed.');}memoryStopped=true;generation.abort();execFile('/Applications/LM Studio.app/Contents/Resources/app/.webpack/lms',['unload','resident-local'],{timeout:15000},()=>{});void shutdown();},5000);
 const models=await fetch((process.env.LOCAL_AI_URL||'http://127.0.0.1:1234/v1').replace(/\/$/,'')+'/models',{signal:AbortSignal.timeout(10000)});if(!models.ok)throw Error('Start LM Studio and load resident-local first.');const inventory=await models.json();if(!inventory.data?.some(m=>m.id===client.model))throw Error('Load the model in LM Studio with identifier '+client.model+'.');
+async function ensureModel(){
+ const issue=memoryIssue(readMemory(),baseline);if(issue)throw Error('Memory guard: '+issue);
+ const r=await fetch((process.env.LOCAL_AI_URL||'http://127.0.0.1:1234/v1').replace(/\/$/,'')+'/models',{signal:AbortSignal.timeout(10000)});
+ if(!r.ok)throw Error('LM Studio API unavailable.');
+ if((await r.json()).data?.some(m=>m.id===client.model))return;
+ if(client.model!=='resident-local')throw Error('Reload your custom model before resuming.');
+ console.log('Reloading idle-unloaded model with the low-memory settings…');
+ await promisify(execFile)('/Applications/LM Studio.app/Contents/Resources/app/.webpack/lms',['load','qwen3.5-4b-mlx','--context-length','4096','--identifier','resident-local','--parallel','1','--ttl','300','--yes'],{signal:generation.signal,timeout:60000});
+}
 const memoryGuard=monitorMemory();
 console.log('Mac worker ready: '+client.model+'. Local API stays on loopback; the worker makes outbound HTTPS requests only.');
 // Heartbeats continue during generation; no inference is started by this timer.
@@ -22,7 +32,7 @@ const heartbeat=setInterval(()=>{if(connected&&busy)void post({op:'poll'}).catch
 try{while(!stopped){try{
  if(!cookie)await login();if(!connected){await post({op:'connect',model:client.model});connected=true;console.log('Connected to hosted resident using Mac LM Studio. Manual pause state preserved.');}
  const {job}=await post({op:'poll'});if(stopped)break;if(!job){await pause(1500);continue;}
- busy=true;console.log('Generating local decision…');try{const decision=await client.complete(job.context,job.message,generation.signal);await post({op:'result',id:job.id,decision,usage:client.lastAttempt?.usage,sent:client.lastAttempt?.sent});console.log('Decision returned ('+Math.round((client.lastAttempt?.latencyMs||0)/100)/10+'s).');}
+ busy=true;console.log('Generating local decision…');try{await ensureModel();const decision=await client.complete(job.context,job.message,generation.signal);await post({op:'result',id:job.id,decision,usage:client.lastAttempt?.usage,sent:client.lastAttempt?.sent});console.log('Decision returned ('+Math.round((client.lastAttempt?.latencyMs||0)/100)/10+'s).');}
  catch(e){try{await post({op:'result',id:job.id,error:e.message});}catch{}console.log('Local decision failed: '+e.message);}finally{busy=false;}
  }catch(e){console.log(e.message);await pause(5000);}}
 }finally{clearInterval(heartbeat);clearInterval(memoryGuard);await shutdown();}
