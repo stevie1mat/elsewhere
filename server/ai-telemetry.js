@@ -1,3 +1,4 @@
+import {ensureDailyUsage,recordDailyUsage} from './daily-usage.js';
 import {rateLimitDetails} from './rate-limits.js';
 const safeNumber=value=>Number.isFinite(value)&&value>=0?value:null;
 export function trackedProviderFetch(fetchImpl,provider,model,secrets=[]){
@@ -22,7 +23,9 @@ export function trackedProviderFetch(fetchImpl,provider,model,secrets=[]){
 export function recordTelemetry(ai,client){
   const attempts=client.attempts||(client.lastAttempt?[client.lastAttempt]:[]);
   const t=ai.telemetry??={requests:0,input:0,output:0,total:0,usageReported:0,startedAt:Date.now(),recent:[]};
+  ensureDailyUsage(t);
   for(const a of attempts){
+    recordDailyUsage(t,a);if(a.quota?.kind){t.quotaSnapshots??={};t.quotaSnapshots[a.provider]={...a.quota,at:a.at};}
     t.requests++;if(a.usage){t.input+=a.usage.input||0;t.output+=a.usage.output||0;t.total+=a.usage.total??((a.usage.input||0)+(a.usage.output||0));t.usageReported++;}
     const {sent,received,...summary}=a;t.recent.push(summary);t.recent=t.recent.slice(-12);
     t.lastExchange={...a};if(a.status==='error'&&a.received?.content)t.lastRejectedDecision={provider:a.provider,at:a.at,error:a.error,received:a.received};
