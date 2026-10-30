@@ -22,6 +22,7 @@ export default async function handler(req,res){
     }
     const response=await fetch(new URL(path,base),{method:req.method,headers:{...(req.headers.cookie?{Cookie:req.headers.cookie}:{}),'Content-Type':'application/json'},body,redirect:'error',signal:AbortSignal.timeout(45000)});
     res.statusCode=response.status;res.setHeader('Content-Type',response.headers.get('content-type')||'application/json');
+    if(response.headers.has('retry-after'))res.setHeader('Retry-After',response.headers.get('retry-after'));
     const cookies=response.headers.getSetCookie();if(cookies.length)res.setHeader('Set-Cookie',cookies);
     res.end(Buffer.from(await response.arrayBuffer()));
   }catch{return fail(503,'The game server could not be reached. Please try again shortly.');}

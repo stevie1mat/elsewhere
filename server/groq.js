@@ -95,24 +95,35 @@ export function createResilientClient({clients=[createGroqClient(),createMistral
     }
   };
 }
-export function createResidentBrain({client=createResilientClient(),now=()=>Date.now()}={}){
-  let busy=false,stopped=false,nextAt=0,failures=0;const abort=new AbortController();
+export function createResidentBrain({client=createResilientClient(),now=()=>Date.now(),sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms))}={}){
+  let chatWaiting=0,busy=false,stopped=false,nextAt=0,failures=0;const abort=new AbortController();
   function initialize(s){s.messages??=[];s.ai={...s.ai,enabled:client.configured,model:client.model,status:client.configured?'ready':'unconfigured',provider:client.provider||'Groq',providers:client.providers||['Groq'],fallback:false,error:null};delete s.pendingDecision;}
   async function request(s,message){
-    if(busy||now()<nextAt)throw new GroqError('Please wait before the next AI request.',{status:429,retryMs:Math.max(1000,nextAt-now())});
+    if(busy||now()<nextAt)throw new GroqError(busy?'The character is finishing another thought. Your message will retry automatically.':`AI connection is cooling down. Retrying in ${Math.max(1,Math.ceil((nextAt-now())/1000))} seconds.`,{status:429,retryMs:busy?1000:Math.max(1000,nextAt-now())});
     busy=true;
     try{const decision=await client.complete(residentContext(s),message,abort.signal);failures=0;nextAt=now()+5000;s.ai.provider=client.provider||'Groq';s.ai.model=client.model;s.ai.error=null;return decision;}
     catch(error){failures++;nextAt=now()+Math.max(error.retryMs||60000,Math.min(900000,30000*2**Math.min(failures,5)));throw error;}
     finally{busy=false;}
   }
   return {initialize,async update(s){
-    if(stopped||!client.configured||busy||now()<nextAt||!s.obstacles||s.arrival.phase!=='landed'||s.route.length||s.rest>0||s.pendingDecision)return;
+    if(stopped||chatWaiting||!client.configured||busy||now()<nextAt||!s.obstacles||s.arrival.phase!=='landed'||s.route.length||s.rest>0||s.pendingDecision)return;
     s.ai.status='thinking';s.ai.fallback=false;s.player.speed=0;s.player.moving=false;
     try{const decision=await request(s,'Choose and execute your next autonomous activity.');if(stopped)return;s.pendingDecision=decision;s.ai.goal=decision.goal;s.ai.fallback=false;s.ai.status='ready';s.ai.error=null;s.ai.lastDecisionAt=now();remember(s,`Chose to ${decision.action==='visit'?'visit '+RESIDENT_PLACES.find(p=>p.id===decision.destination).name:decision.action}. Goal: ${decision.goal}`,now());}
     catch(error){if(!stopped){s.ai.status='fallback';s.ai.fallback=true;s.ai.error=error.message;remember(s,error.message,now());}}
   },async chat(s,message){
     if(stopped)throw new GroqError('Server is stopping.');
-    const decision=await request(s,`Chat with the human. Their message: ${message}`);
+    if(!client.configured)throw new GroqError('AI chat is not configured on the server.',{retryMs:0});
+    let decision;chatWaiting++;
+    try{
+      const deadline=now()+7000;
+      while(!stopped&&(busy||now()<nextAt)&&now()<deadline){
+        if(!busy&&nextAt-now()>7000)break;
+        await sleep(Math.min(100,Math.max(1,deadline-now())));
+      }
+      if(stopped)throw new GroqError('Server is stopping.',{retryMs:0});
+      decision=await request(s,`Chat with the human. Their message: ${message}`);
+    }finally{chatWaiting--;}
+
     if(stopped)throw new GroqError('Server is stopping.');
     let reply=decision.reply;
     if(decision.changePlan){

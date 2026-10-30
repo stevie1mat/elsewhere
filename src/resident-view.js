@@ -58,10 +58,24 @@ export function mountResidentView({initial,player,arrival,welcome,getWorld}) {
     const input=panel.querySelector('#resident-message'),button=panel.querySelector('#resident-chat-form button'),error=panel.querySelector('#resident-chat-error');
     if(!input.value.trim())return;
     chatBusy=true;button.disabled=true;button.textContent='Listening…';error.textContent='';
-    try{const response=await fetch('/api/resident/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:input.value.trim()})});
-      if(response.status===401){location.replace('/');return;}
-      const data=await response.json();if(!response.ok)throw Error(data.error||'Unable to send message.');input.value='';await sync();
-    }catch(e){error.textContent=e.message;}finally{chatBusy=false;button.disabled=!snapshot.ai?.enabled;button.textContent='Send';}
+    const message=input.value.trim();input.disabled=true;
+    try{
+      for(;;){
+        const response=await fetch('/api/resident/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message})});
+        if(response.status===401){location.replace('/');return;}
+        const data=await response.json();
+        if(!response.ok){
+          if([429,503].includes(response.status)&&Number.isFinite(data.retryAfterMs)&&data.retryAfterMs>0){
+            const until=Date.now()+Math.max(1000,data.retryAfterMs);
+            while(Date.now()<until){const seconds=Math.ceil((until-Date.now())/1000);button.textContent=`Queued · ${seconds}s`;error.textContent='Your message is queued. Waiting for the AI connection…';await new Promise(resolve=>setTimeout(resolve,Math.min(1000,Math.max(1,until-Date.now()))));}
+            button.textContent='Listening…';error.textContent='';continue;
+          }
+          throw Error(data.error||'Unable to send message.');
+        }
+        input.value='';error.textContent='';await sync();break;
+      }
+    }catch(e){error.textContent=e.message;}finally{chatBusy=false;input.disabled=false;button.disabled=!snapshot.ai?.enabled;button.textContent='Send';}
+
   };
   apply(initial);Object.assign(player,initial.player);
   async function sync(){

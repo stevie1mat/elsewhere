@@ -53,3 +53,14 @@ test('a chat question keeps the current route and a rejected route never promise
  time+=6000;choice={...decision,changePlan:true};s.obstacles=[{minX:40,maxX:55,minZ:60,maxZ:75}];
  const reply=await brain.chat(s,'Can we go to the garden?');assert.match(reply,/couldn't find a clear walking route/);assert.equal(s.route,route);brain.stop();
 });
+test('chat waits out the normal cooldown and has priority over autonomous planning',async()=>{
+ let time=0,calls=0;const s=ready();let brain;
+ brain=createResidentBrain({client:{configured:true,model:'test',complete:async()=>{calls++;return {...decision,changePlan:false};}},now:()=>time,sleep:async ms=>{time+=ms;await brain.update(s);}});brain.initialize(s);
+ await brain.chat(s,'hello');const reply=await brain.chat(s,'What are you doing?');
+ assert.equal(reply,decision.reply);assert.equal(calls,2);assert.ok(time>=5000);assert.equal(s.messages.length,4);brain.stop();
+});
+test('long provider backoff reports actual retry time instead of a five-second error',async()=>{
+ const s=ready();const brain=createResidentBrain({client:{configured:true,model:'test',complete:async()=>{throw new GroqError('Provider limit',{retryMs:120000});}},now:()=>1000,sleep:async()=>{throw Error('must not hold a request for two minutes');}});brain.initialize(s);
+ await assert.rejects(brain.chat(s,'hello'),/Provider limit/);
+ await assert.rejects(brain.chat(s,'hello'),e=>e.status===429&&e.retryMs===120000&&/120 seconds/.test(e.message));brain.stop();
+});

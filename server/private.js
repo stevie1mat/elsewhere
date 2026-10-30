@@ -72,7 +72,7 @@ export function createPrivateServer({code=process.env.PRIVATE_ACCESS_CODE||'2792
         const input=await body(req);
         if(typeof input.message!=='string'||!input.message.trim()||input.message.length>1200){json(res,400,{error:'Enter a message of up to 1200 characters.'});return;}
         try{const reply=await brain.chat(state,input.message.trim());save();void writeCloud();json(res,200,{reply,messages:state.messages});}
-        catch(error){json(res,error.status===429?429:503,{error:error.message});}return;
+        catch(error){const retryAfterMs=error.retryMs>0?Math.max(1000,error.retryMs):null;if(retryAfterMs)res.setHeader('Retry-After',String(Math.ceil(retryAfterMs/1000)));json(res,error.status===429?429:503,{error:error.message,retryAfterMs});}return;
       }
       if(url.pathname.startsWith('/api/')){json(res,404,{error:'Not found'});return;}
       if(req.method!=='GET'&&req.method!=='HEAD'){res.writeHead(405);res.end();return;}
