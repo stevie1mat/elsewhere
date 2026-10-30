@@ -1,3 +1,4 @@
+import {mountLearningView} from './learning-view.js';
 import {downloadAiCsv} from './ai-csv.js';
 import * as THREE from 'three';
 import './resident-view.css';
@@ -67,9 +68,10 @@ export function mountResidentView({initial,player,arrival,welcome,getWorld,onLoc
   document.querySelector('#app').append(toggle,connection,playback,diagnostics,panel,bubble);
   let snapshot=initial,busy=false,geometrySent=false,lastEvents='',lastMessages='',receivedAt=Date.now();
   let chatBusy=false;
+  const learningView=mountLearningView();
   const motion=new ResidentMotion(initial.player,performance.now());
   function apply(next){motion.receive(next.player,performance.now(),{snap:next.arrival.phase!==snapshot.arrival.phase||next.arrival.phase!=='landed'});snapshot=next;Object.assign(arrival,next.arrival);Object.assign(welcome,next.welcome);receivedAt=Date.now();
-    showConnection(next.ai);renderDiagnostics(next);playback.querySelector('#resident-pause').textContent=next.paused?'▶ Resume life & AI':'Ⅱ Pause life & AI';playback.querySelector('#resident-pause-status').textContent=next.paused?'Paused · no new AI requests or memories':'';
+    learningView.update(next);showConnection(next.ai);renderDiagnostics(next);playback.querySelector('#resident-pause').textContent=next.paused?'▶ Resume life & AI':'Ⅱ Pause life & AI';playback.querySelector('#resident-pause-status').textContent=next.paused?'Paused · no new AI requests or memories':'';
     document.body.classList.toggle('arriving',next.arrival.phase!=='landed');
     document.querySelector('#arrival-title').textContent=next.arrival.phase==='parachute'?'Coming in to land.':'Your island is on the horizon.';
     document.querySelector('#arrival-detail').textContent=next.thought;

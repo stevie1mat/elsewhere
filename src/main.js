@@ -104,6 +104,7 @@ document.querySelector('#app').innerHTML = `
     </div><p>On a touch screen, use the arrows to pedal and steer, and drag to orbit the camera. Ride near a landmark to discover it.</p></dialog>`;
 
 const $ = s => document.querySelector(s);
+if(residentSession){$('#intro').hidden=true;$('#intro').inert=true;}
 $('#world-select').value=isChai?'chai':isMumbai?'mumbai':'porto';
 $('#world-select').onchange=event=>{const url=new URL(location.href);url.search='';url.searchParams.set('world',event.target.value);location.href=url.href;};
 if(isMumbai){
