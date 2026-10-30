@@ -21,7 +21,7 @@ export function residentContext(s){ensureMind(s);recordObservation(s,s.updatedAt
   goal:s.ai?.goal||'Choose a purpose for your life.',personality:s.personality,plan:s.script?{goal:s.script.goal,criterion:s.script.successCriterion,status:s.script.status,reason:s.script.reason,next:s.script.steps.slice(s.script.cursor)}:null,settled:s.welcome.phase==='settled',destination:s.destination,
   phone:s.media?{query:s.media.query,reason:s.media.reason,status:s.media.status,playback:s.media.playback,selected:s.media.selected}:null,
   activity:s.activity?{kind:s.activity.kind,remaining:Math.ceil(s.activity.remaining)}:null,
-  actionSupport:ACTION_SUPPORT,executionFeedback:(s.executionFeedback||[]).slice(-2),capabilities:ACTIVITY_ACTIONS,worldRequests:(s.worldRequests||[]).slice(-5).map(({name,kind,intendedUse,status})=>({name,kind,intendedUse,status})),
+  actionSupport:ACTION_SUPPORT,executionFeedback:(s.executionFeedback||[]).slice(-2),lastRejectedPlan:s.ai?.lastRejectedPlan||null,capabilities:ACTIVITY_ACTIONS,worldRequests:(s.worldRequests||[]).slice(-5).map(({name,kind,intendedUse,status})=>({name,kind,intendedUse,status})),
   reusableSkills:Object.values(s.skills||{}).filter(x=>x.successes>0).slice(-4).map(({name,verb,objectType,successes})=>({name,verb,objectType,successes})),
   measuredEffects:retrieveEffects(s),mechanics:EFFECT_FACTS,needAwareness:needAwareness(s),task:s.task||null,
   lessonsForCurrentNeeds:relevantLessons(s),
@@ -31,7 +31,7 @@ export function residentContext(s){ensureMind(s);recordObservation(s,s.updatedAt
 };}
 
 export class GroqError extends Error {
-  constructor(message,{status=503,retryMs=60000}={}){super(message);this.status=status;this.retryMs=retryMs;}
+  constructor(message,{status=503,retryMs=60000,kind='provider'}={}){super(message);this.status=status;this.retryMs=retryMs;this.kind=kind;}
 }
 export function createGroqClient({apiKey=process.env.GROQ_API_KEY,model=process.env.GROQ_MODEL||DEFAULT_GROQ_MODEL,fetchImpl=fetch}={}){
   const configured=!!apiKey?.trim(),tracker=trackedProviderFetch(fetchImpl,'Groq',model,[apiKey]);let attempts=[];
@@ -120,21 +120,25 @@ export function createResidentBrain({client=createResilientClient(),now=()=>Date
       let issue=objectiveIssue(decision,required)||(message.includes(PHONE_SEARCH_REQUEST)&&decision.action==='phone'&&decision.changePlan!==true?'You selected a phone search for an explicit use-phone request but changePlan=false will not execute it. Set changePlan=true if accepting the phone task; otherwise decline clearly without promising playback.':message.startsWith('Chat with the human.')&&decision.changePlan!==true?null:decisionIssue(s,decision));
       if(issue){
         if(requestGeneration!==generation||s.paused||stopped)throw new GroqError('Request cancelled.',{retryMs:0});
-        const originalObjective=required||decision.objective;
-        decision=await complete(context,message+'\nYour proposed plan failed the execution check: '+issue+' Repair the commands, retaining the same requested metric, amount, direction and interaction. Original decision: '+JSON.stringify(decision));
+        // Human targets survive repair. An invented physical benefit from a
+        // phone-only plan is itself the error and must be correctable.
+        const invalidPhoneObjective=issue.startsWith('Phone use cannot');
+        const originalObjective=required||(invalidPhoneObjective?null:decision.objective);
+        const repairRule=originalObjective?'Repair the commands, retaining the same requested metric, amount, direction and interaction.':'Correct the impossible objective too. A phone-only plan must use objective metric=none, amount=0, interaction=none. You may choose another supported action and attainable goal. Do not claim physical benefits from phone use.';
+        decision=await complete(context,message+'\nYour proposed plan failed the execution check: '+issue+' '+repairRule+' Original decision: '+JSON.stringify(decision));
         issue=objectiveIssue(decision,required)||(message.includes(PHONE_SEARCH_REQUEST)&&decision.action==='phone'&&decision.changePlan!==true?'Phone action was still not marked for execution after repair.':decisionIssue(s,decision));
         if(originalObjective&&JSON.stringify(decision.objective)!==JSON.stringify(originalObjective)){
           if(['metric','amount','direction','interaction'].some(k=>decision.objective?.[k]!==originalObjective[k]))issue='The repair changed the requested objective instead of fixing the plan.';
         }
-        if(issue)throw new GroqError('AI plan could not be executed: '+issue,{retryMs:15000});
+        if(issue){s.ai.lastRejectedPlan={action:decision.action,objective:decision.objective,reason:issue};const attempt=requestAttempts.at(-1);if(attempt){attempt.status='error';attempt.error='Decision rejected: '+issue;}throw new GroqError('AI plan could not be executed: '+issue,{retryMs:30000,kind:'decision'});}
       }
-      if(requestGeneration!==generation||s.paused||stopped)throw new GroqError('Game paused or request cancelled.',{retryMs:0});failures=0;nextAt=now()+5000;s.ai.provider=client.provider||'Groq';s.ai.model=client.model;s.ai.connected=true;s.ai.lastResponseAt=now();s.ai.error=null;return decision;}
-    catch(error){if(requestGeneration!==generation||s.paused||stopped)throw new GroqError('Game paused or request cancelled.',{retryMs:0});s.ai.connected=false;s.ai.error=error.message;failures++;nextAt=now()+Math.max(error.retryMs||60000,Math.min(900000,30000*2**Math.min(failures,5)));throw error;}
+      if(requestGeneration!==generation||s.paused||stopped)throw new GroqError('Game paused or request cancelled.',{retryMs:0});failures=0;nextAt=now()+5000;s.ai.provider=client.provider||'Groq';s.ai.model=client.model;s.ai.connected=true;s.ai.lastResponseAt=now();s.ai.error=null;s.ai.failureKind=null;s.ai.lastRejectedPlan=null;return decision;}
+    catch(error){if(requestGeneration!==generation||s.paused||stopped)throw new GroqError('Game paused or request cancelled.',{retryMs:0});s.ai.connected=false;s.ai.error=error.message;s.ai.failureKind=error.kind||'provider';if(error.kind==='decision')nextAt=now()+error.retryMs;else{failures++;nextAt=now()+Math.max(error.retryMs||60000,Math.min(900000,30000*2**Math.min(failures,5)));}throw error;}
     finally{recordTelemetry(s.ai,{attempts:requestAttempts,diagnostics:client.diagnostics});s.ai.retryAt=nextAt;busy=false;}
   }
   return {initialize,setPaused(s,paused){
-    generation++;abort.abort();abort=new AbortController();s.paused=paused;s.updatedAt=now();s.player.speed=0;s.player.moving=false;
-    s.ai.connected=false;s.ai.status=paused?'manually_paused':'connecting';s.ai.error=null;
+    generation++;abort.abort();abort=new AbortController();failures=0;s.paused=paused;s.updatedAt=now();s.player.speed=0;s.player.moving=false;
+    s.ai.connected=false;s.ai.status=paused?'manually_paused':'connecting';s.ai.error=null;s.ai.failureKind=null;
     if(!paused)nextAt=now();
   },async update(s){
     if(stopped||s.paused||chatWaiting||!client.configured||busy||now()<nextAt||!s.obstacles)return;

@@ -40,3 +40,18 @@ test('repair cannot silently lower the requested target and repeated bad command
  const {createResidentBrain}=await import('../server/groq.js');const s=person();let calls=0;const client={configured:true,model:'test',complete:async()=>{calls++;return {...decision,changePlan:true,...(calls===1?{action:'rest'}:{objective:{...decision.objective,amount:1}})};}};
  const brain=createResidentBrain({client});brain.initialize(s);await assert.rejects(brain.chat(s,'Raise energy by 10 while sitting'),/changed the requested objective/);assert.equal(s.pendingInteraction,undefined);assert.equal(s.task,undefined);brain.stop();
 });
+test('repair may correct an impossible AI-authored phone objective without changing a human target',async()=>{
+ const {createResidentBrain}=await import('../server/groq.js');const s=person();let calls=0,repair;
+ const phone={action:'phone',destination:'here',seconds:60,goal:'Explore music',intention:'Search for music',reply:'I will search for music.',mediaQuery:'calm music',changePlan:true,nextSteps:[],objective:{metric:'thirst',direction:'decrease',amount:10,interaction:'none'}};
+ const client={configured:true,model:'test',complete:async(c,m)=>{calls++;if(calls===1)return phone;repair=m;return {...phone,objective:{metric:'none',direction:'increase',amount:0,interaction:'none'}};}};
+ const brain=createResidentBrain({client});brain.initialize(s);await brain.chat(s,'Choose an activity you want to do.');
+ assert.equal(calls,2);assert.match(repair,/Correct the impossible objective too/);assert.equal(s.activity.kind,'phone');assert.equal(s.ai.connected,true);brain.stop();
+});
+test('rejected plans preserve provider connection evidence and retry without quota backoff',async()=>{
+ const {createResidentBrain}=await import('../server/groq.js');const s=person();
+ const phone={action:'phone',destination:'here',seconds:60,goal:'Recover energy',intention:'Search for music',reply:'Searching.',mediaQuery:'calm music',changePlan:true,nextSteps:[],objective:{metric:'energy',direction:'increase',amount:10,interaction:'none'}};
+ const attempt={provider:'Mac LM Studio',at:1000,status:'success',usage:{input:10,output:5,total:15},received:{content:JSON.stringify(phone)}};
+ const client={configured:true,model:'test',provider:'Mac LM Studio',diagnostics:[{provider:'Mac LM Studio',status:'connected'}],lastAttempt:attempt,complete:async()=>({...phone})};
+ const brain=createResidentBrain({client,now:()=>1000});brain.initialize(s);await assert.rejects(brain.chat(s,'Choose an activity'),/Phone use cannot/);
+ assert.equal(s.ai.connected,false);assert.equal(s.ai.failureKind,'decision');assert.equal(s.ai.retryAt,31000);assert.equal(s.ai.providerHealth[0].status,'connected');assert.match(s.ai.telemetry.lastRejectedDecision.error,/Decision rejected/);assert.match(residentContext(s).lastRejectedPlan.reason,/Phone use cannot/);brain.stop();
+});

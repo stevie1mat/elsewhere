@@ -1,4 +1,5 @@
 import {residentChatRequest} from './resident-chat-request.js';
+import {aiConnectionStatus} from './ai-connection-status.js';
 import {dailyUsageView} from '../server/daily-usage.js';
 import {mountResidentSidebar} from './resident-sidebar.js';
 import {mountResidentPhone} from './resident-phone.js';
@@ -13,9 +14,8 @@ export function mountResidentView({initial,player,arrival,welcome,getWorld,onLoc
   const connection=document.createElement('button');connection.type='button';connection.id='resident-ai-connection';connection.setAttribute('role','status');connection.setAttribute('aria-live','polite');
   const dot=document.createElement('span');dot.className='ai-connection-dot';dot.setAttribute('aria-hidden','true');const connectionText=document.createElement('span');connection.append(dot,connectionText);
   function showConnection(ai,offline=false){
-    const online=!snapshot?.paused&&!offline&&ai?.enabled&&ai.connected===true&&!ai.error&&!ai.fallback;
-    connection.dataset.state=online?'online':'offline';
-    const text=snapshot?.paused?'Paused · AI stopped':offline?'AI disconnected · reconnecting':!ai?.enabled?'AI not configured':online?`AI connected · ${ai.provider||'AI'}${ai.status==='thinking'?' · thinking':''}`:ai.error||ai.fallback?'AI unavailable · retrying':'AI connecting…';
+    const {state,text}=aiConnectionStatus(ai,{paused:!!snapshot?.paused,offline});
+    connection.dataset.state=state;
     const daily=dailyUsageView(ai?.telemetry);const label=text+` · Today: ${daily.total.toLocaleString()} tokens${daily.partial?' (partial)':''}`;
     if(connectionText.textContent!==label)connectionText.textContent=label;
     connection.title=offline?'The game server cannot be reached.':ai?.error||'Status of the last AI response; provider availability is checked when a request is made.';
