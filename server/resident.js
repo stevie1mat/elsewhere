@@ -57,10 +57,10 @@ export function applyResidentDecision(s,decision,now=Date.now()){
     s.pendingInteraction={objectId:object.id,verb,seconds:decision.seconds,intention:decision.intention};s.thought=decision.intention;return {started:true};
   }
   const destination=LANDMARKS.find(p=>p.id===activityDestination(decision));
-  if(!destination)return {error:'I do not know that place.'};
+  const travel=decision.action==='visit'||['sleep','eat','work'].includes(decision.action);
+  if(!destination&&(travel||decision.destination!=='here'))return {error:'I do not know that place.'};
   if(decision.action==='eat'&&s.wallet<4)return {error:'I need €4 for a meal. I should earn some money first.'};
   if(decision.action==='eat'){const gap=executionGap(s,decision,now);return {error:gap.message};}
-  const travel=decision.action==='visit'||['sleep','eat','work'].includes(decision.action);
   if(travel&&Math.hypot(s.player.x-destination.x,s.player.z-destination.z)>2){
     const route=residentRoute(s.player.interactionPose?.exit||s.player,destination,s.obstacles);
     if(!route.length)return {error:`I couldn't find a clear walking route to ${destination.name}. I'll keep my current plan for now.`};

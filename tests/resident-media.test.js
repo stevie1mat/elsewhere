@@ -46,3 +46,12 @@ test('factual sensory recall stays local while mixed action requests go to the p
  const {groundedRecall}=await import('../server/cognition.js');const s=person();assert.match(groundedRecall(s,'What did you see earlier?'),/last recorded observation/);
  assert.equal(groundedRecall(s,'Search for music, but do not pretend you have heard it yet.'),null);assert.equal(groundedRecall(s,'Play something based on what you saw earlier.'),null);
 });
+test('phone use accepts an empty/current-location destination without inventing a travel target',()=>{
+ const s=person(),before={x:s.player.x,z:s.player.z};const parsed=validateDecision({...d,destination:'',changePlan:true});assert.equal(parsed.destination,'here');assert.equal(applyResidentDecision(s,parsed,1).started,true);assert.equal(s.activity.kind,'phone');assert.equal(s.player.phone,true);assert.deepEqual({x:s.player.x,z:s.player.z},before);assert.equal(s.route.length,0);
+ for(const action of ['visit','work','eat'])assert.throws(()=>validateDecision({...d,action,destination:''}),/travel requires/);
+ const planned=validateDecision({...d,nextSteps:[{...d,destination:'',condition:{need:'none',min:0,max:100}}]});assert.equal(planned.nextSteps[0].destination,'here');
+});
+test('accepted explicit phone request must execute rather than only describe a search',async()=>{
+ const {PHONE_SEARCH_REQUEST}=await import('../server/shared/phone-request.js');const {createResidentBrain}=await import('../server/groq.js');const s=person();let calls=0;
+ const brain=createResidentBrain({client:{configured:true,model:'test',complete:async()=>({...d,destination:'here',changePlan:++calls>1})}});brain.initialize(s);s.ai.connected=true;await brain.chat(s,PHONE_SEARCH_REQUEST);assert.equal(calls,2);assert.equal(s.player.phone,true);assert.equal(s.activity.kind,'phone');brain.stop();
+});
