@@ -6,6 +6,8 @@ The local model uses the same action validation, measured memories and task veri
 
 ## Run
 
+Double-click `Start-Mac-AI.command` to start. It first stops previous workers from this project and waits for them to exit, then starts one replacement. Other Node apps and LM Studio are left running. An active old generation is cancelled before the worker disconnects.
+
 Start LM Studio and load the model if it is not already running:
 
 ```sh

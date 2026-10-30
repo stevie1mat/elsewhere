@@ -9,11 +9,12 @@ const client=createLocalClient(),workerId=randomUUID();let cookie,stopped=false,
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
 async function login(){const r=await fetch(new URL('/api/login',server),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:process.env.PRIVATE_ACCESS_CODE||'279279'}),signal:AbortSignal.timeout(15000)});if(!r.ok)throw Error('Game login failed ('+r.status+').');cookie=r.headers.get('set-cookie')?.split(';')[0];if(!cookie)throw Error('Game session missing.');}
 async function post(body){const r=await fetch(new URL('/api/resident/worker',server),{method:'POST',headers:{Cookie:cookie,'Content-Type':'application/json'},body:JSON.stringify({...body,workerId}),signal:AbortSignal.timeout(20000)});if(r.status===401){cookie=null;connected=false;throw Error('Game session expired; reconnecting.');}const d=await r.json();if(r.status===410){stopped=true;connected=false;}if(!r.ok){if(r.status===409)connected=false;throw Error(d.error||'Worker endpoint not ready ('+r.status+').');}return d;}
-async function shutdown(){if(stopped)return;stopped=true;try{if(connected)await post({op:'disconnect'});}catch{}console.log('Mac worker stopped. The hosted resident will pause when local AI is unavailable.');}
+async function shutdown(){if(stopped)return;stopped=true;generation?.abort();try{if(connected)await post({op:'disconnect'});}catch{}console.log('Mac worker stopped. The hosted resident will pause when local AI is unavailable.');}
 for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>shutdown().then(()=>process.exit(0)));
+let generation;
 if(process.argv.includes('--cloud')){await login();await post({op:'cloud'});console.log('Hosted game switched back to cloud providers. Manual pause state was preserved.');process.exit(0);}
 const baseline=readMemory();if(baseline.pressure!==1)throw Error('Mac memory pressure is elevated. Local AI was not started.');
-const generation=new AbortController();let memoryStopped=false;
+generation=new AbortController();let memoryStopped=false;
 const monitorMemory=()=>setInterval(()=>{if(memoryStopped)return;try{const issue=memoryIssue(readMemory(),baseline);if(!issue)return;console.log('Stopping local AI: '+issue+'.');}catch{console.log('Stopping local AI: memory monitoring failed.');}memoryStopped=true;generation.abort();execFile('/Applications/LM Studio.app/Contents/Resources/app/.webpack/lms',['unload','resident-local'],{timeout:15000},()=>{});void shutdown();},5000);
 const models=await fetch((process.env.LOCAL_AI_URL||'http://127.0.0.1:1234/v1').replace(/\/$/,'')+'/models',{signal:AbortSignal.timeout(10000)});if(!models.ok)throw Error('Start LM Studio and load resident-local first.');const inventory=await models.json();if(!inventory.data?.some(m=>m.id===client.model))throw Error('Load the model in LM Studio with identifier '+client.model+'.');
 async function ensureModel(){
