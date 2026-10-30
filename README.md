@@ -462,3 +462,29 @@ Restart AI reconnects and continues the same character with its existing route,
 memories and needs; it does not reset the game or erase progress. Provider-side
 rate-limit cooldowns are still respected. Spectator camera controls and exports
 remain usable while paused.
+
+
+## Grounded perception and outcome learning
+
+Perception is explicitly sourced from simulation coordinates, nearby landmarks
+and actual activities. It does not claim image, audio, weather or NPC perception.
+Factual sight/sound questions can be answered directly from those recorded facts
+without an API call while AI is connected. Old model descriptions are untrusted
+as observation evidence; the compact prompt explicitly forbids inventing senses.
+
+Completed activities record before/after needs, spending/earnings and a measured
+utility score. Relief is weighted by how much the need mattered at the start,
+so buying food while barely hungry can score worse than eating when hungry.
+Per-activity/place mean scores and trial counts persist across saves and guide
+future choices. This is experience-based preference learning, not model training
+or a claim that the score proves causation. Legacy activities without baselines
+are not assigned invented outcome scores.
+
+Memory summaries are deterministic, cached in the checkpoint and rebuilt only
+when a new observation or measured outcome appears. No summarization API is
+used. The prompt sends rounded needs, four recent events, six capped chat turns,
+compact place names, and a small learned-memory summary rather than the entire
+experience list. Autonomous activities last at least 60 seconds to avoid rapid
+replanning. Response budgets are capped at 1024 tokens. User-requested activities
+can still use the original 15–180 second range. The Brain panel reports learned
+outcome counts, summary cache hits and local factual-recall hits.

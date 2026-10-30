@@ -24,9 +24,9 @@ test('an AI choice drives the actual character instead of the fixed visit schedu
 });
 test('rest decisions and chat are saved without chat replies executing actions',async()=>{
  let time=1000;const s=ready();const brain=createResidentBrain({client:{configured:true,model:'test',complete:async()=>({...decision,action:'rest',seconds:30})},now:()=>time});brain.initialize(s);
- await brain.update(s);stepResident(s,.1,time);assert.equal(s.rest,30);assert.equal(s.route.length,0);
+ await brain.update(s);stepResident(s,.1,time);assert.equal(s.rest,60);assert.equal(s.route.length,0);
  time+=6000;assert.equal(await brain.chat(s,'What are you planning?'),decision.reply);
- assert.equal(s.messages.length,2);assert.equal(s.messages[0].role,'user');assert.equal(s.rest,30);assert.equal(s.pendingDecision,undefined);
+ assert.equal(s.messages.length,2);assert.equal(s.messages[0].role,'user');assert.equal(s.rest,60);assert.equal(s.pendingDecision,undefined);
  const restored=JSON.parse(JSON.stringify(s));assert.equal(restored.messages[1].content,decision.reply);brain.stop();
 });
 test('usage limits back off, prevent overlapping requests and never reveal provider response bodies',async()=>{

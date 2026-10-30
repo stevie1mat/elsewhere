@@ -1,3 +1,4 @@
+import {learnOutcome,recordObservation} from './cognition.js';
 export const ACTIVITY_ACTIONS=['visit','rest','sleep','eat','observe','reflect','exercise','work'];
 const clamp=value=>Math.max(0,Math.min(100,value));
 export function ensureMind(s){
@@ -29,8 +30,10 @@ export function activityDestination(d){
 export function startActivity(s,d,place,now){
   ensureMind(s);
   if(d.action==='eat'&&s.wallet<4)return {error:'I need €4 for a meal. I should earn some money first.'};
+  const before={needs:{...s.needs},money:s.wallet};
   if(d.action==='eat')s.wallet-=4;
-  s.activity={kind:d.action==='visit'?'observe':d.action,total:d.seconds,remaining:d.seconds,place:place?.name||s.destination||'Porto Sol',startedAt:now};
+  s.activity={before,kind:d.action==='visit'?'observe':d.action,total:d.seconds,remaining:d.seconds,place:place?.name||s.destination||'Porto Sol',startedAt:now};
+  recordObservation(s,now);
   s.rest=d.seconds;s.thought=d.intention;s.player.speed=0;s.player.moving=false;
   return {started:true};
 }
@@ -38,6 +41,7 @@ export function finishActivity(s,now){
   if(!s.activity)return null;
   const a=s.activity;s.activity=null;
   if(a.kind==='work')s.wallet+=8;
+  learnOutcome(s,a,now);recordObservation(s,now);
   const text=a.kind==='work'?`Finished a local work shift at ${a.place}; earned €8.`:a.kind==='eat'?`Finished a meal and drink at ${a.place}; spent €4.`:a.kind==='reflect'?`Reflected at ${a.place}. Current ambition: ${s.ai?.goal||'Build a life in Porto Sol.'}`:`Finished ${a.kind} at ${a.place}.`;
   s.experiences.push({at:now,activity:a.kind,place:a.place,mood:s.mood});s.experiences=s.experiences.slice(-40);return text;
 }
