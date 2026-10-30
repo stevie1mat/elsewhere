@@ -1,5 +1,15 @@
 import './private-entry.css';
 const app=document.querySelector('#app');
+let refreshingVersion=false;
+const assetError=error=>/dynamically imported module|loading chunk|importing a module script|preload.*css|failed to fetch module/i.test(error?.message||String(error));
+function refreshVersion(){
+  if(refreshingVersion)return true;
+  // Only refresh once per minute, so network failures cannot create a reload loop.
+  try{const last=Number(sessionStorage.getItem('porto:asset-refresh')||0);if(Date.now()-last<60000)return false;sessionStorage.setItem('porto:asset-refresh',String(Date.now()));}catch{return false;}
+  refreshingVersion=true;shell('Updating your city…','A new version is ready. Reconnecting to your saved life.');
+  const url=new URL(location.href);url.searchParams.set('_update',String(Date.now()));location.replace(url.href);return true;
+}
+window.addEventListener('vite:preloadError',event=>{if(refreshVersion())event.preventDefault();});
 function shell(title,message){
   app.replaceChildren();const main=document.createElement('main');main.className='private-entry';
   const small=document.createElement('small');small.textContent='ELSEWHERE · PRIVATE WORLD';const heading=document.createElement('h1');heading.textContent=title;
@@ -15,7 +25,9 @@ async function start(){
     if(location.search)history.replaceState(null,'',location.pathname);
     await import('./main.js');
   }catch(error){
-    console.error(error);const main=shell('Your city is temporarily offline.',error.message||'Please try connecting again.');
+    console.error(error);if(refreshingVersion)return;
+    const stale=assetError(error);if(stale&&refreshVersion())return;
+    const main=shell(stale?'The game update could not load.':'Your city is temporarily offline.',stale?'Please refresh to load the latest game version. Your saved character is safe.':error.message||'Please try connecting again.');
     const button=document.createElement('button');button.textContent='Try again';button.onclick=()=>location.reload();main.append(button);
   }
 }
