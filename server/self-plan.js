@@ -1,7 +1,7 @@
 // A model-written program over the game's action API, not executable JavaScript.
 export function installPlan(s,decision,now){
   s.script={createdAt:now,goal:decision.goal,successCriterion:decision.successCriterion||decision.goal,status:'running',cursor:1,
-    steps:[{action:decision.action,destination:decision.destination,seconds:Math.max(60,decision.seconds),intention:decision.intention,condition:{need:'none',min:0,max:100}},...(decision.nextSteps||[]).map(step=>({...step,seconds:Math.max(60,step.seconds)}))]};
+    steps:[{objectId:decision.objectId,verb:decision.verb,action:decision.action,destination:decision.destination,seconds:Math.max(60,decision.seconds),intention:decision.intention,condition:{need:'none',min:0,max:100}},...(decision.nextSteps||[]).map(step=>({...step,seconds:Math.max(60,step.seconds)}))]};
 }
 export function nextPlanStep(s){
   const script=s.script;if(!script||script.status!=='running')return null;

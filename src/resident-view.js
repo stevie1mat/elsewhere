@@ -128,7 +128,7 @@ export function mountResidentView({initial,player,arrival,welcome,getWorld,onLoc
     try{
       let response;
       if(!geometrySent&&getWorld()){
-        response=await fetch('/api/resident/world',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({obstacles:getWorld().obstacles})});
+        response=await fetch('/api/resident/world',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({obstacles:getWorld().obstacles,objects:getWorld().interactionObjects||[]})});
         if(response.ok)geometrySent=true;
       }else response=await fetch('/api/resident',{cache:'no-store'});
       if(response.status===401){location.replace('/');return;}
@@ -140,7 +140,7 @@ export function mountResidentView({initial,player,arrival,welcome,getWorld,onLoc
   const point=new THREE.Vector3();
   return {get paused(){return snapshot.paused===true;},update(camera){
     // Never advance the saved life in the browser: all tabs observe one server state.
-    const pitch=player.pitch;Object.assign(player,motion.sample(performance.now()));player.pitch=pitch;player.arrival=arrival;
+    const pitch=player.pitch;Object.assign(player,motion.sample(performance.now()));player.pitch=pitch;if(!snapshot.player.interactionPose)delete player.interactionPose;player.arrival=arrival;
     if(Date.now()-receivedAt>3000){player.speed=0;player.moving=false;showConnection(snapshot.ai,true);}
   },render(camera,pose){
     point.set(pose.x,(pose.y||0)+2.8,pose.z).project(camera);

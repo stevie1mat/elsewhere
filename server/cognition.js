@@ -1,14 +1,15 @@
+import {perceivedObjects} from './object-perception.js';
 import {LANDMARKS} from './shared/movement.js';
 const rounded=values=>Object.fromEntries(Object.entries(values||{}).map(([k,v])=>[k,Math.round(v)]));
 export function perception(s){
   const nearby=LANDMARKS.map(p=>({id:p.id,name:p.name,metres:Math.round(Math.hypot(s.player.x-p.x,s.player.z-p.z))})).filter(p=>p.metres<=25).sort((a,b)=>a.metres-b.metres).slice(0,3);
-  return {source:'simulation geometry, not camera vision',position:{x:Math.round(s.player.x),z:Math.round(s.player.z)},travel:s.arrival.phase,nearbyPlaces:nearby,activity:s.activity?.kind||(s.route.length?'walking':'idle'),unavailable:['images','sounds','NPC observations','weather']};
+  return {source:'simulation geometry, not camera vision',position:{x:Math.round(s.player.x),z:Math.round(s.player.z)},travel:s.arrival.phase,nearbyPlaces:nearby,objects:perceivedObjects(s),activity:s.activity?.kind||(s.route.length?'walking':'idle'),unavailable:['images','sounds','NPC observations','weather']};
 }
 export function recordObservation(s,now){
-  const p=perception(s),key=JSON.stringify([p.position,p.activity,p.nearbyPlaces.map(x=>x.id)]);
+  const p=perception(s),key=JSON.stringify([p.position,p.activity,p.nearbyPlaces.map(x=>x.id),p.objects.map(x=>x.id)]);
   s.observations??=[];
   if(s.observations.at(-1)?.key===key)return;
-  s.observations.push({at:now,key,source:'simulation',position:p.position,nearbyPlaces:p.nearbyPlaces,activity:p.activity});s.observations=s.observations.slice(-20);
+  s.observations.push({at:now,key,source:'simulation',position:p.position,nearbyPlaces:p.nearbyPlaces,activity:p.activity,objects:p.objects});s.observations=s.observations.slice(-20);
 }
 export function learnOutcome(s,activity,now){
   if(!activity.before)return null;
@@ -30,7 +31,8 @@ export function cachedMemory(s){
   const version=JSON.stringify([s.learning?.totalOutcomes||0,s.observations?.at(-1)?.at||0]);
   if(s.memoryCache?.version===version){s.memoryCache.hits++;return s.memoryCache.summary;}
   const lessons=Object.entries(s.learning?.preferences||{}).sort((a,b)=>b[1].meanReward-a[1].meanReward);
-  const summary={outcomesLearned:s.learning?.totalOutcomes||0,helpful:lessons.filter(([,v])=>v.meanReward>0).slice(0,3).map(([activity,v])=>({activity,trials:v.count,score:v.meanReward})),unhelpful:lessons.filter(([,v])=>v.meanReward<=0).slice(-3).map(([activity,v])=>({activity,trials:v.count,score:v.meanReward})),lastObserved:s.observations?.length?(({key,...observation})=>observation)(s.observations.at(-1)):null,lastOutcome:s.outcomes?.length?(({activity,place,reward,moneyChange})=>({activity,place,reward,moneyChange}))(s.outcomes.at(-1)):null};
+  const knownObjects=[...new Map((s.observations||[]).flatMap(o=>o.objects||[]).map(o=>[o.id,o])).values()].slice(-6);
+  const summary={knownObjects,outcomesLearned:s.learning?.totalOutcomes||0,helpful:lessons.filter(([,v])=>v.meanReward>0).slice(0,3).map(([activity,v])=>({activity,trials:v.count,score:v.meanReward})),unhelpful:lessons.filter(([,v])=>v.meanReward<=0).slice(-3).map(([activity,v])=>({activity,trials:v.count,score:v.meanReward})),lastObserved:s.observations?.length?(({key,...observation})=>observation)(s.observations.at(-1)):null,lastOutcome:s.outcomes?.length?(({activity,place,reward,moneyChange})=>({activity,place,reward,moneyChange}))(s.outcomes.at(-1)):null};
   s.memoryCache={version,summary,hits:s.memoryCache?.hits||0,builds:(s.memoryCache?.builds||0)+1};return summary;
 }
 export function groundedRecall(s,message){

@@ -6,6 +6,7 @@ import {SuitcasePhysics} from './suitcase-physics.js';
 import {groundElevation} from './movement.js';
 import {pitchedRoof} from './building-details.js';
 export function buildFirstHome(w){
+  w.interactionObjects?.push({id:'casa-bed',name:'Casa Aurora bed',type:'bed',x:16,y:.67,z:-85.1,yaw:0,approach:{x:19,z:-85},affordances:['lie_down']});
   const collider=(a,h,b,x,y,z)=>{const proxy=new T.Mesh(new T.BoxGeometry(a,h,b));proxy.position.set(x,y,z);proxy.updateMatrixWorld();w.cameraColliders.push(proxy);};
   const wall=(a,h,b,x,y,z,m=w.m.cream)=>{w.box(a,h,b,x,y,z,m);w.obstacle(x,z,a,b);collider(a,h,b,x,y,z);};
   const plaster=new T.MeshStandardMaterial({color:0xeadfcb,roughness:.95});

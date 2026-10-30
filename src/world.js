@@ -52,7 +52,7 @@ export class World {
   constructor(scene, renderer, manager, location = 'porto') {
     this.location = location; this.cityBuildings = [];
     this.scene = scene; this.renderer = renderer; this.manager = manager;
-    this.obstacles = []; this.cameraColliders = []; this.batches = new Map(); this.walkers = []; this.birds = []; this.lights = [];
+    this.interactionObjects=[];this.obstacles = []; this.cameraColliders = []; this.batches = new Map(); this.walkers = []; this.birds = []; this.lights = [];
     this.night = false; this.treePositions = []; this.seed = 427;
     this.loader = new T.TextureLoader(manager);
     this.materials(); this.environment(); this.ground(); this.neighborhood(); this.waterfront(); this.garden(); this.details(); if (location === 'porto') { expandPorto(this); hillsideLandmarks(this); curvedHarbor(this); townFabric(this); enrichCity(this); addPainterlyGreens(this); } this.bake();
@@ -372,6 +372,7 @@ export class World {
     this.cylinder(.7, .7, .09, x, .79, z, this.m.teak, 20); this.cylinder(.05, .08, .76, x, .38, z, this.m.dark, 8);
     this.cylinder(.34, .34, .06, x, .035, z, this.m.dark, 12);
     for (const dz of [-1.2, 1.2]) {
+      this.interactionObjects?.push({id:`chair:${x}:${z}:${dz}`,name:'Café chair',type:'chair',x,y:.52+(this.elevationOffset||0),z:z+dz,yaw:dz>0?0:Math.PI,approach:{x:x+1.4,z:z+dz},affordances:['sit']});
       this.box(.62, .08, .6, x, .48, z + dz, this.m.teak); this.box(.64, .7, .065, x, .8, z + dz + Math.sign(dz) * .25, this.m.teak);
       for (const dx of [-.23, .23]) for (const q of [-.2, .2]) this.box(.045, .47, .045, x + dx, .23, z + dz + q, this.m.dark); this.obstacle(x, z + dz, .65, .6);
     }
@@ -393,6 +394,7 @@ export class World {
     this.obstacle(x, z, 1.15, 1.15);
   }
   bench(x, z, rotation = 0) {
+    this.interactionObjects?.push({id:`bench:${x}:${z}:${rotation}`,name:'Park bench',type:'bench',x,y:.59+(this.elevationOffset||0),z,yaw:-rotation,approach:{x:x-Math.sin(rotation)*1.3,z:z-Math.cos(rotation)*1.3},affordances:['sit']});
     const group = new T.Group();
     const add = (w, h, d, xx, y, zz, mat) => { const g = new T.BoxGeometry(w, h, d); g.translate(xx, y, zz); g.rotateY(rotation); this.mesh(g, mat, x, 0, z); };
     for (let i = 0; i < 5; i++)add(2.8, .08, .11, 0, .55, -.27 + i * .14, this.m.teak);

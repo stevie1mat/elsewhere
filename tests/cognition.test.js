@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {perception,cachedMemory,groundedRecall} from '../server/cognition.js';
+import {perception,cachedMemory,groundedRecall,learnOutcome} from '../server/cognition.js';
 import {createResident} from '../server/resident.js';
 import {ensureMind,startActivity,stepMind,finishActivity} from '../server/resident-mind.js';
 import {createResidentBrain,residentContext} from '../server/groq.js';
@@ -11,7 +11,7 @@ test('perception and recall report simulation facts rather than invented scenery
  assert.equal(groundedRecall(s,'Can we walk to the beach?'),null);
 });
 test('outcomes teach that an unnecessary meal is less useful than one when hungry',()=>{
- function meal(hunger,thirst){const s=person();s.needs.hunger=hunger;s.needs.thirst=thirst;startActivity(s,{action:'eat',seconds:60,intention:'Eat'},{name:'Café Luma'},0);for(let i=0;i<600;i++)stepMind(s,.1);finishActivity(s,60000);return s;}
+ function meal(hunger,thirst){const s=person();s.needs.hunger=hunger;s.needs.thirst=thirst;const before={needs:{...s.needs},money:s.wallet};s.needs.hunger=0;s.needs.thirst=0;s.wallet-=4;learnOutcome(s,{kind:'eat',place:'Café Luma',before},60000);return s;}
  const unnecessary=meal(14,25),useful=meal(90,85);
  assert.ok(unnecessary.outcomes[0].reward<0);assert.ok(useful.outcomes[0].reward>0);assert.ok(useful.outcomes[0].reward>unnecessary.outcomes[0].reward);
  assert.equal(useful.learning.preferences['eat|Café Luma'].count,1);

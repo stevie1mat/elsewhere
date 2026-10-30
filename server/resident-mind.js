@@ -34,7 +34,7 @@ export function startActivity(s,d,place,now){
   const gap=executionGap(s,d,now);if(gap?.blocked)return {error:gap.message,requirement:gap.requirement};
   const before={needs:{...s.needs},money:s.wallet};
   if(d.action==='eat')s.wallet-=4;
-  s.activity={executionMode:gap?'standing_only':'simulation',before,kind:d.action==='visit'?'observe':d.action,total:d.seconds,remaining:d.seconds,place:place?.name||s.destination||'Porto Sol',startedAt:now};
+  s.activity={executionMode:s.player.interactionPose?'object_interaction':gap?'standing_only':'simulation',before,kind:d.action==='visit'?'observe':d.action,total:d.seconds,remaining:d.seconds,place:place?.name||s.destination||'Porto Sol',startedAt:now};
   recordObservation(s,now);
   s.rest=d.seconds;s.thought=gap?.message||d.intention;s.player.speed=0;s.player.moving=false;
   return {started:true};

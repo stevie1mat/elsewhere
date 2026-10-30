@@ -1,3 +1,4 @@
+import {validateObjects} from './object-perception.js';
 import {createSupabaseStore} from './supabase-store.js';
 import {createResilientClient,createResidentBrain} from './groq.js';
 import {createServer} from 'node:http';
@@ -63,10 +64,11 @@ export function createPrivateServer({code=process.env.PRIVATE_ACCESS_CODE||'2792
       if(url.pathname==='/api/resident'&&req.method==='GET'){if(!cloudReady&&!hadLocal){json(res,503,{error:'Loading the saved life from Supabase. Please retry shortly.'});return;}json(res,200,{...residentSnapshot(state),saveError:saveError||cloudError,storage:storageStatus()});return;}
       if(url.pathname.startsWith('/api/resident/')&&!cloudReady&&!hadLocal){json(res,503,{error:'Waiting for the saved life from Supabase.'});return;}
       if(url.pathname==='/api/resident/world'&&req.method==='POST'){
-        if(!state.obstacles){const input=await body(req);
+        const input=await body(req);if(input.objects!==undefined){if(!validateObjects(input.objects)){json(res,400,{error:'Invalid interaction object registry'});return;}state.objects=input.objects;}
+        if(!state.obstacles){
           if(!Array.isArray(input.obstacles)||input.obstacles.length>20000||!input.obstacles.every(b=>['minX','maxX','minZ','maxZ'].every(k=>Number.isFinite(b[k])&&Math.abs(b[k])<10000)&&b.minX<=b.maxX&&b.minZ<=b.maxZ)){json(res,400,{error:'Invalid world geometry'});return;}
           state.obstacles=input.obstacles.map(({minX,maxX,minZ,maxZ})=>({minX,maxX,minZ,maxZ}));remember(state,'Began the balloon journey to Porto Sol.',Date.now());save();void writeCloud();
-        }json(res,200,residentSnapshot(state));return;
+        }save();void writeCloud();json(res,200,residentSnapshot(state));return;
       }
       if(url.pathname==='/api/resident/control'&&req.method==='POST'){
         const input=await body(req);

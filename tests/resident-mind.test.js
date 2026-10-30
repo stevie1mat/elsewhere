@@ -10,14 +10,13 @@ test('old saves receive persistent needs and walking gradually consumes energy',
  assert.ok(s.needs.energy<before);assert.ok(s.needs.hunger>25);assert.ok(s.needs.thirst>20);
  const restored=JSON.parse(JSON.stringify(s));ensureMind(restored);assert.deepEqual(restored.needs,s.needs);
 });
-test('meals cost money, reduce hunger and thirst, and finish with a real event',()=>{
- const s=person();s.player.x=31;s.player.z=10;s.needs.hunger=90;s.needs.thirst=80;
- applyResidentDecision(s,decision('eat','cafe'),0);assert.equal(s.wallet,16);
- for(let i=0;i<460;i++)stepResident(s,.1,i*100);
- assert.ok(s.needs.hunger<50);assert.ok(s.needs.thirst<50);assert.ok(s.events.some(e=>e.message.includes('Finished a meal')));
+test('food cannot be consumed without an edible object and interaction',()=>{
+ const s=person();s.player.x=31;s.player.z=10;s.needs.hunger=90;
+ assert.match(applyResidentDecision(s,decision('eat','cafe'),0).error,/No usable food/);
+ assert.equal(s.wallet,20);assert.equal(s.needs.hunger,90);assert.equal(s.activity,undefined);
 });
 test('sleep travels home before recovery and work pays only after completion',()=>{
- const s=person();s.needs.energy=20;applyResidentDecision(s,decision('sleep','garden'),0);
+ const s=person();s.objects=[{id:'bed',name:'Casa Aurora',type:'bed',x:16,y:.67,z:-85,yaw:0,approach:{x:19,z:-85},affordances:['lie_down']}];s.needs.energy=20;applyResidentDecision(s,decision('sleep','garden'),0);
  assert.equal(s.destination,'Casa Aurora');assert.equal(s.rest,0);assert.equal(s.activity,null);assert.ok(s.route.length);
  const w=person();w.player.x=31;w.player.z=10;applyResidentDecision(w,decision('work','cafe',30),0);assert.equal(w.wallet,20);
  for(let i=0;i<310;i++)stepResident(w,.1,i*100);
