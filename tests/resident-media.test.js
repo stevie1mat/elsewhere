@@ -35,3 +35,14 @@ test('real character holds a human-scale phone; pose and prop disappear when pho
  const size=new T.Box3().setFromObject(e.phone).getSize(new T.Vector3());assert.ok(size.length()>.1&&size.length()<.3);const hand=e.walker.getObjectByName('Bip01_R_Hand').getWorldPosition(new T.Vector3());assert.ok(e.phone.getWorldPosition(new T.Vector3()).distanceTo(hand)<.1);
  applyResidentDecision(s,{action:'observe',destination:'cafe',seconds:15,intention:'Observe'},2);e.update(s.player,0);assert.equal(e.phone.visible,false);
 });
+test('the exact phone button request reaches the AI planner instead of sensory recall, and starts a search',async()=>{
+ const {PHONE_SEARCH_REQUEST}=await import('../server/shared/phone-request.js');const {createResidentBrain}=await import('../server/groq.js');const {groundedRecall}=await import('../server/cognition.js');
+ const s=person();assert.equal(groundedRecall(s,PHONE_SEARCH_REQUEST),null);let calls=0;
+ const brain=createResidentBrain({client:{configured:true,model:'test',complete:async()=>{calls++;return {...d,changePlan:true};}}});brain.initialize(s);s.ai.connected=true;
+ const reply=await brain.chat(s,PHONE_SEARCH_REQUEST);assert.equal(calls,1);assert.equal(reply,d.reply);assert.equal(s.player.phone,true);assert.equal(s.activity.kind,'phone');assert.equal(s.media.query,d.mediaQuery);assert.equal(s.ai.localRecallHits,undefined);
+ let searches=0;const service=createMediaService({instances:['https://first.example'],fetchImpl:async()=>{searches++;return Response.json([video]);}});await service.update(s);assert.equal(searches,1);assert.equal(s.media.status,'ready');brain.stop();
+});
+test('factual sensory recall stays local while mixed action requests go to the planner',async()=>{
+ const {groundedRecall}=await import('../server/cognition.js');const s=person();assert.match(groundedRecall(s,'What did you see earlier?'),/last recorded observation/);
+ assert.equal(groundedRecall(s,'Search for music, but do not pretend you have heard it yet.'),null);assert.equal(groundedRecall(s,'Play something based on what you saw earlier.'),null);
+});

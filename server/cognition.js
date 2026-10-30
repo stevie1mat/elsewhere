@@ -40,6 +40,8 @@ export function cachedMemory(s){
   s.memoryCache={version,summary,hits:s.memoryCache?.hits||0,builds:(s.memoryCache?.builds||0)+1};return summary;
 }
 export function groundedRecall(s,message){
+  // Action requests must reach the planner even if they also mention seeing/hearing.
+  if(/\b(search|play|listen|watch)\b|\buse\b.{0,40}\bphone\b/i.test(message))return null;
   if(!/\b(see|saw|seen|hear|heard|smell|smelled|notice|noticed|observe|observed)\b/i.test(message)||/\b(go|walk|visit|head|take me)\b/i.test(message))return null;
   const earlier=/\b(earlier|before|previous|last)\b/i.test(message),observation=earlier?s.observations?.at(-1):null,p=observation||perception(s);
   const places=(p.nearbyPlaces||[]).map(x=>`${x.name} (${x.metres}m away)`).join(', ');

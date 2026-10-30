@@ -1,0 +1,1 @@
+export const PHONE_SEARCH_REQUEST='Would you like to use your phone to search for a YouTube video or music now? Choose your own query and explain your reason in relation to your mood or interests. If you accept, execute the phone action. Do not claim to have heard content before playback.';

@@ -1,3 +1,4 @@
+import {PHONE_SEARCH_REQUEST} from '../server/shared/phone-request.js';
 const node=(tag,text)=>{const e=document.createElement(tag);if(text!==undefined)e.textContent=text;return e;};
 let apiPromise;
 function youtubeApi(){
@@ -24,14 +25,14 @@ export function mountResidentPhone(){
    }});
   }catch(e){playback.textContent=e.message;report('blocked',m.id);}finally{open.disabled=!active()||!snapshot?.media?.selected;}
  };
- ask.onclick=async()=>{if(askBusy)return;askBusy=true;ask.disabled=true;status.textContent='Asking the resident…';try{const r=await fetch('/api/resident/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:'Would you like to use your phone to search for a YouTube video or music now? Choose your own query and explain your reason in relation to your mood or interests. If you accept, execute the phone action. Do not claim to have heard content before playback.'})});const data=await r.json();status.textContent=data.reply||data.error||'Request finished.';}catch{status.textContent='Cannot reach the game server.';}finally{askBusy=false;ask.disabled=!active()&&(snapshot?.paused||snapshot?.ai?.connected!==true);}};
+ ask.onclick=async()=>{if(askBusy)return;askBusy=true;ask.disabled=true;status.textContent='Asking the resident…';try{const r=await fetch('/api/resident/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:PHONE_SEARCH_REQUEST})});const data=await r.json();status.textContent=data.reply||data.error||'Request finished.';}catch{status.textContent='Cannot reach the game server.';}finally{askBusy=false;ask.disabled=!active()&&(snapshot?.paused||snapshot?.ai?.connected!==true);}};
  let signature='';return {update(s){snapshot=s;const m=s.media;badge.textContent=`📱 Phone · ${s.mood||'settling in'}${s.player.phone?' · in hand':''}`;
  if(player&&(!active()||playingId!==m?.id||document.hidden))stop('paused');
- ask.disabled=askBusy||!s.ai?.connected||s.paused;ask.textContent=askBusy?'Resident is choosing…':s.paused?'Resume life & AI to use phone':!s.ai?.connected?'Waiting for AI connection':'Ask resident to choose a video';open.disabled=!active()||!m?.selected;
+ ask.disabled=askBusy||!s.ai?.connected||s.paused;ask.textContent=askBusy?'Resident is choosing…':s.paused?'Resume life & AI to use phone':!s.ai?.connected?'Waiting for AI connection':'Ask resident to choose a video';open.disabled=!active()||!m?.selected;open.hidden=!m?.selected;
  const key=JSON.stringify([s.mood,s.paused,s.ai?.connected,s.activity?.kind,m,s.mediaHistory]);if(key===signature)return;signature=key;
  mood.textContent='Current simulated mood: '+(s.mood||'settling in');reason.textContent=m?'Reason stated by AI: '+m.reason:'The resident has not chosen a phone search yet.';query.textContent=m?'AI search: “'+m.query+'”':'';
  status.textContent=s.paused?'Game paused. Resume life & AI before the resident can choose a phone search.':!s.ai?.connected?'AI disconnected — phone activity paused.':!m?'No search chosen yet. The phone appears in its hand only during a phone action. Ask the resident to choose a video, or let it choose autonomously.':m.error||`${m.status} via Invidious${m.cached?' · cached search':''}${m.selected?' · '+m.selected.title:''}`;
- if(!player)playback.textContent=active()?'Open a player to watch/listen. Search results are not proof of playback.':'Phone activity is not running. Past search is retained below.';
+ if(!player)playback.textContent=active()?'Open a player to watch/listen. Search results are not proof of playback.':m?'Phone activity is not running. Past search is retained below.':'No phone activity or playback yet.';
  link.hidden=!m;link.href=(m?.instance||'https://yt.chocolatemoo53.com')+'/search?q='+encodeURIComponent(m?.query||'');watch.hidden=!m?.selected;watch.href=(m?.instance||'https://yt.chocolatemoo53.com')+'/watch?v='+encodeURIComponent(m?.selected?.videoId||'');history.replaceChildren();
  searches.replaceChildren();for(const prior of [...(s.mediaHistory||[])].reverse().slice(0,10))searches.append(node('li',`${prior.query} · mood: ${prior.moodAtSearch} · ${prior.reason}`));
  for(const result of m?.results||[]){const li=node('li',result.title+' — '+result.author+(result.videoId===m.selected?.videoId?' · first result for the AI query':''));history.append(li);}
