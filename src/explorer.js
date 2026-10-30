@@ -1,3 +1,4 @@
+import {createPhone,applyPhonePose} from './phone-pose.js';
 import {applyObjectPose} from './object-poses.js';
 import * as T from 'three';
 import { clone } from 'three/addons/utils/SkeletonUtils.js';
@@ -97,7 +98,7 @@ export class Explorer {
     // SkeletonUtils clones meshes but shares materials, so the wardrobe controls this rider only.
     this.walker=clone(template);this.walker.scale.setScalar(.01);
     this.applyWalkingLook=dress(this.walker);
-    this.footContact=new FootContact(this.walker);
+    this.footContact=new FootContact(this.walker);this.phone=createPhone(this.walker);
     this.walker.updateWorldMatrix(true,true);
     const spine=this.walker.getObjectByName('Bip01_Spine1');
     this.parachutePack=createParachutePack();
@@ -167,6 +168,7 @@ export class Explorer {
       for(const {bone,rotation} of this.idleLegs)bone.quaternion.slerp(rotation,idle);
       this.walker.position.set(p.x,p.y||0,p.z);this.walker.rotation.set(0,Math.PI-p.yaw,0,'YXZ');
       if(!applyObjectPose(this.walker,p.interactionPose))this.footContact.align(p);
+      applyPhonePose(this.walker,this.phone,p.phone===true);
       if(p.swimming){
         this.swimClock=(this.swimClock||0)+Math.min(.1,dt);
         const effort=Math.min(1,Math.abs(p.speed)/1.6),stroke=this.swimClock*(2+effort*2);

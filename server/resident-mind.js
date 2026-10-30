@@ -1,3 +1,4 @@
+import {beginPhone} from './resident-media.js';
 import {learnOutcome,recordObservation} from './cognition.js';
 export {ACTIVITY_ACTIONS} from './action-catalog.js';
 import {executionGap} from './capability-feedback.js';
@@ -32,6 +33,8 @@ export function startActivity(s,d,place,now){
   ensureMind(s);
   if(d.action==='eat'&&s.wallet<4)return {error:'I need €4 for a meal. I should earn some money first.'};
   const gap=executionGap(s,d,now);if(gap?.blocked)return {error:gap.message,requirement:gap.requirement};
+  if(s.player.phone&&s.media){s.media.endedAt=now;s.media.playback='stopped';}
+  if(d.action==='phone'){const phone=beginPhone(s,d,now);if(phone.error)return phone;}else delete s.player.phone;
   const before={needs:{...s.needs},money:s.wallet};
   if(d.action==='eat')s.wallet-=4;
   s.activity={executionMode:s.player.interactionPose?'object_interaction':gap?'standing_only':'simulation',before,kind:d.action==='visit'?'observe':d.action,total:d.seconds,remaining:d.seconds,place:place?.name||s.destination||'Porto Sol',startedAt:now};
@@ -41,7 +44,7 @@ export function startActivity(s,d,place,now){
 }
 export function finishActivity(s,now){
   if(!s.activity)return null;
-  const a=s.activity;s.activity=null;
+  const a=s.activity;s.activity=null;if(a.kind==='phone'){delete s.player.phone;if(s.media){s.media.endedAt=now;s.media.playback='stopped';}}
   if(a.kind==='work')s.wallet+=8;
   learnOutcome(s,a,now);recordObservation(s,now);
   const text=a.kind==='work'?`Finished a local work shift at ${a.place}; earned €8.`:a.kind==='eat'?`Finished a meal and drink at ${a.place}; spent €4.`:a.kind==='reflect'?`Reflected at ${a.place}. Current ambition: ${s.ai?.goal||'Build a life in Porto Sol.'}`:`Finished ${a.kind} at ${a.place}.`;

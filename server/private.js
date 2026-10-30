@@ -1,3 +1,4 @@
+import {createMediaService} from './resident-media.js';
 import {validateObjects} from './object-perception.js';
 import {createSupabaseStore} from './supabase-store.js';
 import {createResilientClient,createResidentBrain} from './groq.js';
@@ -17,6 +18,7 @@ export function createPrivateServer({code=process.env.PRIVATE_ACCESS_CODE||'2792
   const hadLocal=existsSync(saveFile);
   let state=existsSync(saveFile)?JSON.parse(readFileSync(saveFile,'utf8')):createResident();
   if(state.version!==1)throw Error('Unsupported resident save version');
+  const mediaService=createMediaService();
   const brain=createResidentBrain({client:groqClient});brain.initialize(state);
   let cloudReady=!cloud.configured,cloudError=null,lastCloudSave=null,cloudWrite=null,loading=null;
   async function loadCloud(){
@@ -70,6 +72,12 @@ export function createPrivateServer({code=process.env.PRIVATE_ACCESS_CODE||'2792
           state.obstacles=input.obstacles.map(({minX,maxX,minZ,maxZ})=>({minX,maxX,minZ,maxZ}));remember(state,'Began the balloon journey to Porto Sol.',Date.now());save();void writeCloud();
         }save();void writeCloud();json(res,200,residentSnapshot(state));return;
       }
+      if(url.pathname==='/api/resident/media'&&req.method==='POST'){
+        const input=await body(req),m=state.media;
+        if(!m||input.id!==m.id||!['player_open','playing_unmuted','playing_muted','ended','paused','closed','blocked'].includes(input.playback)){json(res,400,{error:'Invalid media playback update'});return;}
+        if(state.paused||state.ai?.connected!==true||state.activity?.kind!=='phone'){json(res,409,{error:'Resident paused or disconnected'});return;}
+        m.playback=input.playback;m.playbackReportedAt=Date.now();save();json(res,200,{ok:true});return;
+      }
       if(url.pathname==='/api/resident/control'&&req.method==='POST'){
         const input=await body(req);
         if(!['pause','resume','restart'].includes(input.action)){json(res,400,{error:'Choose pause, resume or restart.'});return;}
@@ -90,7 +98,7 @@ export function createPrivateServer({code=process.env.PRIVATE_ACCESS_CODE||'2792
       res.writeHead(200,{'Content-Type':types[extname(path)]||'application/octet-stream','Cache-Control':'no-store'});res.end(req.method==='HEAD'?undefined:readFileSync(path));
     }catch(error){console.error(error.message);if(!res.headersSent)json(res,500,{error:'Unable to process request'});else res.end();}
   });
-  let last=Date.now();const tick=setInterval(()=>{const now=Date.now(),dt=Math.min(1,(now-last)/1000);last=now;try{if(!cloudReady&&!hadLocal)return;void brain.update(state);stepResident(state,dt,now);}catch(e){console.error('Resident simulation failed:',e.message);}},100);
+  let last=Date.now();const tick=setInterval(()=>{const now=Date.now(),dt=Math.min(1,(now-last)/1000);last=now;try{if(!cloudReady&&!hadLocal)return;void brain.update(state);stepResident(state,dt,now);void mediaService.update(state);}catch(e){console.error('Resident simulation failed:',e.message);}},100);
   const persistence=setInterval(()=>{save();if(cloudReady)void writeCloud();else void loadCloud();const now=Date.now();for(const [key,until] of sessions)if(until<now)sessions.delete(key);for(const [key,limit] of attempts)if(limit.until<now)attempts.delete(key);},5000);
   const ready=loadCloud();
   return {http,get state(){return state;},ready,storageStatus,close:async()=>{brain.stop();clearInterval(tick);clearInterval(persistence);await ready;if(cloudWrite)await cloudWrite;save();await writeCloud();await new Promise(resolve=>http.close(resolve));}};

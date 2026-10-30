@@ -1,5 +1,6 @@
-export const ACTIVITY_ACTIONS=['visit','rest','sleep','eat','observe','reflect','exercise','work','interact'];
+export const ACTIVITY_ACTIONS=['visit','rest','sleep','eat','observe','reflect','exercise','work','interact','phone'];
 export const ACTION_SUPPORT={
+ phone:'Take out your phone and search YouTube via Invidious using mediaQuery. Browser viewer must open player and allow playback; no audio or video content is perceived by the AI. Choose queries yourself, explain the reason. No guaranteed mood benefit.',
  visit:'Walk to landmark; observe on arrival.',
  interact:'Choose objectId and verb from perceived or remembered objects. Navigate to approach, align, sit or lie_down with a procedural body pose, then stand up. Sitting restores energy (~0.132/s net); lying restores ~0.692/s. No imported transition clips.',
  rest:'Standing rest restores energy (~0.132/s net); use interact with a seat to recover while sitting.',

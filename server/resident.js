@@ -51,6 +51,7 @@ export function applyResidentDecision(s,decision,now=Date.now()){
     const start=s.player.interactionPose?.exit||s.player;
     const route=residentRoute(start,object.approach,s.obstacles, .8);
     if(!route.length)return {error:`No safe route to the approach slot for ${object.name}.`};
+    if(s.player.phone){delete s.player.phone;if(s.media){s.media.endedAt=now;s.media.playback='stopped';}}
     finishInteraction(s,now,false);
     s.route=route;s.routeIndex=0;s.destination=object.name;s.rest=0;s.activity=null;s.activityOnArrival=null;
     s.pendingInteraction={objectId:object.id,verb,seconds:decision.seconds,intention:decision.intention};s.thought=decision.intention;return {started:true};
@@ -63,6 +64,7 @@ export function applyResidentDecision(s,decision,now=Date.now()){
   if(travel&&Math.hypot(s.player.x-destination.x,s.player.z-destination.z)>2){
     const route=residentRoute(s.player.interactionPose?.exit||s.player,destination,s.obstacles);
     if(!route.length)return {error:`I couldn't find a clear walking route to ${destination.name}. I'll keep my current plan for now.`};
+    if(s.player.phone){delete s.player.phone;if(s.media){s.media.endedAt=now;s.media.playback='stopped';}}
     finishInteraction(s,now,false);delete s.pendingInteraction;
     s.route=route;s.routeIndex=0;s.destination=destination.name;s.rest=0;s.activity=null;s.activityOnArrival={...decision,destination:destination.id};s.thought=decision.intention;return {started:true};
   }

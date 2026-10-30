@@ -1,3 +1,4 @@
+import {mountResidentPhone} from './resident-phone.js';
 import {mountLearningView} from './learning-view.js';
 import {downloadAiCsv} from './ai-csv.js';
 import * as THREE from 'three';
@@ -68,9 +69,9 @@ export function mountResidentView({initial,player,arrival,welcome,getWorld,onLoc
   document.querySelector('#app').append(toggle,connection,playback,diagnostics,panel,bubble);
   let snapshot=initial,busy=false,geometrySent=false,lastEvents='',lastMessages='',receivedAt=Date.now();
   let chatBusy=false;
-  const learningView=mountLearningView();
+  const learningView=mountLearningView();const phoneView=mountResidentPhone();
   const motion=new ResidentMotion(initial.player,performance.now());
-  function apply(next){motion.receive(next.player,performance.now(),{snap:next.arrival.phase!==snapshot.arrival.phase||next.arrival.phase!=='landed'});snapshot=next;Object.assign(arrival,next.arrival);Object.assign(welcome,next.welcome);receivedAt=Date.now();
+  function apply(next){motion.receive(next.player,performance.now(),{snap:next.arrival.phase!==snapshot.arrival.phase||next.arrival.phase!=='landed'});snapshot=next;phoneView.update(next);Object.assign(arrival,next.arrival);Object.assign(welcome,next.welcome);receivedAt=Date.now();
     learningView.update(next);showConnection(next.ai);renderDiagnostics(next);playback.querySelector('#resident-pause').textContent=next.paused?'▶ Resume life & AI':'Ⅱ Pause life & AI';playback.querySelector('#resident-pause-status').textContent=next.paused?'Paused · no new AI requests or memories':'';
     document.body.classList.toggle('arriving',next.arrival.phase!=='landed');
     document.querySelector('#arrival-title').textContent=next.arrival.phase==='parachute'?'Coming in to land.':'Your island is on the horizon.';
@@ -133,14 +134,14 @@ export function mountResidentView({initial,player,arrival,welcome,getWorld,onLoc
       }else response=await fetch('/api/resident',{cache:'no-store'});
       if(response.status===401){location.replace('/');return;}
       if(!response.ok)throw Error(`City connection failed (${response.status})`);apply(await response.json());
-    }catch(error){showConnection(snapshot.ai,true);panel.querySelector('#resident-status').textContent=error.message+' · retrying';if(!geometrySent)document.querySelector('#arrival-detail').textContent='Waiting for the city connection. Retrying automatically…';}finally{busy=false;}
+    }catch(error){phoneView.update({...snapshot,ai:{...snapshot.ai,connected:false}});showConnection(snapshot.ai,true);panel.querySelector('#resident-status').textContent=error.message+' · retrying';if(!geometrySent)document.querySelector('#arrival-detail').textContent='Waiting for the city connection. Retrying automatically…';}finally{busy=false;}
   }
   const interval=setInterval(sync,400);sync();window.addEventListener('pagehide',()=>clearInterval(interval),{once:true});
   const marker=document.createElement('button');marker.type='button';marker.id='resident-marker';marker.setAttribute('aria-label','Move camera close to your resident');marker.onclick=onLocate;marker.innerHTML='<span aria-hidden="true">◆</span> YOUR RESIDENT';document.querySelector('#app').append(marker);
   const point=new THREE.Vector3();
   return {get paused(){return snapshot.paused===true;},update(camera){
     // Never advance the saved life in the browser: all tabs observe one server state.
-    const pitch=player.pitch;Object.assign(player,motion.sample(performance.now()));player.pitch=pitch;if(!snapshot.player.interactionPose)delete player.interactionPose;player.arrival=arrival;
+    const pitch=player.pitch;Object.assign(player,motion.sample(performance.now()));player.pitch=pitch;if(!snapshot.player.phone)delete player.phone;if(!snapshot.player.interactionPose)delete player.interactionPose;player.arrival=arrival;
     if(Date.now()-receivedAt>3000){player.speed=0;player.moving=false;showConnection(snapshot.ai,true);}
   },render(camera,pose){
     point.set(pose.x,(pose.y||0)+2.8,pose.z).project(camera);
