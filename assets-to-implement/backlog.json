@@ -1,0 +1,6 @@
+[
+  {"id":"food-interaction","name":"Food and drink interaction","status":"needs_implementation","source":"developer inventory","needs":["Usable food/drink props","Object affordances and consumption state","Reach, hold, eat/drink and release animation","Only apply hunger/thirst relief after successful consumption"]},
+  {"id":"seat-transitions","name":"Smooth sit and stand transitions","status":"needs_implementation","source":"developer inventory","needs":["Rig-compatible sit-down and stand-up clips","Transitions into and out of existing seated pose"]},
+  {"id":"bed-transitions","name":"Smooth bed entry and exit","status":"needs_implementation","source":"developer inventory","needs":["Rig-compatible lie-down and get-up clips","Transitions into and out of existing lying pose"]},
+  {"id":"physical-work-exercise","name":"Physical work and exercise tasks","status":"needs_implementation","source":"developer inventory","needs":["Task-specific props and usable targets","Rig-compatible task animations","Measured task success/failure beyond a timer"]}
+]

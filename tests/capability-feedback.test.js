@@ -11,7 +11,7 @@ test('bed sleep is reported as an interaction gap instead of a successful activi
 });
 test('standing rest is honest and does not repeatedly announce the same missing capability',()=>{
  const s=person(),d={action:'rest',seconds:60,intention:'Rest here.'};
- assert.equal(startActivity(s,d,null,1000).started,true);assert.equal(s.activity.executionMode,'standing_only');assert.match(s.thought,/Standing rest/);
+ assert.equal(startActivity(s,d,null,1000).started,true);assert.equal(s.activity.executionMode,'standing_only');assert.match(s.thought,/resting on my feet/);
  startActivity(s,d,null,2000);assert.equal(s.worldRequests,undefined);assert.equal(s.messages,undefined);
  const seated=startActivity(s,{...d,intention:'Sit down on the chair.'},null,3000);assert.match(seated.error,/No usable target/);
 });
