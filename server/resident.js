@@ -1,3 +1,4 @@
+import {ensureMind,stepMind,startActivity,finishActivity,activityDestination} from './resident-mind.js';
 import {createPlayer,SPAWN,canOccupy,groundElevation,LANDMARKS,PORTO_BOUNDS} from './shared/movement.js';
 import {createArrival,stepArrival,dropArrival,JOURNEY_SECONDS} from './shared/arrival.js';
 
@@ -35,11 +36,25 @@ export function residentRoute(start,target,obstacles) {
   }
   return [];
 }
+export function applyResidentDecision(s,decision,now=Date.now()){
+  ensureMind(s);
+  const destination=LANDMARKS.find(p=>p.id===activityDestination(decision));
+  if(!destination)return {error:'I do not know that place.'};
+  if(decision.action==='eat'&&s.wallet<4)return {error:'I need €4 for a meal. I should earn some money first.'};
+  const travel=decision.action==='visit'||['sleep','eat','work'].includes(decision.action);
+  if(travel&&Math.hypot(s.player.x-destination.x,s.player.z-destination.z)>2){
+    const route=residentRoute(s.player,destination,s.obstacles);
+    if(!route.length)return {error:`I couldn't find a clear walking route to ${destination.name}. I'll keep my current plan for now.`};
+    s.route=route;s.routeIndex=0;s.destination=destination.name;s.rest=0;s.activity=null;s.activityOnArrival={...decision,destination:destination.id};s.thought=decision.intention;return {started:true};
+  }
+  s.route=[];s.routeIndex=0;s.activityOnArrival=null;
+  return startActivity(s,decision,travel?destination:null,now);
+}
 const visits=['home','cafe','garden','bikes','home','south'];
 export function stepResident(s,dt,now=Date.now()) {
   if(!s.obstacles)return;
   const p=s.player,clear=(x,z)=>canOccupy(x,z,s.obstacles,.6);
-  s.updatedAt=now;
+  s.updatedAt=now;ensureMind(s);if(s.arrival.phase==='landed')stepMind(s,dt);
   if(s.arrival.phase!=='landed') {
     stepArrival(s.arrival,dt,{player:p,canLand:clear});
     if(s.arrival.phase==='balloon'&&s.arrival.elapsed>=JOURNEY_SECONDS){
@@ -48,17 +63,17 @@ export function stepResident(s,dt,now=Date.now()) {
     if(s.arrival.phase==='landed')remember(s,'Landed in Porto Sol. Next: find Casa Aurora.',now);
     return;
   }
-  if(s.rest>0){s.rest=Math.max(0,s.rest-dt);p.moving=false;p.speed=0;return;}
+  if(s.rest>0){s.rest=Math.max(0,s.rest-dt);if(s.activity)s.activity.remaining=s.rest;p.moving=false;p.speed=0;if(s.rest===0){const event=finishActivity(s,now);if(event)remember(s,event,now);}return;}
   if(!s.route.length){
     let decision;
     if(s.ai?.enabled&&!s.ai.fallback){
       decision=s.pendingDecision;
       if(!decision){p.speed=0;p.moving=false;return;}
       delete s.pendingDecision;
-      if(decision.action==='rest'){s.rest=decision.seconds;s.thought=decision.intention;p.speed=0;p.moving=false;remember(s,`Resting for ${decision.seconds} seconds.`,now);return;}
+      if(decision.action!=='visit'){const result=applyResidentDecision(s,decision,now);if(result.error){s.thought=result.error;remember(s,result.error,now);s.rest=10;}if(!s.route.length)return;}
     }
-    const destination=LANDMARKS.find(l=>l.id===(decision?decision.destination:visits[s.visit%visits.length]));
-    s.route=residentRoute(p,destination,s.obstacles);s.routeIndex=0;s.destination=destination.name;
+    const destination=LANDMARKS.find(l=>l.id===(decision?activityDestination(decision):visits[s.visit%visits.length]));
+    if(!s.route.length){s.route=residentRoute(p,destination,s.obstacles);s.routeIndex=0;s.destination=destination.name;s.activityOnArrival=decision||null;}
     if(!s.route.length){s.thought=`I could not find a safe route to ${destination.name}. I'll try somewhere else.`;remember(s,s.thought,now);s.visit++;s.rest=10;return;}
     s.thought=decision?.intention||`I'm walking to ${destination.name}.`;remember(s,`Set off for ${destination.name}.`,now);
   }
@@ -74,7 +89,10 @@ export function stepResident(s,dt,now=Date.now()) {
   if(s.routeIndex===s.route.length){
     remember(s,`Reached ${s.destination}. Taking a short rest.`,now);
     if(s.destination==='Casa Aurora'&&s.welcome.phase!=='settled'){s.welcome={phase:'settled'};remember(s,'Settled into Casa Aurora; the first home is saved.',now);}
-    s.thought=`I'm taking a moment at ${s.destination}.`;s.route=[];s.visit++;s.rest=45;p.moving=false;p.speed=0;
+    s.placesVisited[s.destination]=(s.placesVisited[s.destination]||0)+1;s.needs.curiosity=Math.max(0,s.needs.curiosity-12);
+    const next=s.activityOnArrival||{action:'observe',seconds:45,intention:`I'm taking a moment at ${s.destination}.`};s.activityOnArrival=null;
+    const result=startActivity(s,{...next,intention:next.action==='visit'?`I'm looking around ${s.destination}.`:next.intention},{name:s.destination},now);
+    if(result.error){s.thought=result.error;s.rest=10;remember(s,result.error,now);}s.route=[];s.visit++;p.moving=false;p.speed=0;
   }
 }
 export function residentSnapshot(s){const {obstacles,route,...snapshot}=s;return {...snapshot,initialized:!!obstacles,mode:s.ai?.enabled&&!s.ai.fallback?'ai':'routine'};}

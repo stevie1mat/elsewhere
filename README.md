@@ -393,3 +393,23 @@ rest/route. Questions and greetings leave the activity unchanged. Beach requests
 map to Costa Dourada's seaside promenade and beach access. If a destination is
 unreachable, the response explains that movement could not start; it does not
 promise to walk there. Accepted changes persist in the checkpoint and event log.
+
+
+## Needs and everyday activities
+
+The resident now maintains energy, hunger, thirst, stress, curiosity and social
+need, plus personality, mood, spending money, visited places and recent
+experiences. Existing saves receive defaults without resetting progress; all
+fields persist in the same Supabase checkpoint. The AI sees these values and
+uses them to choose purposeful activities instead of only rotating destinations.
+
+New actions are `sleep`, `eat`, `work`, `observe`, `reflect` and `exercise`,
+alongside visiting/resting. Sleep routes home; meals and work route to the café
+or market. A meal/drink costs €4 and reduces hunger/thirst over time. A completed
+work shift pays €8; an interrupted shift does not pay. These are timed simulation
+activities, not detailed restaurant transactions, NPC jobs, or new animations.
+Sleep/rest restore energy, reflection reduces stress, observation satisfies
+curiosity, and chat reduces social need. Activity duration/progress, earnings
+and completed experiences are saved. The Brain view shows current needs, mood,
+activity countdown and money. Accepted chat requests can interrupt activities.
+Construction, full relationships and named NPC conversations remain future work.
