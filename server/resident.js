@@ -1,3 +1,4 @@
+import {executionGap} from './capability-feedback.js';
 import {invalidatePlan} from './self-plan.js';
 import {ensureMind,stepMind,startActivity,finishActivity,activityDestination} from './resident-mind.js';
 import {createPlayer,SPAWN,canOccupy,groundElevation,LANDMARKS,PORTO_BOUNDS} from './shared/movement.js';
@@ -56,7 +57,7 @@ export function stepResident(s,dt,now=Date.now()) {
   if(s.paused||s.ai&&s.ai.connected!==true){s.player.speed=0;s.player.moving=false;return;}
   if(!s.obstacles)return;
   const p=s.player,clear=(x,z)=>canOccupy(x,z,s.obstacles,.6);
-  s.updatedAt=now;ensureMind(s);if(s.arrival.phase==='landed')stepMind(s,dt);
+  s.updatedAt=now;ensureMind(s);if(s.arrival.phase==='landed'&&s.activity?.kind!=='sleep')stepMind(s,dt);
   if(s.arrival.phase!=='landed') {
     stepArrival(s.arrival,dt,{player:p,canLand:clear});
     if(s.arrival.phase==='balloon'&&s.arrival.elapsed>=JOURNEY_SECONDS){
@@ -65,6 +66,7 @@ export function stepResident(s,dt,now=Date.now()) {
     if(s.arrival.phase==='landed')remember(s,'Landed in Porto Sol. Next: find Casa Aurora.',now);
     return;
   }
+  if(s.activity?.kind==='sleep'){const gap=executionGap(s,{action:'sleep',intention:''},now);s.activity=null;s.rest=0;s.thought=gap.message;invalidatePlan(s,gap.message);remember(s,gap.message,now);return;}
   if(s.rest>0){s.rest=Math.max(0,s.rest-dt);if(s.activity)s.activity.remaining=s.rest;p.moving=false;p.speed=0;if(s.rest===0){const event=finishActivity(s,now);if(event)remember(s,event,now);}return;}
   if(!s.route.length){
     let decision;

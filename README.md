@@ -526,3 +526,19 @@ has no camera vision and cannot infer that furniture or objects are missing just
 because they are not landmarks. Current action capabilities are supplied to the
 model, and it must keep executable plans within them while awaiting additions.
 An asset request never grants new executable capabilities or builds the object.
+
+
+## Report unmet physical interactions
+
+The AI receives an explicit action-support catalog. A timed activity name no
+longer implies physical animation support: rest is standing-only, eating/work/
+exercise are timers, and bed-use sleep is unavailable until interactions and
+animations are implemented. Casa Aurora already has a bed model; requests should
+ask for approaching/using it, lying down, sleeping and getting up, not another bed.
+
+Execution checks produce grounded feedback and a deduplicated high-priority
+capability request in chat and the wishlist. Unsupported bed-use or sitting is
+not marked successful. Standing rest explains its limitation. Older saved sleep
+timers are interrupted without awarding sleep recovery or a completed sleep.
+Learning → What I cannot do yet shows these confirmed execution limitations.
+These checks do not add model calls and do not add the missing animations.

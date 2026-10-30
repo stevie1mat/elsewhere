@@ -26,8 +26,8 @@ test('rest decisions and chat are saved without chat replies executing actions',
  let time=1000;const s=ready();const brain=createResidentBrain({client:{configured:true,model:'test',complete:async()=>({...decision,action:'rest',seconds:30})},now:()=>time});brain.initialize(s);
  await brain.update(s);stepResident(s,.1,time);assert.equal(s.rest,60);assert.equal(s.route.length,0);
  time+=6000;assert.equal(await brain.chat(s,'What are you planning?'),decision.reply);
- assert.equal(s.messages.length,2);assert.equal(s.messages[0].role,'user');assert.equal(s.rest,60);assert.equal(s.pendingDecision,undefined);
- const restored=JSON.parse(JSON.stringify(s));assert.equal(restored.messages[1].content,decision.reply);brain.stop();
+ assert.equal(s.messages.at(-2).role,'user');assert.equal(s.rest,60);assert.equal(s.pendingDecision,undefined);
+ const restored=JSON.parse(JSON.stringify(s));assert.equal(restored.messages.at(-1).content,decision.reply);brain.stop();
 });
 test('usage limits back off, prevent overlapping requests and never reveal provider response bodies',async()=>{
  const client=createGroqClient({apiKey:'test-secret',fetchImpl:async()=>({ok:false,status:429,headers:new Headers({'retry-after':'120'}),text:async()=>{throw Error('must not read raw provider error');}})});

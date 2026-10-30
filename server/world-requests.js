@@ -1,5 +1,5 @@
 import {LANDMARKS} from './shared/movement.js';
-import {ACTIVITY_ACTIONS} from './resident-mind.js';
+import {ACTIVITY_ACTIONS} from './action-catalog.js';
 const normalize=text=>text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
 export function validateWorldRequests(requests){
   if(requests===undefined)return;

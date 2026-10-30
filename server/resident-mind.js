@@ -1,5 +1,6 @@
 import {learnOutcome,recordObservation} from './cognition.js';
-export const ACTIVITY_ACTIONS=['visit','rest','sleep','eat','observe','reflect','exercise','work'];
+export {ACTIVITY_ACTIONS} from './action-catalog.js';
+import {executionGap} from './capability-feedback.js';
 const clamp=value=>Math.max(0,Math.min(100,value));
 export function ensureMind(s){
   s.needs??={energy:78,hunger:25,thirst:20,stress:20,curiosity:60,social:35};
@@ -30,11 +31,12 @@ export function activityDestination(d){
 export function startActivity(s,d,place,now){
   ensureMind(s);
   if(d.action==='eat'&&s.wallet<4)return {error:'I need €4 for a meal. I should earn some money first.'};
+  const gap=executionGap(s,d,now);if(gap?.blocked)return {error:gap.message,requirement:gap.requirement};
   const before={needs:{...s.needs},money:s.wallet};
   if(d.action==='eat')s.wallet-=4;
-  s.activity={before,kind:d.action==='visit'?'observe':d.action,total:d.seconds,remaining:d.seconds,place:place?.name||s.destination||'Porto Sol',startedAt:now};
+  s.activity={executionMode:gap?'standing_only':'simulation',before,kind:d.action==='visit'?'observe':d.action,total:d.seconds,remaining:d.seconds,place:place?.name||s.destination||'Porto Sol',startedAt:now};
   recordObservation(s,now);
-  s.rest=d.seconds;s.thought=d.intention;s.player.speed=0;s.player.moving=false;
+  s.rest=d.seconds;s.thought=gap?.message||d.intention;s.player.speed=0;s.player.moving=false;
   return {started:true};
 }
 export function finishActivity(s,now){
