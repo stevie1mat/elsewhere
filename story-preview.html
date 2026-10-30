@@ -1,19 +1,14 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Elsewhere · Cinematic story preview</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#192a2c" />
+    <title>Elsewhere — Porto Sol</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   </head>
   <body>
-    <button id="replay" type="button">Replay opening story</button>
-    <script type="module">
-      import './src/style.css';
-      import './src/story-cinema.css';
-      import {mountOpeningStory} from './src/opening-story.js';
-      const story = mountOpeningStory();
-      document.querySelector('#replay').onclick = () => story.open();
-      story.open();
-    </script>
+    <div id="app"></div>
+    <script type="module" src="/src/main.js"></script>
   </body>
 </html>
