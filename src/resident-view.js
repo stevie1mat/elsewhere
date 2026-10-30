@@ -70,8 +70,8 @@ export function mountResidentView({initial,player,arrival,welcome,getWorld}) {
         if(response.ok)geometrySent=true;
       }else response=await fetch('/api/resident',{cache:'no-store'});
       if(response.status===401){location.replace('/');return;}
-      if(!response.ok)throw Error('Sync failed');apply(await response.json());
-    }catch{panel.querySelector('#resident-status').textContent='Disconnected · waiting to resume the live view';}finally{busy=false;}
+      if(!response.ok)throw Error(`City connection failed (${response.status})`);apply(await response.json());
+    }catch(error){panel.querySelector('#resident-status').textContent=error.message+' · retrying';if(!geometrySent)document.querySelector('#arrival-detail').textContent='Waiting for the city connection. Retrying automatically…';}finally{busy=false;}
   }
   const interval=setInterval(sync,400);sync();window.addEventListener('pagehide',()=>clearInterval(interval),{once:true});
   const point=new THREE.Vector3();

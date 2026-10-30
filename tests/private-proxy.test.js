@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import handler from '../api/[...path].js';
+import handler from '../server/vercel-proxy.js';
 function response(){return {headers:{},setHeader(k,v){this.headers[k]=v;},end(value){this.body=value;}};}
 test('hosted API rejects an insecure backend override',async()=>{
  const previous=process.env.PRIVATE_SERVER_URL;process.env.PRIVATE_SERVER_URL='http://insecure.example';
@@ -13,4 +13,10 @@ test('proxy forwards session cookies and login cookies without exposing provider
  assert.equal(res.statusCode,200);assert.equal(forwarded.url,'https://example.onrender.com/api/login');assert.equal(forwarded.headers.Cookie,'porto_session=old');assert.equal(forwarded.headers.Authorization,undefined);assert.match(res.headers['Set-Cookie'][0],/HttpOnly/);
  const denied=response();await handler({url:'/api/login',method:'POST',headers:{host:'game.vercel.app',origin:'https://untrusted.example'},body:{}},denied);assert.equal(denied.statusCode,403);
  }finally{globalThis.fetch=original;if(previous===undefined)delete process.env.PRIVATE_SERVER_URL;else process.env.PRIVATE_SERVER_URL=previous;}
+});
+
+test('each deployed API path has an explicit Vercel function entry',async()=>{
+ for(const path of ['login','resident','resident/world','resident/chat']){
+  const entry=await import(`../api/${path}.js`);assert.equal(entry.default,handler);
+ }
 });
