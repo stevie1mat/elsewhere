@@ -429,3 +429,21 @@ Drag to orbit, Shift-drag/right-drag to pan, and scroll to zoom. The camera does
 not follow the resident's position or turns. Locate resident frames them on
 request; a YOUR RESIDENT marker identifies the main character, including when
 they leave the view. Flight-stage transitions reframe once for landing.
+
+
+## AI diagnostics and resident shortcut
+
+Click the AI status badge to inspect provider-reported input/output/total token
+counts, cumulative counts since tracking began, request attempts, latency,
+provider health and retry times. Counts persist with the character checkpoint;
+older requests made before tracking cannot be reconstructed. Failed responses
+may omit usage and are counted as requests without inventing a token estimate.
+
+The latest exchange shows the exact JSON request body (model, instructions,
+action schema and compact resident context) and public response/decision.
+Headers, API keys and reasoning traces are excluded. Recent attempts retain
+bounded summaries rather than duplicating all prompt bodies. Provider error
+messages redact the configured key before being exposed to the private UI.
+
+Click YOUR RESIDENT above the character (or its off-screen marker) to move the
+spectator camera close to them. This frames once; the camera remains independent.

@@ -6,8 +6,8 @@ export function createSpectatorCamera(camera,canvas){
   const controls=document.createElement('div');controls.id='spectator-controls';
   controls.innerHTML='<button type="button">◎ Locate resident</button><small>Spectator · drag to orbit · Shift-drag to pan · scroll to zoom</small>';
   document.querySelector('#app').append(controls);
-  function locate(){if(pose)target.set(pose.x,(pose.y||0)+1,pose.z);}
-  controls.querySelector('button').onclick=locate;
+  function locate(close=false){if(close){distance=8;pitch=.45;}if(pose)target.set(pose.x,(pose.y||0)+1,pose.z);}
+  controls.querySelector('button').onclick=()=>locate();
   canvas.addEventListener('contextmenu',e=>e.preventDefault());
   canvas.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY,pan:e.shiftKey||e.button===2};canvas.setPointerCapture(e.pointerId);});
   canvas.addEventListener('pointermove',e=>{if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;drag.x=e.clientX;drag.y=e.clientY;
@@ -16,7 +16,7 @@ export function createSpectatorCamera(camera,canvas){
   });
   canvas.addEventListener('pointerup',()=>{drag=null;});canvas.addEventListener('pointercancel',()=>{drag=null;});
   canvas.addEventListener('wheel',e=>{e.preventDefault();distance=Math.max(6,Math.min(180,distance*Math.exp(e.deltaY*.001)));},{passive:false});
-  return {update(next,arrivalPhase){pose=next;if(phase===null||phase!==arrivalPhase){phase=arrivalPhase;locate();}
+  return {locate,update(next,arrivalPhase){pose=next;if(phase===null||phase!==arrivalPhase){phase=arrivalPhase;locate();}
     camera.position.set(target.x+Math.sin(yaw)*distance*Math.cos(pitch),target.y+Math.sin(pitch)*distance,target.z+Math.cos(yaw)*distance*Math.cos(pitch));camera.lookAt(target);
   }};
 }

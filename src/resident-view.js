@@ -1,18 +1,35 @@
 import * as THREE from 'three';
 import './resident-view.css';
 import {ResidentMotion} from './resident-motion.js';
-export function mountResidentView({initial,player,arrival,welcome,getWorld}) {
+export function mountResidentView({initial,player,arrival,welcome,getWorld,onLocate=()=>{}}) {
   document.body.classList.add('resident-observer');
   const toggle=document.createElement('button');toggle.id='resident-brain-toggle';toggle.type='button';toggle.innerHTML='<span aria-hidden="true">🧠</span> Brain';toggle.setAttribute('aria-expanded','false');toggle.setAttribute('aria-controls','resident-panel');
-  const connection=document.createElement('div');connection.id='resident-ai-connection';connection.setAttribute('role','status');connection.setAttribute('aria-live','polite');
+  const connection=document.createElement('button');connection.type='button';connection.id='resident-ai-connection';connection.setAttribute('role','status');connection.setAttribute('aria-live','polite');
   const dot=document.createElement('span');dot.className='ai-connection-dot';dot.setAttribute('aria-hidden','true');const connectionText=document.createElement('span');connection.append(dot,connectionText);
   function showConnection(ai,offline=false){
     const online=!offline&&ai?.enabled&&ai.connected===true&&!ai.error&&!ai.fallback;
     connection.dataset.state=online?'online':'offline';
     const text=offline?'AI disconnected · reconnecting':!ai?.enabled?'AI not configured':online?`AI connected · ${ai.provider||'AI'}${ai.status==='thinking'?' · thinking':''}`:ai.error||ai.fallback?'AI unavailable · retrying':'AI connecting…';
-    if(connectionText.textContent!==text)connectionText.textContent=text;
+    const count=ai?.telemetry?.total;const label=text+(count?` · ${count.toLocaleString()} tokens total`:'');
+    if(connectionText.textContent!==label)connectionText.textContent=label;
     connection.title=offline?'The game server cannot be reached.':ai?.error||'Status of the last AI response; provider availability is checked when a request is made.';
   }
+  const diagnostics=document.createElement('section');diagnostics.id='resident-ai-details';diagnostics.hidden=true;diagnostics.setAttribute('aria-label','AI connection and token usage');
+  diagnostics.innerHTML='<header><h2>AI connection</h2><button type="button" aria-label="Close AI details">×</button></header><p id="ai-detail-summary"></p><div id="ai-token-counts"></div><p class="ai-detail-note">Provider-reported tokens since tracking began, saved across updates. Output counts can include model reasoning tokens. Failed requests may not report usage.</p><div id="ai-provider-health"></div><details><summary>Last request sent to the model</summary><p>Includes instructions, available actions, position, needs, mood, goals, recent experiences and conversation. API keys and authorization headers are excluded.</p><pre id="ai-sent"></pre></details><details><summary>Last response received</summary><p>Public answer and decision only. Internal reasoning traces are excluded.</p><pre id="ai-received"></pre></details><details><summary>Recent request attempts</summary><pre id="ai-attempts"></pre></details>';
+  connection.setAttribute('aria-controls','resident-ai-details');connection.setAttribute('aria-expanded','false');
+  function renderDiagnostics(next){
+    if(diagnostics.hidden)return;
+    const ai=next.ai||{},t=ai.telemetry||{},exchange=t.lastExchange;
+    diagnostics.querySelector('#ai-detail-summary').textContent=ai.error||`${ai.provider||'AI'} · ${ai.model||'not configured'} · ${ai.connected?'last response succeeded':'waiting for a successful response'}`;
+    diagnostics.querySelector('#ai-token-counts').textContent=`Input: ${(t.input||0).toLocaleString()} · Output: ${(t.output||0).toLocaleString()} · Total: ${(t.total||0).toLocaleString()} · Requests: ${t.requests||0} · Usage reported: ${t.usageReported||0}`;
+    const health=diagnostics.querySelector('#ai-provider-health');health.replaceChildren();
+    for(const provider of ai.providerHealth||[]){const p=document.createElement('p');p.textContent=`${provider.provider}: ${provider.status||'not checked'}${provider.error?' — '+provider.error:''}${provider.retryAt>Date.now()?' · retry in '+Math.ceil((provider.retryAt-Date.now())/1000)+'s':''}`;health.append(p);}
+    diagnostics.querySelector('#ai-sent').textContent=exchange?JSON.stringify({provider:exchange.provider,model:exchange.model,at:new Date(exchange.at).toISOString(),request:exchange.sent},null,2):'No request recorded yet.';
+    diagnostics.querySelector('#ai-received').textContent=exchange?JSON.stringify({httpStatus:exchange.httpStatus,latencyMs:exchange.latencyMs,usage:exchange.usage,response:exchange.received,error:exchange.error},null,2):'No response recorded yet.';
+    diagnostics.querySelector('#ai-attempts').textContent=JSON.stringify(t.recent||[],null,2);
+  }
+  connection.onclick=()=>{diagnostics.hidden=!diagnostics.hidden;connection.setAttribute('aria-expanded',String(!diagnostics.hidden));if(!diagnostics.hidden){panel.hidden=true;toggle.setAttribute('aria-expanded','false');renderDiagnostics(snapshot);}};
+  diagnostics.querySelector('header button').onclick=()=>{diagnostics.hidden=true;connection.setAttribute('aria-expanded','false');connection.focus();};
   const panel=document.createElement('section');panel.id='resident-panel';panel.hidden=true;panel.setAttribute('aria-label','Character brain');
   panel.innerHTML=`<header class="brain-header"><div><small>THE MIND OF YOUR RESIDENT</small><h2>A thought becomes a step.</h2></div><button id="resident-brain-close" aria-label="Close brain view">×</button></header>
     <p id="resident-status" role="status"></p>
@@ -31,15 +48,15 @@ export function mountResidentView({initial,player,arrival,welcome,getWorld}) {
     <div id="brain-needs" aria-label="Character needs"></div><div class="brain-facts"><article><small>MOOD & ACTIVITY</small><p id="brain-mood"></p></article><article><small>PERCEPTION</small><p id="brain-perception"></p></article><article><small>CURRENT GOAL</small><p id="brain-goal"></p></article><article><small>PLANNER</small><p id="brain-planner"></p></article><article><small>CURRENT INTENTION</small><p id="resident-goal"></p></article><article><small>MEMORY STORAGE</small><p id="brain-storage"></p></article></div>
     <details><summary id="brain-memory-label">Recent memories</summary><ol id="resident-history"></ol></details>
     <details id="resident-chat" open><summary>Talk to your resident</summary><div id="resident-messages" aria-live="polite"></div><form id="resident-chat-form"><label for="resident-message">Your message</label><textarea id="resident-message" rows="2" maxlength="1200" placeholder="What are you planning?" required></textarea><button type="submit">Send</button><p id="resident-chat-error" role="alert"></p></form></details>`;
-  const setOpen=open=>{panel.hidden=!open;toggle.setAttribute('aria-expanded',String(open));if(open)panel.querySelector('#resident-brain-close').focus();else toggle.focus();};
+  const setOpen=open=>{if(open){diagnostics.hidden=true;connection.setAttribute('aria-expanded','false');}panel.hidden=!open;toggle.setAttribute('aria-expanded',String(open));if(open)panel.querySelector('#resident-brain-close').focus();else toggle.focus();};
   toggle.onclick=()=>setOpen(panel.hidden);panel.querySelector('#resident-brain-close').onclick=()=>setOpen(false);panel.addEventListener('keydown',event=>{if(event.key==='Escape'){event.stopPropagation();setOpen(false);}});
   const bubble=document.createElement('div');bubble.id='resident-thought';bubble.setAttribute('aria-label','Current intention');
-  document.querySelector('#app').append(toggle,connection,panel,bubble);
+  document.querySelector('#app').append(toggle,connection,diagnostics,panel,bubble);
   let snapshot=initial,busy=false,geometrySent=false,lastEvents='',lastMessages='',receivedAt=Date.now();
   let chatBusy=false;
   const motion=new ResidentMotion(initial.player,performance.now());
   function apply(next){motion.receive(next.player,performance.now(),{snap:next.arrival.phase!==snapshot.arrival.phase||next.arrival.phase!=='landed'});snapshot=next;Object.assign(arrival,next.arrival);Object.assign(welcome,next.welcome);receivedAt=Date.now();
-    showConnection(next.ai);
+    showConnection(next.ai);renderDiagnostics(next);
     document.body.classList.toggle('arriving',next.arrival.phase!=='landed');
     document.querySelector('#arrival-title').textContent=next.arrival.phase==='parachute'?'Coming in to land.':'Your island is on the horizon.';
     document.querySelector('#arrival-detail').textContent=next.thought;
@@ -101,7 +118,7 @@ export function mountResidentView({initial,player,arrival,welcome,getWorld}) {
     }catch(error){showConnection(snapshot.ai,true);panel.querySelector('#resident-status').textContent=error.message+' · retrying';if(!geometrySent)document.querySelector('#arrival-detail').textContent='Waiting for the city connection. Retrying automatically…';}finally{busy=false;}
   }
   const interval=setInterval(sync,400);sync();window.addEventListener('pagehide',()=>clearInterval(interval),{once:true});
-  const marker=document.createElement('div');marker.id='resident-marker';marker.innerHTML='<span aria-hidden="true">◆</span> YOUR RESIDENT';document.querySelector('#app').append(marker);
+  const marker=document.createElement('button');marker.type='button';marker.id='resident-marker';marker.setAttribute('aria-label','Move camera close to your resident');marker.onclick=onLocate;marker.innerHTML='<span aria-hidden="true">◆</span> YOUR RESIDENT';document.querySelector('#app').append(marker);
   const point=new THREE.Vector3();
   return {update(camera){
     // Never advance the saved life in the browser: all tabs observe one server state.

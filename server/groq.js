@@ -1,3 +1,4 @@
+import {trackedProviderFetch,recordTelemetry} from './ai-telemetry.js';
 import {ACTIVITY_ACTIONS,ensureMind} from './resident-mind.js';
 import {LANDMARKS} from './shared/movement.js';
 import {remember,applyResidentDecision} from './resident.js';
@@ -31,11 +32,11 @@ export class GroqError extends Error {
   constructor(message,{status=503,retryMs=60000}={}){super(message);this.status=status;this.retryMs=retryMs;}
 }
 export function createGroqClient({apiKey=process.env.GROQ_API_KEY,model=process.env.GROQ_MODEL||DEFAULT_GROQ_MODEL,fetchImpl=fetch}={}){
-  const configured=!!apiKey?.trim();
-  return {configured,model,provider:'Groq',async complete(context,message,signal){
+  const configured=!!apiKey?.trim(),tracker=trackedProviderFetch(fetchImpl,'Groq',model,[apiKey]);
+  return {get lastAttempt(){return tracker.latest;},configured,model,provider:'Groq',async complete(context,message,signal){
     if(!configured)throw new GroqError('Groq is not configured. Add GROQ_API_KEY to the server .env.');
     let response;
-    try{response=await fetchImpl('https://api.groq.com/openai/v1/chat/completions',{
+    try{response=await tracker.fetch('https://api.groq.com/openai/v1/chat/completions',{
       method:'POST',headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},
       signal:signal?AbortSignal.any([signal,AbortSignal.timeout(15000)]):AbortSignal.timeout(15000),
       body:JSON.stringify({model,...(model.startsWith('openai/gpt-oss-')?{reasoning_effort:'low'}:{}),temperature:.7,max_completion_tokens:2048,response_format:{type:'json_schema',json_schema:{name:'resident_decision',strict:true,schema}},messages:[{role:'system',content:SYSTEM},{role:'user',content:JSON.stringify({world:context,request:message})}]})
@@ -55,10 +56,11 @@ export function createGroqClient({apiKey=process.env.GROQ_API_KEY,model=process.
   }};
 }
 export function createMistralClient({apiKey=process.env.MISTRAL_API_KEY,model=process.env.MISTRAL_MODEL||'mistral-small-latest',fetchImpl=fetch}={}){
-  return {configured:!!apiKey?.trim(),model,provider:'Mistral',async complete(context,message,signal){
+  const tracker=trackedProviderFetch(fetchImpl,'Mistral',model,[apiKey]);
+  return {get lastAttempt(){return tracker.latest;},configured:!!apiKey?.trim(),model,provider:'Mistral',async complete(context,message,signal){
     if(!apiKey?.trim())throw new GroqError('Mistral is not configured.');
     let response;
-    try{response=await fetchImpl('https://api.mistral.ai/v1/chat/completions',{
+    try{response=await tracker.fetch('https://api.mistral.ai/v1/chat/completions',{
       method:'POST',headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},
       signal:signal?AbortSignal.any([signal,AbortSignal.timeout(15000)]):AbortSignal.timeout(15000),
       body:JSON.stringify({model,temperature:.7,max_tokens:2048,response_format:{type:'json_object'},messages:[
@@ -78,20 +80,20 @@ export function createMistralClient({apiKey=process.env.MISTRAL_API_KEY,model=pr
 // Stick with the last healthy provider. Failed providers cool down independently;
 // a failed request tries the other API immediately, without waiting for a retry.
 export function createResilientClient({clients=[createGroqClient(),createMistralClient()],now=()=>Date.now()}={}){
-  const available=clients.filter(c=>c.configured),cooldowns=new Map();let active=0;
-  return {configured:available.length>0,
+  const available=clients.filter(c=>c.configured),cooldowns=new Map(),health=new Map();let active=0,attempts=[];
+  return {get attempts(){return attempts;},get diagnostics(){return available.map((c,i)=>({provider:c.provider,model:c.model,...health.get(i),retryAt:cooldowns.get(i)||null}));},configured:available.length>0,
     get model(){return available[active]?.model;},get provider(){return available[active]?.provider;},
     get providers(){return available.map(c=>c.provider);},
     async complete(context,message,signal){
-      let earliest=Infinity;
+      attempts=[];let earliest=Infinity;
       for(let offset=0;offset<available.length;offset++){
         if(signal?.aborted)throw new GroqError('Request cancelled.');
         const index=(active+offset)%available.length,client=available[index],until=cooldowns.get(index)||0;
         if(until>now()){earliest=Math.min(earliest,until);continue;}
-        try{const result=await client.complete(context,message,signal);active=index;cooldowns.delete(index);return result;}
-        catch(error){if(signal?.aborted)throw new GroqError('Request cancelled.');const until=now()+Math.max(30000,error.retryMs||60000);cooldowns.set(index,until);earliest=Math.min(earliest,until);}
+        try{const result=await client.complete(context,message,signal);if(client.lastAttempt)attempts.push({...client.lastAttempt});health.set(index,{status:'connected',error:null});active=index;cooldowns.delete(index);return result;}
+        catch(error){if(client.lastAttempt)attempts.push({...client.lastAttempt,status:'error',error:client.lastAttempt.error||error.message});health.set(index,{status:'unavailable',error:client.lastAttempt?.error||error.message});if(signal?.aborted)throw new GroqError('Request cancelled.');const until=now()+Math.max(30000,error.retryMs||60000);cooldowns.set(index,until);earliest=Math.min(earliest,until);}
       }
-      throw new GroqError('AI providers are unavailable. Character paused until the connection recovers.',{retryMs:Number.isFinite(earliest)?Math.max(1000,earliest-now()):60000});
+      throw new GroqError('AI unavailable. '+available.map((c,i)=>c.provider+': '+(health.get(i)?.error||'waiting to retry')).join(' · '),{retryMs:Number.isFinite(earliest)?Math.max(1000,earliest-now()):60000});
     }
   };
 }
@@ -103,7 +105,7 @@ export function createResidentBrain({client=createResilientClient(),now=()=>Date
     busy=true;
     try{const decision=await client.complete(residentContext(s),message,abort.signal);failures=0;nextAt=now()+5000;s.ai.provider=client.provider||'Groq';s.ai.model=client.model;s.ai.connected=true;s.ai.lastResponseAt=now();s.ai.error=null;return decision;}
     catch(error){s.ai.connected=false;s.ai.error=error.message;failures++;nextAt=now()+Math.max(error.retryMs||60000,Math.min(900000,30000*2**Math.min(failures,5)));throw error;}
-    finally{busy=false;}
+    finally{recordTelemetry(s.ai,client);s.ai.retryAt=nextAt;busy=false;}
   }
   return {initialize,async update(s){
     if(stopped||chatWaiting||!client.configured||busy||now()<nextAt||!s.obstacles)return;

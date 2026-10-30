@@ -147,7 +147,7 @@ let renderer, scene, camera, world, audioContext, audioGain, toastTimer, discove
 const keys=new Set(), discovered=new Set();
 const storage={get(key){try{return JSON.parse(localStorage.getItem(`elsewhere:${isChai?'chai:':isMumbai?'mumbai:':''}${key}`));}catch{return null;}},set(key,value){try{localStorage.setItem(`elsewhere:${isChai?'chai:':isMumbai?'mumbai:':''}${key}`,JSON.stringify(value));return true;}catch{return false;}}};
 const welcome=residentSession?.welcome||createWelcome(storage.get('first-home'));
-if(residentSession)residentView=mountResidentView({initial:residentSession,player,arrival,welcome,getWorld:()=>world});
+if(residentSession)residentView=mountResidentView({initial:residentSession,player,arrival,welcome,getWorld:()=>world,onLocate:()=>spectatorCamera?.locate(true)});
 const lifeStory=isUrban?null:mountSettlingStory({storage,getPlayer:()=>player,getWorld:()=>world,releaseKeys,onChange:state=>{if(state.stage===9)setNight(true);if(state.complete)setNight(false);}});
 $('#app').insertAdjacentHTML('beforeend','<section id="welcome-card" hidden aria-label="Your first day"><small>YOUR FIRST DAY</small><h2 id="welcome-title"></h2><p id="welcome-body"></p><button id="welcome-action" type="button"></button></section>');
 $('#welcome-action').onclick=()=>talk();
