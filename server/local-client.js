@@ -1,4 +1,4 @@
-import {requestedObjective} from './decision-check.js';
+import {requestedObjective,humanActionConstraints} from './decision-check.js';
 import {PHONE_SEARCH_REQUEST} from './shared/phone-request.js';
 import {RESIDENT_DECISION_SCHEMA,RESIDENT_SYSTEM_PROMPT,validateDecision} from './decision-contract.js';
 import {trackedProviderFetch} from './ai-telemetry.js';
@@ -7,6 +7,15 @@ export function createLocalClient({url=process.env.LOCAL_AI_URL||'http://127.0.0
  const tracker=trackedProviderFetch(fetchImpl,'Mac LM Studio',model);return {provider:'Mac LM Studio',model,configured:true,get lastAttempt(){return tracker.latest;},async complete(context,message,signal){
   const outputSchema=structuredClone(RESIDENT_DECISION_SCHEMA),required=requestedObjective(message);
   outputSchema.properties.nextSteps.maxItems=1;
+  const constraints=context.humanActionConstraints||humanActionConstraints(context.conversation,message.startsWith('Chat with the human.')?message.slice('Chat with the human. Their message: '.length):'');
+  if(!constraints.phoneAllowed){
+    for(const step of [outputSchema,outputSchema.properties.nextSteps.items])step.properties.action.enum=step.properties.action.enum.filter(action=>action!=='phone');
+  }
+  if(constraints.travelDestination&&message.startsWith('Chat with the human.')){
+    outputSchema.properties.changePlan.enum=[true];
+    outputSchema.properties.action.enum=['visit'];
+    outputSchema.properties.destination.enum=[constraints.travelDestination];
+  }
   for(const [key,maxLength] of [['goal',120],['intention',120],['reply',240],['successCriterion',120]])outputSchema.properties[key].maxLength=maxLength;
   const explicit=message.includes(PHONE_SEARCH_REQUEST)||required&&/\b(please|execute|task experiment)\b/i.test(message)&&!/\b(explain how|tell me|how can|how would)\b/i.test(message);
   if(explicit){

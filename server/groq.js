@@ -3,12 +3,12 @@ export {validateDecision,RESIDENT_PLACES} from './decision-contract.js';
 import {PHONE_SEARCH_REQUEST} from './shared/phone-request.js';
 import {compactContext} from './compact-context.js';
 import {rateLimitDetails} from './rate-limits.js';
-import {decisionIssue,requestedObjective,objectiveIssue} from './decision-check.js';
+import {decisionIssue,requestedObjective,objectiveIssue,humanActionConstraints,humanActionIssue} from './decision-check.js';
 import {retrieveEffects,EFFECT_FACTS,needAwareness} from './experience.js';
 import {relevantLessons} from './learning-progress.js';
 import {ACTION_SUPPORT} from './action-catalog.js';
 import {recordWorldRequests} from './world-requests.js';
-import {installPlan,nextPlanStep} from './self-plan.js';
+import {installPlan,nextPlanStep,invalidatePlan} from './self-plan.js';
 import {perception,cachedMemory,groundedRecall,recordObservation} from './cognition.js';
 import {trackedProviderFetch,recordTelemetry} from './ai-telemetry.js';
 import {ACTIVITY_ACTIONS,ensureMind} from './resident-mind.js';
@@ -17,6 +17,7 @@ import {remember,applyResidentDecision} from './resident.js';
 
 export const DEFAULT_GROQ_MODEL='openai/gpt-oss-20b';
 export function residentContext(s){ensureMind(s);recordObservation(s,s.updatedAt||Date.now());return {
+  humanActionConstraints:humanActionConstraints(s.messages),
   perception:perception(s),needs:Object.fromEntries(Object.entries(s.needs).map(([k,v])=>[k,Math.round(v)])),mood:s.mood,money:s.wallet,
   goal:s.ai?.goal||'Choose a purpose for your life.',personality:s.personality,plan:s.script?{goal:s.script.goal,criterion:s.script.successCriterion,status:s.script.status,reason:s.script.reason,next:s.script.steps.slice(s.script.cursor)}:null,settled:s.welcome.phase==='settled',destination:s.destination,
   phone:s.media?{query:s.media.query,reason:s.media.reason,status:s.media.status,playback:s.media.playback,selected:s.media.selected}:null,
@@ -115,9 +116,11 @@ export function createResidentBrain({client=createResilientClient(),now=()=>Date
     if(s.paused)throw new GroqError('Game paused. Resume to use AI.',{retryMs:0});
     const requestGeneration=generation;busy=true;const requestAttempts=[];
     const complete=async(context,text)=>{try{return await client.complete(context,text,abort.signal);}finally{requestAttempts.push(...(client.attempts||(client.lastAttempt?[client.lastAttempt]:[])));}};
-    try{const context=compactContext(residentContext(s),{chat:message.startsWith('Chat with the human.')});let decision=await complete(context,message);
+    const chat=message.startsWith('Chat with the human.');
+    const constraints=humanActionConstraints(s.messages,chat?message.slice('Chat with the human. Their message: '.length):'');
+    try{const context={...compactContext(residentContext(s),{chat}),humanActionConstraints:constraints};let decision=await complete(context,message);
       const required=requestedObjective(message);
-      let issue=objectiveIssue(decision,required)||(message.includes(PHONE_SEARCH_REQUEST)&&decision.action==='phone'&&decision.changePlan!==true?'You selected a phone search for an explicit use-phone request but changePlan=false will not execute it. Set changePlan=true if accepting the phone task; otherwise decline clearly without promising playback.':message.startsWith('Chat with the human.')&&decision.changePlan!==true?null:decisionIssue(s,decision));
+      let issue=humanActionIssue(decision,constraints,{chat})||objectiveIssue(decision,required)||(message.includes(PHONE_SEARCH_REQUEST)&&decision.action==='phone'&&decision.changePlan!==true?'You selected a phone search for an explicit use-phone request but changePlan=false will not execute it. Set changePlan=true if accepting the phone task; otherwise decline clearly without promising playback.':message.startsWith('Chat with the human.')&&decision.changePlan!==true?null:decisionIssue(s,decision));
       if(issue){
         if(requestGeneration!==generation||s.paused||stopped)throw new GroqError('Request cancelled.',{retryMs:0});
         // Human targets survive repair. An invented physical benefit from a
@@ -126,7 +129,7 @@ export function createResidentBrain({client=createResilientClient(),now=()=>Date
         const originalObjective=required||(invalidPhoneObjective?null:decision.objective);
         const repairRule=originalObjective?'Repair the commands, retaining the same requested metric, amount, direction and interaction.':'Correct the impossible objective too. A phone-only plan must use objective metric=none, amount=0, interaction=none. You may choose another supported action and attainable goal. Do not claim physical benefits from phone use.';
         decision=await complete(context,message+'\nYour proposed plan failed the execution check: '+issue+' '+repairRule+' Original decision: '+JSON.stringify(decision));
-        issue=objectiveIssue(decision,required)||(message.includes(PHONE_SEARCH_REQUEST)&&decision.action==='phone'&&decision.changePlan!==true?'Phone action was still not marked for execution after repair.':decisionIssue(s,decision));
+        issue=humanActionIssue(decision,constraints,{chat})||objectiveIssue(decision,required)||(message.includes(PHONE_SEARCH_REQUEST)&&decision.action==='phone'&&decision.changePlan!==true?'Phone action was still not marked for execution after repair.':decisionIssue(s,decision));
         if(originalObjective&&JSON.stringify(decision.objective)!==JSON.stringify(originalObjective)){
           if(['metric','amount','direction','interaction'].some(k=>decision.objective?.[k]!==originalObjective[k]))issue='The repair changed the requested objective instead of fixing the plan.';
         }
@@ -144,7 +147,7 @@ export function createResidentBrain({client=createResilientClient(),now=()=>Date
     if(stopped||s.paused||chatWaiting||!client.configured||busy||now()<nextAt||!s.obstacles)return;
     const updateGeneration=generation;const reconnecting=s.ai.connected!==true;
     if(!reconnecting&&(s.arrival.phase!=='landed'||s.route.length||s.rest>0||s.pendingDecision))return;
-    if(!reconnecting){const step=nextPlanStep(s);if(step){s.pendingDecision=step;s.ai.goal=step.goal;s.ai.planStepsReused=(s.ai.planStepsReused||0)+1;remember(s,`Continuing my plan: ${step.intention}`,now());return;}}
+    if(!reconnecting){const step=nextPlanStep(s);if(step&&!humanActionIssue(step,humanActionConstraints(s.messages))){s.pendingDecision=step;s.ai.goal=step.goal;s.ai.planStepsReused=(s.ai.planStepsReused||0)+1;remember(s,`Continuing my plan: ${step.intention}`,now());return;}if(step)invalidatePlan(s,'Saved plan conflicts with the latest human action constraints.');}
     s.ai.status=reconnecting?'connecting':'thinking';s.ai.fallback=false;
     if(reconnecting){s.player.speed=0;s.player.moving=false;}
     try{
