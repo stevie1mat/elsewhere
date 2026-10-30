@@ -509,3 +509,20 @@ it can appear in chat without a separate question-generation call (at most one
 such question per five minutes). It can continue living without an answer.
 The available actions remain limited to the implemented world capabilities;
 this change does not add construction, arbitrary tools or human consciousness.
+
+
+## Resident requests for world additions
+
+The model can propose up to one place, object or capability during its normal
+planning/chat response, including why it matters to its own goal, intended use,
+nearby landmark and priority. No separate asset-ideation API call is made.
+Requests persist in the character checkpoint, notify the human once in chat,
+and appear in Learning → What I wish existed. Case/punctuation duplicates merge
+instead of creating repeated notifications; at most 50 proposals are retained.
+Known place names and exact implemented action names are excluded.
+
+These are proposals for human review, not proof of visual absence. The resident
+has no camera vision and cannot infer that furniture or objects are missing just
+because they are not landmarks. Current action capabilities are supplied to the
+model, and it must keep executable plans within them while awaiting additions.
+An asset request never grants new executable capabilities or builds the object.
