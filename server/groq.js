@@ -14,18 +14,19 @@ import {remember,applyResidentDecision} from './resident.js';
 export const DEFAULT_GROQ_MODEL='openai/gpt-oss-20b';
 export const RESIDENT_PLACES=LANDMARKS.filter(p=>!['skyway','pier'].includes(p.id)).map(p=>p.id==='coast'?{...p,subtitle:'Costa Dourada seaside promenade and beach access. Use this destination when asked to go to the beach.'}:p);
 const stepSchema={type:'object',additionalProperties:false,required:['action','destination','seconds','intention','objectId','verb','mediaQuery','condition'],properties:{
- mediaQuery:{type:'string'},objectId:{type:'string'},verb:{type:'string',enum:['','sit','lie_down']},action:{type:'string',enum:ACTIVITY_ACTIONS},destination:{type:'string',enum:RESIDENT_PLACES.map(p=>p.id)},seconds:{type:'integer'},intention:{type:'string'},
+ mediaQuery:{type:'string'},objectId:{type:'string'},verb:{type:'string',enum:['','sit','lie_down']},action:{type:'string',enum:ACTIVITY_ACTIONS},destination:{type:'string',enum:RESIDENT_PLACES.map(p=>p.id)},seconds:{type:'integer',minimum:15,maximum:180},intention:{type:'string'},
  condition:{type:'object',additionalProperties:false,required:['need','min','max'],properties:{need:{type:'string',enum:['none','energy','hunger','thirst','stress','curiosity','social']},min:{type:'integer'},max:{type:'integer'}}}
 }};
 const schema={type:'object',additionalProperties:false,required:['action','destination','seconds','goal','intention','reply','changePlan','nextSteps','successCriterion','assetRequests','objectId','verb','objective','mediaQuery'],properties:{
   mediaQuery:{type:'string'},objective:objectiveSchema,objectId:{type:'string'},verb:{type:'string',enum:['','sit','lie_down']},assetRequests:{type:'array',maxItems:1,items:{type:'object',additionalProperties:false,required:['name','kind','reason','intendedUse','near','priority'],properties:{name:{type:'string'},kind:{type:'string',enum:['place','object','ability']},reason:{type:'string'},intendedUse:{type:'string'},near:{type:'string',enum:RESIDENT_PLACES.map(p=>p.id)},priority:{type:'string',enum:['low','medium','high']}}}},
   nextSteps:{type:'array',maxItems:3,items:stepSchema},successCriterion:{type:'string'},changePlan:{type:'boolean'},action:{type:'string',enum:ACTIVITY_ACTIONS},destination:{type:'string',enum:RESIDENT_PLACES.map(p=>p.id)},
-  seconds:{type:'integer'},goal:{type:'string'},intention:{type:'string'},reply:{type:'string'}
+  seconds:{type:'integer',minimum:15,maximum:180},goal:{type:'string'},intention:{type:'string'},reply:{type:'string'}
 }};
 function validateMedia(d){if(d.action==='phone'&&(typeof d.mediaQuery!=='string'||!d.mediaQuery.trim()||d.mediaQuery.length>120))throw Error('Invalid phone search query.');}
 function validateInteraction(d){if(d.action==='interact'&&(typeof d.objectId!=='string'||!d.objectId||d.objectId.length>120||!['sit','lie_down'].includes(d.verb)))throw Error('Invalid object interaction.');}
 export function validateDecision(value){
-  if(!value||!ACTIVITY_ACTIONS.includes(value.action)||!RESIDENT_PLACES.some(p=>p.id===value.destination)||!Number.isInteger(value.seconds)||value.seconds<15||value.seconds>180)throw Error('Groq returned an invalid action.');
+  if(!value||!ACTIVITY_ACTIONS.includes(value.action)||!RESIDENT_PLACES.some(p=>p.id===value.destination))throw Error('Invalid action or destination.');
+  if(!Number.isInteger(value.seconds)||value.seconds<15||value.seconds>180)throw Error('Decision seconds must be an integer from 15 to 180. Existing activity timers are resumed separately.');
   for(const [key,max] of [['goal',180],['intention',160],['reply',1500]])if(typeof value[key]!=='string'||!value[key].trim()||value[key].length>max)throw Error('Groq returned an invalid description.');
   validateInteraction(value);validateMedia(value);
   validateWorldRequests(value.assetRequests);validateObjective(value.objective);
@@ -85,7 +86,7 @@ export function createGroqClient({apiKey=process.env.GROQ_API_KEY,model=process.
       const data=await response.json(),choice=data.choices?.[0];
       if(choice?.finish_reason!=='stop')throw Error('Incomplete response');
       return validateDecision(JSON.parse(choice.message.content));
-    }catch{throw new GroqError('Groq returned an incomplete or invalid decision. Retrying shortly.');}
+    }catch(error){throw new GroqError(error instanceof SyntaxError?'Groq returned invalid JSON.':error.message==='Incomplete response'?'Groq response ended before a complete decision.':'Groq decision rejected: '+error.message);}
   }};
 }
 export function createMistralClient({apiKey=process.env.MISTRAL_API_KEY,model=process.env.MISTRAL_MODEL||'mistral-small-latest',fetchImpl=fetch}={}){
@@ -107,7 +108,7 @@ export function createMistralClient({apiKey=process.env.MISTRAL_API_KEY,model=pr
       throw new GroqError(response.status===401?'Mistral rejected the API key.':`Mistral request failed (${response.status}).`,{status:response.status,retryMs:Math.max(30000,Number.isFinite(retryMs)?retryMs:60000)});
     }
     try{const data=await response.json(),choice=data.choices?.[0];if(choice?.finish_reason!=='stop')throw Error('Incomplete');return validateDecision(JSON.parse(choice.message.content));}
-    catch{throw new GroqError('Mistral returned an incomplete or invalid decision.');}
+    catch(error){throw new GroqError(error instanceof SyntaxError?'Mistral returned invalid JSON.':error.message==='Incomplete'?'Mistral response ended before a complete decision.':'Mistral decision rejected: '+error.message);}
   }};
 }
 // Stick with the last healthy provider. Failed providers cool down independently;
@@ -165,7 +166,7 @@ export function createResidentBrain({client=createResilientClient(),now=()=>Date
     s.ai.status=reconnecting?'connecting':'thinking';s.ai.fallback=false;
     if(reconnecting){s.player.speed=0;s.player.moving=false;}
     try{
-      const decision=await request(s,reconnecting?'Reconnect to the character. If there is an activity or arrival already in progress, retain that activity; otherwise choose the next activity.':'Choose and execute your next autonomous activity.');
+      const decision=await request(s,reconnecting?'Reconnect to the character. The server will resume any saved route, arrival or activity with its exact remaining time; do not restart or recreate it. Your response still needs a valid proposed decision with seconds=15..180 even when the saved activity has fewer than 15 seconds left. This proposed decision will be ignored while the existing activity resumes. Otherwise choose the next activity.':'Choose and execute your next autonomous activity.');
       if(stopped||s.paused||updateGeneration!==generation)return;
       recordWorldRequests(s,decision.assetRequests,now());
       s.ai.status='ready';s.ai.fallback=false;

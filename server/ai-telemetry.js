@@ -24,7 +24,7 @@ export function recordTelemetry(ai,client){
   for(const a of attempts){
     t.requests++;if(a.usage){t.input+=a.usage.input||0;t.output+=a.usage.output||0;t.total+=a.usage.total??((a.usage.input||0)+(a.usage.output||0));t.usageReported++;}
     const {sent,received,...summary}=a;t.recent.push(summary);t.recent=t.recent.slice(-12);
-    t.lastExchange={...a};
+    t.lastExchange={...a};if(a.status==='error'&&a.received?.content)t.lastRejectedDecision={provider:a.provider,at:a.at,error:a.error,received:a.received};
   }
   ai.providerHealth=client.diagnostics||[];
 }

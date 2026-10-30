@@ -79,3 +79,8 @@ test('pausing discards a late in-flight model decision without creating memories
  const pending=brain.update(s);brain.setPaused(s,true);resolve(decision);await pending;
  assert.equal(s.pendingDecision,undefined);assert.equal(s.events.length,0);assert.equal(s.ai.connected,false);assert.equal(s.ai.status,'manually_paused');brain.stop();
 });
+test('duration bounds reach the provider schema and rejection names the exact violated constraint',async()=>{
+ let body;const invalid={...decision,seconds:9};const client=createGroqClient({apiKey:'test',fetchImpl:async(url,o)=>{body=JSON.parse(o.body);return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(invalid)}}]});}});
+ await assert.rejects(client.complete({},'Reconnect'),/seconds must be an integer from 15 to 180/);
+ const properties=body.response_format.json_schema.schema.properties;assert.equal(properties.seconds.minimum,15);assert.equal(properties.seconds.maximum,180);assert.equal(properties.nextSteps.items.properties.seconds.minimum,15);
+});

@@ -50,3 +50,8 @@ test('disconnected arrival and needs remain frozen instead of falling back to a 
  for(let i=0;i<100;i++)stepResident(s,.1,i*100);
  assert.equal(JSON.stringify({arrival:s.arrival,needs:s.needs,events:s.events}),before);assert.equal(s.player.moving,false);
 });
+test('reconnect keeps the final nine seconds of a saved shift and explicitly avoids recreating it',async()=>{
+ const s=createResident();s.obstacles=[];s.arrival.phase='landed';s.rest=9;s.activity={kind:'work',remaining:9,total:180};let message;
+ const brain=createResidentBrain({client:{configured:true,model:'test',complete:async(c,m)=>{message=m;return {...decision,seconds:15};}},now:()=>1000});brain.initialize(s);
+ await brain.update(s);assert.equal(s.ai.connected,true);assert.equal(s.rest,9);assert.equal(s.activity.remaining,9);assert.equal(s.pendingDecision,undefined);assert.match(message,/seconds=15..180/);assert.match(message,/ignored while the existing activity resumes/);brain.stop();
+});

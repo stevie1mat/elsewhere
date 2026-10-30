@@ -1,5 +1,5 @@
 const metrics=['none','energy','hunger','thirst','stress','curiosity','social','money'];
-export const objectiveSchema={type:'object',additionalProperties:false,required:['metric','direction','amount','interaction'],properties:{metric:{type:'string',enum:metrics},direction:{type:'string',enum:['increase','decrease']},amount:{type:'integer'},interaction:{type:'string',enum:['none','sit','lie_down']}}};
+export const objectiveSchema={type:'object',additionalProperties:false,required:['metric','direction','amount','interaction'],properties:{metric:{type:'string',enum:metrics},direction:{type:'string',enum:['increase','decrease']},amount:{type:'integer',minimum:0,maximum:100},interaction:{type:'string',enum:['none','sit','lie_down']}}};
 export function validateObjective(o){if(o===undefined)return;if(!o||!metrics.includes(o.metric)||!['increase','decrease'].includes(o.direction)||!Number.isInteger(o.amount)||o.amount<0||o.amount>100||!['none','sit','lie_down'].includes(o.interaction))throw Error('Invalid measurable objective.');}
 const value=(s,metric)=>metric==='money'?s.wallet:s.needs[metric];
 export function installObjective(s,d,now,replace=false){
