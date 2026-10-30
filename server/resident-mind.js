@@ -44,8 +44,8 @@ export function startActivity(s,d,place,now){
   if(d.action==='eat')s.wallet-=4;
   s.activity={executionMode:d.action==='collect_bicycle'?'bicycle_pickup':s.player.interactionPose?'object_interaction':gap?'standing_only':'simulation',before,kind:d.action==='visit'?'observe':d.action,total:d.seconds,remaining:d.seconds,place:place?.name||s.destination||'Porto Sol',startedAt:now};
   recordObservation(s,now);
-  s.rest=d.seconds;s.thought=gap?.message||d.intention;s.player.speed=0;s.player.moving=false;
-  return {started:true};
+  s.rest=d.seconds;s.thought=d.action==='collect_bicycle'?'Collected and mounted the loan bicycle.':gap?.message||d.intention;s.player.speed=0;s.player.moving=false;
+  return {started:true,...(d.action==='collect_bicycle'?{message:s.thought}:{})};
 }
 export function finishActivity(s,now){
   if(!s.activity)return null;
