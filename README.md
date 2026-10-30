@@ -488,3 +488,24 @@ experience list. Autonomous activities last at least 60 seconds to avoid rapid
 replanning. Response budgets are capped at 1024 tokens. User-requested activities
 can still use the original 15–180 second range. The Brain panel reports learned
 outcome counts, summary cache hits and local factual-recall hits.
+
+
+## Model-authored executable plans
+
+The model chooses its own goal and success criterion, and writes a first action
+plus up to three future steps. Each future step can include a need-range condition
+chosen by the model. The game executes these plans using validated action APIs;
+it does not execute arbitrary generated JavaScript or assign a fixed daily
+mission. A failed condition or blocked route invalidates the plan so the next
+model decision can revise it using observed results. Finished plans are also
+reviewed at the next decision. Success criteria are descriptions for that model
+review, not automatically proven goals.
+
+Plan steps, cursor and criteria persist with the character. Reusing a planned
+step does not make another model request. The Learning inspector shows the
+model-written goal, criteria, ordered steps, conditions, progress, plan data
+and reuse count. If the model includes a useful question in an autonomous reply,
+it can appear in chat without a separate question-generation call (at most one
+such question per five minutes). It can continue living without an answer.
+The available actions remain limited to the implemented world capabilities;
+this change does not add construction, arbitrary tools or human consciousness.

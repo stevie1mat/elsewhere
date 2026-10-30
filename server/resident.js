@@ -1,3 +1,4 @@
+import {invalidatePlan} from './self-plan.js';
 import {ensureMind,stepMind,startActivity,finishActivity,activityDestination} from './resident-mind.js';
 import {createPlayer,SPAWN,canOccupy,groundElevation,LANDMARKS,PORTO_BOUNDS} from './shared/movement.js';
 import {createArrival,stepArrival,dropArrival,JOURNEY_SECONDS} from './shared/arrival.js';
@@ -71,11 +72,11 @@ export function stepResident(s,dt,now=Date.now()) {
       decision=s.pendingDecision;
       if(!decision){p.speed=0;p.moving=false;return;}
       delete s.pendingDecision;
-      if(decision.action!=='visit'){const result=applyResidentDecision(s,decision,now);if(result.error){s.thought=result.error;remember(s,result.error,now);s.rest=10;}if(!s.route.length)return;}
+      if(decision.action!=='visit'){const result=applyResidentDecision(s,decision,now);if(result.error){invalidatePlan(s,result.error);s.thought=result.error;remember(s,result.error,now);s.rest=10;}if(!s.route.length)return;}
     }
     const destination=LANDMARKS.find(l=>l.id===(decision?activityDestination(decision):visits[s.visit%visits.length]));
     if(!s.route.length){s.route=residentRoute(p,destination,s.obstacles);s.routeIndex=0;s.destination=destination.name;s.activityOnArrival=decision||null;}
-    if(!s.route.length){s.thought=`I could not find a safe route to ${destination.name}. I'll try somewhere else.`;remember(s,s.thought,now);s.visit++;s.rest=10;return;}
+    if(!s.route.length){invalidatePlan(s,'No walkable route to '+destination.name);s.thought=`I could not find a safe route to ${destination.name}. I'll try somewhere else.`;remember(s,s.thought,now);s.visit++;s.rest=10;return;}
     s.thought=decision?.intention||`I'm walking to ${destination.name}.`;remember(s,`Set off for ${destination.name}.`,now);
   }
   let budget=dt*1.65;
@@ -83,7 +84,7 @@ export function stepResident(s,dt,now=Date.now()) {
     const next=s.route[s.routeIndex],dx=next.x-p.x,dz=next.z-p.z,d=Math.hypot(dx,dz);
     if(d<.001){s.routeIndex++;continue;}
     const distance=Math.min(budget,d),x=p.x+dx/d*distance,z=p.z+dz/d*distance;
-    if(!clear(x,z)){s.route=[];s.rest=3;p.moving=false;p.speed=0;return;}
+    if(!clear(x,z)){invalidatePlan(s,'Walking route became blocked.');s.route=[];s.rest=3;p.moving=false;p.speed=0;return;}
     p.x=x;p.z=z;p.y=groundElevation(x,z);p.yaw=Math.atan2(dx,-dz);p.walked+=distance;p.speed=1.65;p.moving=true;budget-=distance;
     if(distance===d)s.routeIndex++;
   }
@@ -93,7 +94,7 @@ export function stepResident(s,dt,now=Date.now()) {
     s.placesVisited[s.destination]=(s.placesVisited[s.destination]||0)+1;s.needs.curiosity=Math.max(0,s.needs.curiosity-12);
     const next=s.activityOnArrival||{action:'observe',seconds:45,intention:`I'm taking a moment at ${s.destination}.`};s.activityOnArrival=null;
     const result=startActivity(s,{...next,intention:next.action==='visit'?`I'm looking around ${s.destination}.`:next.intention},{name:s.destination},now);
-    if(result.error){s.thought=result.error;s.rest=10;remember(s,result.error,now);}s.route=[];s.visit++;p.moving=false;p.speed=0;
+    if(result.error){invalidatePlan(s,result.error);s.thought=result.error;s.rest=10;remember(s,result.error,now);}s.route=[];s.visit++;p.moving=false;p.speed=0;
   }
 }
 export function residentSnapshot(s){const {obstacles,route,...snapshot}=s;return {...snapshot,initialized:!!obstacles,mode:s.ai?(s.ai.connected===true?'ai':'paused'):'routine'};}
