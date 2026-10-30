@@ -65,7 +65,7 @@ export function createPrivateServer({code=process.env.PRIVATE_ACCESS_CODE||'2792
       const token=(req.headers.cookie||'').split(';').map(v=>v.trim()).find(v=>v.startsWith('porto_session='))?.slice(14);
       if(!token||!(sessions.get(token)>Date.now())){
         if(url.pathname.startsWith('/api/')){json(res,401,{error:'Sign in required'});return;}
-        res.writeHead(200,{'Content-Type':'text/html','Cache-Control':'no-store'});res.end(loginPage);return;
+        res.writeHead(200,{'Content-Type':'text/html','Cache-Control':'no-store'});res.end(loginPage.replace("location.href='/'","location.href=location.pathname"));return;
       }
       if(url.pathname==='/api/resident'&&req.method==='GET'){if(!cloudReady&&!hadLocal){json(res,503,{error:'Loading the saved life from Supabase. Please retry shortly.'});return;}json(res,200,{...residentSnapshot(state),saveError:saveError||cloudError,storage:storageStatus()});return;}
       if(url.pathname.startsWith('/api/resident/')&&!cloudReady&&!hadLocal){json(res,503,{error:'Waiting for the saved life from Supabase.'});return;}
@@ -114,7 +114,7 @@ export function createPrivateServer({code=process.env.PRIVATE_ACCESS_CODE||'2792
       }
       if(url.pathname.startsWith('/api/')){json(res,404,{error:'Not found'});return;}
       if(req.method!=='GET'&&req.method!=='HEAD'){res.writeHead(405);res.end();return;}
-      const path=resolve(dist,'.'+decodeURIComponent(url.pathname==='/'?'/index.html':url.pathname));
+      const path=resolve(dist,'.'+decodeURIComponent(['/', '/dashboard', '/dashboard/'].includes(url.pathname)?'/index.html':url.pathname));
       if(!path.startsWith(dist+'/')||!existsSync(path)||!statSync(path).isFile()){res.writeHead(404);res.end('Not found');return;}
       const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.jpg':'image/jpeg','.png':'image/png','.svg':'image/svg+xml','.webp':'image/webp','.json':'application/json','.glb':'model/gltf-binary','.woff2':'font/woff2'};
       res.writeHead(200,{'Content-Type':types[extname(path)]||'application/octet-stream','Cache-Control':'no-store'});res.end(req.method==='HEAD'?undefined:readFileSync(path));
