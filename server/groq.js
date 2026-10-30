@@ -97,12 +97,12 @@ export function createResilientClient({clients=[createGroqClient(),createMistral
 }
 export function createResidentBrain({client=createResilientClient(),now=()=>Date.now(),sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms))}={}){
   let chatWaiting=0,busy=false,stopped=false,nextAt=0,failures=0;const abort=new AbortController();
-  function initialize(s){s.messages??=[];s.ai={...s.ai,enabled:client.configured,model:client.model,status:client.configured?'ready':'unconfigured',provider:client.provider||'Groq',providers:client.providers||['Groq'],fallback:false,error:null};delete s.pendingDecision;}
+  function initialize(s){s.messages??=[];s.ai={...s.ai,enabled:client.configured,model:client.model,status:client.configured?'ready':'unconfigured',provider:client.provider||'Groq',providers:client.providers||['Groq'],fallback:false,connected:false,error:null};delete s.pendingDecision;}
   async function request(s,message){
     if(busy||now()<nextAt)throw new GroqError(busy?'The character is finishing another thought. Your message will retry automatically.':`AI connection is cooling down. Retrying in ${Math.max(1,Math.ceil((nextAt-now())/1000))} seconds.`,{status:429,retryMs:busy?1000:Math.max(1000,nextAt-now())});
     busy=true;
-    try{const decision=await client.complete(residentContext(s),message,abort.signal);failures=0;nextAt=now()+5000;s.ai.provider=client.provider||'Groq';s.ai.model=client.model;s.ai.error=null;return decision;}
-    catch(error){failures++;nextAt=now()+Math.max(error.retryMs||60000,Math.min(900000,30000*2**Math.min(failures,5)));throw error;}
+    try{const decision=await client.complete(residentContext(s),message,abort.signal);failures=0;nextAt=now()+5000;s.ai.provider=client.provider||'Groq';s.ai.model=client.model;s.ai.connected=true;s.ai.lastResponseAt=now();s.ai.error=null;return decision;}
+    catch(error){s.ai.connected=false;s.ai.error=error.message;failures++;nextAt=now()+Math.max(error.retryMs||60000,Math.min(900000,30000*2**Math.min(failures,5)));throw error;}
     finally{busy=false;}
   }
   return {initialize,async update(s){

@@ -4,6 +4,15 @@ import {ResidentMotion} from './resident-motion.js';
 export function mountResidentView({initial,player,arrival,welcome,getWorld}) {
   document.body.classList.add('resident-observer');
   const toggle=document.createElement('button');toggle.id='resident-brain-toggle';toggle.type='button';toggle.innerHTML='<span aria-hidden="true">🧠</span> Brain';toggle.setAttribute('aria-expanded','false');toggle.setAttribute('aria-controls','resident-panel');
+  const connection=document.createElement('div');connection.id='resident-ai-connection';connection.setAttribute('role','status');connection.setAttribute('aria-live','polite');
+  const dot=document.createElement('span');dot.className='ai-connection-dot';dot.setAttribute('aria-hidden','true');const connectionText=document.createElement('span');connection.append(dot,connectionText);
+  function showConnection(ai,offline=false){
+    const online=!offline&&ai?.enabled&&ai.connected===true&&!ai.error&&!ai.fallback;
+    connection.dataset.state=online?'online':'offline';
+    const text=offline?'AI disconnected · reconnecting':!ai?.enabled?'AI not configured':online?`AI connected · ${ai.provider||'AI'}${ai.status==='thinking'?' · thinking':''}`:ai.error||ai.fallback?'AI unavailable · retrying':'AI connecting…';
+    if(connectionText.textContent!==text)connectionText.textContent=text;
+    connection.title=offline?'The game server cannot be reached.':ai?.error||'Status of the last AI response; provider availability is checked when a request is made.';
+  }
   const panel=document.createElement('section');panel.id='resident-panel';panel.hidden=true;panel.setAttribute('aria-label','Character brain');
   panel.innerHTML=`<header class="brain-header"><div><small>THE MIND OF YOUR RESIDENT</small><h2>A thought becomes a step.</h2></div><button id="resident-brain-close" aria-label="Close brain view">×</button></header>
     <p id="resident-status" role="status"></p>
@@ -25,11 +34,12 @@ export function mountResidentView({initial,player,arrival,welcome,getWorld}) {
   const setOpen=open=>{panel.hidden=!open;toggle.setAttribute('aria-expanded',String(open));if(open)panel.querySelector('#resident-brain-close').focus();else toggle.focus();};
   toggle.onclick=()=>setOpen(panel.hidden);panel.querySelector('#resident-brain-close').onclick=()=>setOpen(false);panel.addEventListener('keydown',event=>{if(event.key==='Escape'){event.stopPropagation();setOpen(false);}});
   const bubble=document.createElement('div');bubble.id='resident-thought';bubble.setAttribute('aria-label','Current intention');
-  document.querySelector('#app').append(toggle,panel,bubble);
+  document.querySelector('#app').append(toggle,connection,panel,bubble);
   let snapshot=initial,busy=false,geometrySent=false,lastEvents='',lastMessages='',receivedAt=Date.now();
   let chatBusy=false;
   const motion=new ResidentMotion(initial.player,performance.now());
   function apply(next){motion.receive(next.player,performance.now(),{snap:next.arrival.phase!==snapshot.arrival.phase||next.arrival.phase!=='landed'});snapshot=next;Object.assign(arrival,next.arrival);Object.assign(welcome,next.welcome);receivedAt=Date.now();
+    showConnection(next.ai);
     document.body.classList.toggle('arriving',next.arrival.phase!=='landed');
     document.querySelector('#arrival-title').textContent=next.arrival.phase==='parachute'?'Coming in to land.':'Your island is on the horizon.';
     document.querySelector('#arrival-detail').textContent=next.thought;
@@ -88,14 +98,14 @@ export function mountResidentView({initial,player,arrival,welcome,getWorld}) {
       }else response=await fetch('/api/resident',{cache:'no-store'});
       if(response.status===401){location.replace('/');return;}
       if(!response.ok)throw Error(`City connection failed (${response.status})`);apply(await response.json());
-    }catch(error){panel.querySelector('#resident-status').textContent=error.message+' · retrying';if(!geometrySent)document.querySelector('#arrival-detail').textContent='Waiting for the city connection. Retrying automatically…';}finally{busy=false;}
+    }catch(error){showConnection(snapshot.ai,true);panel.querySelector('#resident-status').textContent=error.message+' · retrying';if(!geometrySent)document.querySelector('#arrival-detail').textContent='Waiting for the city connection. Retrying automatically…';}finally{busy=false;}
   }
   const interval=setInterval(sync,400);sync();window.addEventListener('pagehide',()=>clearInterval(interval),{once:true});
   const point=new THREE.Vector3();
   return {update(camera){
     // Never advance the saved life in the browser: all tabs observe one server state.
     const pitch=player.pitch;Object.assign(player,motion.sample(performance.now()));player.pitch=pitch;player.arrival=arrival;
-    if(Date.now()-receivedAt>3000){player.speed=0;player.moving=false;}
+    if(Date.now()-receivedAt>3000){player.speed=0;player.moving=false;showConnection(snapshot.ai,true);}
     point.set(player.x,(player.y||0)+2.35,player.z).project(camera);
     bubble.hidden=arrival.phase!=='landed'||point.z>1||point.z< -1||Math.abs(point.x)>1||Math.abs(point.y)>1;
     bubble.style.left=`${(point.x*.5+.5)*innerWidth}px`;bubble.style.top=`${(-point.y*.5+.5)*innerHeight}px`;
