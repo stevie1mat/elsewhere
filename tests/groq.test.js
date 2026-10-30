@@ -33,7 +33,7 @@ test('usage limits back off, prevent overlapping requests and never reveal provi
  const client=createGroqClient({apiKey:'test-secret',fetchImpl:async()=>({ok:false,status:429,headers:new Headers({'retry-after':'120'}),text:async()=>{throw Error('must not read raw provider error');}})});
  await assert.rejects(client.complete({},'test'),e=>e.retryMs===120000&&!e.message.includes('test-secret'));
  let time=1000,calls=0;const s=ready();const brain=createResidentBrain({client:{configured:true,model:'test',complete:async()=>{calls++;throw new GroqError('Usage limit',{status:429,retryMs:120000});}},now:()=>time});brain.initialize(s);
- await brain.update(s);await brain.update(s);time+=119000;await brain.update(s);assert.equal(calls,1);time+=2000;await brain.update(s);assert.equal(calls,2);assert.equal(s.ai.status,'fallback');brain.stop();
+ await brain.update(s);await brain.update(s);time+=119000;await brain.update(s);assert.equal(calls,1);time+=2000;await brain.update(s);assert.equal(calls,2);assert.equal(s.ai.status,'paused');brain.stop();
 });
 test('stopping the brain discards pending decisions and prevents future requests',async()=>{
  let resolve;const s=ready();const brain=createResidentBrain({client:{configured:true,model:'test',complete:()=>new Promise(r=>{resolve=r;})},now:()=>1000});brain.initialize(s);

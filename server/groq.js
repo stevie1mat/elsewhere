@@ -91,7 +91,7 @@ export function createResilientClient({clients=[createGroqClient(),createMistral
         try{const result=await client.complete(context,message,signal);active=index;cooldowns.delete(index);return result;}
         catch(error){if(signal?.aborted)throw new GroqError('Request cancelled.');const until=now()+Math.max(30000,error.retryMs||60000);cooldowns.set(index,until);earliest=Math.min(earliest,until);}
       }
-      throw new GroqError('AI providers are unavailable. Continuing the local routine while they recover.',{retryMs:Number.isFinite(earliest)?Math.max(1000,earliest-now()):60000});
+      throw new GroqError('AI providers are unavailable. Character paused until the connection recovers.',{retryMs:Number.isFinite(earliest)?Math.max(1000,earliest-now()):60000});
     }
   };
 }
@@ -106,10 +106,19 @@ export function createResidentBrain({client=createResilientClient(),now=()=>Date
     finally{busy=false;}
   }
   return {initialize,async update(s){
-    if(stopped||chatWaiting||!client.configured||busy||now()<nextAt||!s.obstacles||s.arrival.phase!=='landed'||s.route.length||s.rest>0||s.pendingDecision)return;
-    s.ai.status='thinking';s.ai.fallback=false;s.player.speed=0;s.player.moving=false;
-    try{const decision=await request(s,'Choose and execute your next autonomous activity.');if(stopped)return;s.pendingDecision=decision;s.ai.goal=decision.goal;s.ai.fallback=false;s.ai.status='ready';s.ai.error=null;s.ai.lastDecisionAt=now();remember(s,`Chose to ${decision.action==='visit'?'visit '+RESIDENT_PLACES.find(p=>p.id===decision.destination).name:decision.action}. Goal: ${decision.goal}`,now());}
-    catch(error){if(!stopped){s.ai.status='fallback';s.ai.fallback=true;s.ai.error=error.message;remember(s,error.message,now());}}
+    if(stopped||chatWaiting||!client.configured||busy||now()<nextAt||!s.obstacles)return;
+    const reconnecting=s.ai.connected!==true;
+    if(!reconnecting&&(s.arrival.phase!=='landed'||s.route.length||s.rest>0||s.pendingDecision))return;
+    s.ai.status=reconnecting?'connecting':'thinking';s.ai.fallback=false;
+    if(reconnecting){s.player.speed=0;s.player.moving=false;}
+    try{
+      const decision=await request(s,reconnecting?'Reconnect to the character. If there is an activity or arrival already in progress, retain that activity; otherwise choose the next activity.':'Choose and execute your next autonomous activity.');
+      if(stopped)return;
+      s.ai.status='ready';s.ai.fallback=false;
+      if(reconnecting&&(s.arrival.phase!=='landed'||s.route.length||s.rest>0||s.pendingDecision))return;
+      s.pendingDecision=decision;s.ai.goal=decision.goal;s.ai.lastDecisionAt=now();
+      remember(s,`Chose to ${decision.action==='visit'?'visit '+RESIDENT_PLACES.find(p=>p.id===decision.destination).name:decision.action}. Goal: ${decision.goal}`,now());
+    }catch(error){if(!stopped){s.ai.status='paused';s.ai.fallback=false;s.ai.connected=false;s.ai.error=error.message;}}
   },async chat(s,message){
     if(stopped)throw new GroqError('Server is stopping.');
     if(!client.configured)throw new GroqError('AI chat is not configured on the server.',{retryMs:0});

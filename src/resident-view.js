@@ -101,12 +101,18 @@ export function mountResidentView({initial,player,arrival,welcome,getWorld}) {
     }catch(error){showConnection(snapshot.ai,true);panel.querySelector('#resident-status').textContent=error.message+' · retrying';if(!geometrySent)document.querySelector('#arrival-detail').textContent='Waiting for the city connection. Retrying automatically…';}finally{busy=false;}
   }
   const interval=setInterval(sync,400);sync();window.addEventListener('pagehide',()=>clearInterval(interval),{once:true});
+  const marker=document.createElement('div');marker.id='resident-marker';marker.innerHTML='<span aria-hidden="true">◆</span> YOUR RESIDENT';document.querySelector('#app').append(marker);
   const point=new THREE.Vector3();
   return {update(camera){
     // Never advance the saved life in the browser: all tabs observe one server state.
     const pitch=player.pitch;Object.assign(player,motion.sample(performance.now()));player.pitch=pitch;player.arrival=arrival;
     if(Date.now()-receivedAt>3000){player.speed=0;player.moving=false;showConnection(snapshot.ai,true);}
-    point.set(player.x,(player.y||0)+2.35,player.z).project(camera);
+  },render(camera,pose){
+    point.set(pose.x,(pose.y||0)+2.8,pose.z).project(camera);
+    const outside=point.z>1||point.z< -1||Math.abs(point.x)>.9||Math.abs(point.y)>.9;
+    marker.classList.toggle('offscreen',outside);marker.style.left=`${Math.max(85,Math.min(innerWidth-85,(point.x*.5+.5)*innerWidth))}px`;marker.style.top=`${Math.max(110,Math.min(innerHeight-80,(-point.y*.5+.5)*innerHeight))}px`;
+    marker.title=outside?'Resident is outside the view. Use Locate resident.':'Your autonomous character';
+    point.set(pose.x,(pose.y||0)+4.5,pose.z).project(camera);
     bubble.hidden=arrival.phase!=='landed'||point.z>1||point.z< -1||Math.abs(point.x)>1||Math.abs(point.y)>1;
     bubble.style.left=`${(point.x*.5+.5)*innerWidth}px`;bubble.style.top=`${(-point.y*.5+.5)*innerHeight}px`;
   }};

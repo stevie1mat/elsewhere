@@ -52,6 +52,7 @@ export function applyResidentDecision(s,decision,now=Date.now()){
 }
 const visits=['home','cafe','garden','bikes','home','south'];
 export function stepResident(s,dt,now=Date.now()) {
+  if(s.ai&&s.ai.connected!==true){s.player.speed=0;s.player.moving=false;return;}
   if(!s.obstacles)return;
   const p=s.player,clear=(x,z)=>canOccupy(x,z,s.obstacles,.6);
   s.updatedAt=now;ensureMind(s);if(s.arrival.phase==='landed')stepMind(s,dt);
@@ -95,4 +96,4 @@ export function stepResident(s,dt,now=Date.now()) {
     if(result.error){s.thought=result.error;s.rest=10;remember(s,result.error,now);}s.route=[];s.visit++;p.moving=false;p.speed=0;
   }
 }
-export function residentSnapshot(s){const {obstacles,route,...snapshot}=s;return {...snapshot,initialized:!!obstacles,mode:s.ai?.enabled&&!s.ai.fallback?'ai':'routine'};}
+export function residentSnapshot(s){const {obstacles,route,...snapshot}=s;return {...snapshot,initialized:!!obstacles,mode:s.ai?(s.ai.connected===true?'ai':'paused'):'routine'};}

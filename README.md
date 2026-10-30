@@ -413,3 +413,19 @@ curiosity, and chat reduces social need. Activity duration/progress, earnings
 and completed experiences are saved. The Brain view shows current needs, mood,
 activity countdown and money. Accepted chat requests can interrupt activities.
 Construction, full relationships and named NPC conversations remain future work.
+
+
+## AI-only life and spectator camera
+
+AI availability is now required for simulation. At startup/reconnect the server
+verifies a provider even when an existing route, rest or arrival is in progress.
+If neither provider can respond, the resident's movement, needs, activity timers
+and new activity memories freeze. Retries are system state, not character
+memories. A successful reconnection resumes the saved activity without replacing
+it. Persistence continues to protect the last state; there is no offline routine.
+
+The default private-game view is an independent elevated spectator camera.
+Drag to orbit, Shift-drag/right-drag to pan, and scroll to zoom. The camera does
+not follow the resident's position or turns. Locate resident frames them on
+request; a YOUR RESIDENT marker identifies the main character, including when
+they leave the view. Flight-stage transitions reframe once for landing.

@@ -1,3 +1,4 @@
+import {createSpectatorCamera} from './spectator-camera.js';
 import {mountResidentView} from './resident-view.js';
 import {lifeStep} from './settling-story.js';
 import {mountSettlingStory} from './settling-ui.js';
@@ -23,7 +24,7 @@ import { mapProjection,panMap,zoomMap } from './map-view.js';
 import { restoreQuest, activeStop, canInteract, advanceQuest } from './quest.js';
 
 const residentSession=window.portoResident||null;
-let residentView;
+let residentView,spectatorCamera;
 const isMumbai=new URLSearchParams(location.search).get('world')==='mumbai';
 const isChai=new URLSearchParams(location.search).get('world')==='chai';
 const isUrban=isMumbai||isChai;
@@ -382,7 +383,7 @@ function initialize(){
   renderer.shadowMap.autoUpdate=true;renderer.shadowMap.needsUpdate=true;
   renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=isUrban?.88:.94;
   renderer.domElement.setAttribute('aria-label',`Third-person cycling in ${worldName}`);renderer.domElement.tabIndex=0;viewport.appendChild(renderer.domElement);viewport.classList.toggle('storybook-world',!isUrban);
-  scene=new THREE.Scene();camera=new THREE.PerspectiveCamera(isUrban?66:59,innerWidth/innerHeight,.3,3500);camera.rotation.order='YXZ';
+  scene=new THREE.Scene();camera=new THREE.PerspectiveCamera(isUrban?66:59,innerWidth/innerHeight,.3,3500);camera.rotation.order='YXZ';if(residentSession)spectatorCamera=createSpectatorCamera(camera,renderer.domElement);
   const manager=new THREE.LoadingManager();let failed=0;
   manager.onProgress=(_,loaded,total)=>{$('#progress').style.width=`${loaded/total*100}%`;$('#loading-status').textContent=`Bringing ${worldName} to life · ${Math.round(loaded/total*100)}%`;};
   manager.onError=()=>{failed++;};
@@ -443,6 +444,7 @@ function initialize(){
       updateWelcome(active?dt:0);
       if(skyRide){world.cyclist.cycle.group.position.y=.015;world.cyclist.group.position.y=player.y;world.cyclist.cycle.group.rotateX(-player.slope);world.cyclist.cycle.group.rotateZ(-Math.max(-.16,Math.min(.16,skyRide.laneVelocity*.1)));}
       if(skyway)skyway.group.visible=!!skyRide;
+      if(spectatorCamera){spectatorCamera.update(arrivalView,arrival.phase);}else{
       // Orbit around the visible rider; the bike's heading is independent of the mouse.
       const insideHome=!isUrban&&player.x>14&&player.x<23.6&&player.z>-88&&player.z<-78;
       const viewYaw=player.yaw+orbitYaw, distance=player.mode==='walking'?(insideHome?2.2:4.4):5.8;
@@ -464,8 +466,9 @@ function initialize(){
       const nearPlane=airborne()?2:(skyRide?1:.3);
       if(camera.near!==nearPlane){camera.near=nearPlane;camera.updateProjectionMatrix();}
       camera.lookAt(cameraAim);
+      }
       world.update(elapsed,modalOpen()?0:dt,camera);
-      renderer.render(scene,camera);
+      renderer.render(scene,camera);residentView?.render(camera,arrivalView);
       uiClock+=dt;frameClock+=dt;frames++;
       if(frameClock>1){$('#performance').textContent=`${player.swimming?'Swimming · ':player.mode==='walking'?'Walking · ':''}${Math.round(Math.abs(player.speed)*3.6)} km/h · ${Math.round(frames/frameClock)} fps`;frameClock=0;frames=0;}
       if(uiClock>.12){updateHUD();uiClock=0;}
@@ -621,8 +624,8 @@ function addControls(){
   const look=(dx,dy)=>{orbitYaw+=dx*.0023;player.pitch=Math.max(airborne()?-.35:.05,Math.min(airborne()?1.15:.85,player.pitch+dy*.0023));};
   async function lockLook(){if(residentSession)return;if(document.pointerLockElement||!started||modalOpen())return;try{await canvas.requestPointerLock();}catch{toast('Drag the scene to look around. A and D steer the bike.');}}
   $('#enter').addEventListener('click',()=>{if(!ready)return;startRide();if(!matchMedia('(pointer:coarse)').matches)lockLook();});
-  canvas.addEventListener('pointerdown',event=>{if(!started||modalOpen())return;canvas.focus();dragging=true;lastX=event.clientX;lastY=event.clientY;if(event.pointerType!=='mouse'||airborne()){canvas.setPointerCapture(event.pointerId);}else if(!document.pointerLockElement)lockLook();});
-  canvas.addEventListener('pointermove',event=>{if(!started||modalOpen())return;if(document.pointerLockElement===canvas)look(event.movementX,event.movementY);else if(dragging){look(event.clientX-lastX,event.clientY-lastY);lastX=event.clientX;lastY=event.clientY;}});
+  canvas.addEventListener('pointerdown',event=>{if(residentSession)return;if(!started||modalOpen())return;canvas.focus();dragging=true;lastX=event.clientX;lastY=event.clientY;if(event.pointerType!=='mouse'||airborne()){canvas.setPointerCapture(event.pointerId);}else if(!document.pointerLockElement)lockLook();});
+  canvas.addEventListener('pointermove',event=>{if(residentSession)return;if(!started||modalOpen())return;if(document.pointerLockElement===canvas)look(event.movementX,event.movementY);else if(dragging){look(event.clientX-lastX,event.clientY-lastY);lastX=event.clientX;lastY=event.clientY;}});
   const stopDrag=()=>{dragging=false;};window.addEventListener('pointerup',stopDrag);window.addEventListener('pointercancel',stopDrag);
   document.addEventListener('pointerlockchange',()=>{$('#ui').classList.toggle('unlocked',document.pointerLockElement!==canvas);releaseKeys();dragging=false;});
   document.addEventListener('pointerlockerror',()=>toast('Mouse capture is unavailable. Drag to look, or use A / D to steer.'));
