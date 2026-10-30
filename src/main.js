@@ -489,7 +489,7 @@ function updateHUD(){
   }
   $('#adventure-goals').hidden=isUrban;
   const pickups=world?.pickups;
-  collectionHUD.hidden=!started||airborne()||!!skyRide||!pickups;
+  collectionHUD.hidden=!!residentSession||!started||airborne()||!!skyRide||!pickups;
   if(pickups){
     for(const type of ['coin','nitro','shield','mystery']){const el=$(`#collected-${type}`),value=String(pickups.collected[type]);if(el.textContent!==value)el.textContent=value;}
     const wallet=`${pickups.coins} coins available · Nitro ${Math.round(pickups.nitro)}% · ${pickups.shield?'Shield ready':'No shield'}`;
