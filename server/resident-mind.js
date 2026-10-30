@@ -1,3 +1,4 @@
+import {collectBicycle} from './shared/movement.js';
 import {beginPhone} from './resident-media.js';
 import {learnOutcome,recordObservation} from './cognition.js';
 export {ACTIVITY_ACTIONS} from './action-catalog.js';
@@ -26,6 +27,7 @@ export function stepMind(s,dt){
 }
 export function activityDestination(d){
   if(d.action==='sleep')return 'home';
+  if(d.action==='collect_bicycle')return 'bikes';
   if(['eat','work'].includes(d.action))return d.destination==='south'?'south':'cafe';
   return d.destination;
 }
@@ -33,11 +35,12 @@ export function startActivity(s,d,place,now){
   ensureMind(s);
   if(d.action==='eat'&&s.wallet<4)return {error:'I need €4 for a meal. I should earn some money first.'};
   const gap=executionGap(s,d,now);if(gap?.blocked)return {error:gap.message,requirement:gap.requirement};
+  if(d.action==='collect_bicycle'){const error=collectBicycle(s.player,s.obstacles||[]);if(error)return {error};}
   if(s.player.phone&&s.media){s.media.endedAt=now;s.media.playback='stopped';}
   if(d.action==='phone'){const phone=beginPhone(s,d,now);if(phone.error)return phone;}else delete s.player.phone;
   const before={needs:{...s.needs},money:s.wallet};
   if(d.action==='eat')s.wallet-=4;
-  s.activity={executionMode:s.player.interactionPose?'object_interaction':gap?'standing_only':'simulation',before,kind:d.action==='visit'?'observe':d.action,total:d.seconds,remaining:d.seconds,place:place?.name||s.destination||'Porto Sol',startedAt:now};
+  s.activity={executionMode:d.action==='collect_bicycle'?'bicycle_pickup':s.player.interactionPose?'object_interaction':gap?'standing_only':'simulation',before,kind:d.action==='visit'?'observe':d.action,total:d.seconds,remaining:d.seconds,place:place?.name||s.destination||'Porto Sol',startedAt:now};
   recordObservation(s,now);
   s.rest=d.seconds;s.thought=gap?.message||d.intention;s.player.speed=0;s.player.moving=false;
   return {started:true};

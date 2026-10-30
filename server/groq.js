@@ -18,6 +18,7 @@ import {remember,applyResidentDecision} from './resident.js';
 export const DEFAULT_GROQ_MODEL='openai/gpt-oss-20b';
 export function residentContext(s){ensureMind(s);recordObservation(s,s.updatedAt||Date.now());return {
   humanActionConstraints:humanActionConstraints(s.messages),
+  bicycle:{mode:s.player.mode,owned:s.player.mode==='cycling'||!!s.player.bike,pickup:'Porto Cycle House',action:'collect_bicycle'},
   perception:perception(s),needs:Object.fromEntries(Object.entries(s.needs).map(([k,v])=>[k,Math.round(v)])),mood:s.mood,money:s.wallet,
   goal:s.ai?.goal||'Choose a purpose for your life.',personality:s.personality,plan:s.script?{goal:s.script.goal,criterion:s.script.successCriterion,status:s.script.status,reason:s.script.reason,next:s.script.steps.slice(s.script.cursor)}:null,settled:s.welcome.phase==='settled',destination:s.destination,
   phone:s.media?{query:s.media.query,reason:s.media.reason,status:s.media.status,playback:s.media.playback,selected:s.media.selected}:null,

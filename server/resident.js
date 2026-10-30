@@ -57,7 +57,7 @@ export function applyResidentDecision(s,decision,now=Date.now()){
     s.pendingInteraction={objectId:object.id,verb,seconds:decision.seconds,intention:decision.intention};s.thought=decision.intention;return {started:true};
   }
   const destination=LANDMARKS.find(p=>p.id===activityDestination(decision));
-  const travel=decision.action==='visit'||['sleep','eat','work'].includes(decision.action);
+  const travel=decision.action==='visit'||['sleep','eat','work','collect_bicycle'].includes(decision.action);
   if(!destination&&(travel||decision.destination!=='here'))return {error:'I do not know that place.'};
   if(decision.action==='eat'&&s.wallet<4)return {error:'I need €4 for a meal. I should earn some money first.'};
   if(decision.action==='eat'){const gap=executionGap(s,decision,now);return {error:gap.message};}
@@ -123,7 +123,7 @@ export function stepResident(s,dt,now=Date.now()) {
     s.placesVisited[s.destination]=(s.placesVisited[s.destination]||0)+1;s.needs.curiosity=Math.max(0,s.needs.curiosity-12);
     const next=s.activityOnArrival||{action:'observe',seconds:45,intention:`I'm taking a moment at ${s.destination}.`};s.activityOnArrival=null;
     const result=startActivity(s,{...next,intention:next.action==='visit'?`I'm looking around ${s.destination}.`:next.intention},{name:s.destination},now);
-    if(result.error){invalidatePlan(s,result.error);s.thought=result.error;s.rest=10;remember(s,result.error,now);}s.route=[];s.visit++;p.moving=false;p.speed=0;
+    if(result.error){invalidatePlan(s,result.error);s.thought=result.error;s.rest=10;remember(s,result.error,now);}else if(next.action==='collect_bicycle')remember(s,'Collected and mounted a loan bicycle at Porto Cycle House.',now);s.route=[];s.visit++;p.moving=false;p.speed=0;
   }
 }
 export function residentSnapshot(s){const {obstacles,route,...snapshot}=s;return {...snapshot,initialized:!!obstacles,mode:s.ai?(s.ai.connected===true?'ai':'paused'):'routine'};}

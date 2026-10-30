@@ -13,7 +13,7 @@ export function createLocalClient({url=process.env.LOCAL_AI_URL||'http://127.0.0
   }
   if(constraints.travelDestination&&message.startsWith('Chat with the human.')){
     outputSchema.properties.changePlan.enum=[true];
-    outputSchema.properties.action.enum=['visit'];
+    outputSchema.properties.action.enum=[constraints.travelAction||'visit'];
     outputSchema.properties.destination.enum=[constraints.travelDestination];
   }
   for(const [key,maxLength] of [['goal',120],['intention',120],['reply',240],['successCriterion',120]])outputSchema.properties[key].maxLength=maxLength;
