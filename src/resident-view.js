@@ -1,3 +1,4 @@
+import {downloadAiCsv} from './ai-csv.js';
 import * as THREE from 'three';
 import './resident-view.css';
 import {ResidentMotion} from './resident-motion.js';
@@ -15,7 +16,7 @@ export function mountResidentView({initial,player,arrival,welcome,getWorld,onLoc
     connection.title=offline?'The game server cannot be reached.':ai?.error||'Status of the last AI response; provider availability is checked when a request is made.';
   }
   const diagnostics=document.createElement('section');diagnostics.id='resident-ai-details';diagnostics.hidden=true;diagnostics.setAttribute('aria-label','AI connection and token usage');
-  diagnostics.innerHTML='<header><h2>AI connection</h2><button type="button" aria-label="Close AI details">×</button></header><p id="ai-detail-summary"></p><div id="ai-token-counts"></div><p class="ai-detail-note">Provider-reported tokens since tracking began, saved across updates. Output counts can include model reasoning tokens. Failed requests may not report usage.</p><div id="ai-provider-health"></div><details><summary>Last request sent to the model</summary><p>Includes instructions, available actions, position, needs, mood, goals, recent experiences and conversation. API keys and authorization headers are excluded.</p><pre id="ai-sent"></pre></details><details><summary>Last response received</summary><p>Public answer and decision only. Internal reasoning traces are excluded.</p><pre id="ai-received"></pre></details><details><summary>Recent request attempts</summary><pre id="ai-attempts"></pre></details>';
+  diagnostics.innerHTML='<header><h2>AI connection</h2><button type="button" aria-label="Close AI details">×</button></header><div class="ai-export"><button id="ai-export-csv" type="button">↓ Export research CSV</button><label><input id="ai-export-payloads" type="checkbox" checked> Include last request and response</label><p>Exports cumulative totals, retained attempts (up to 12), and provider health. Full payloads are retained only for the latest attempt.</p></div><p id="ai-detail-summary"></p><div id="ai-token-counts"></div><p class="ai-detail-note">Provider-reported tokens since tracking began, saved across updates. Output counts can include model reasoning tokens. Failed requests may not report usage.</p><div id="ai-provider-health"></div><details><summary>Last request sent to the model</summary><p>Includes instructions, available actions, position, needs, mood, goals, recent experiences and conversation. API keys and authorization headers are excluded.</p><pre id="ai-sent"></pre></details><details><summary>Last response received</summary><p>Public answer and decision only. Internal reasoning traces are excluded.</p><pre id="ai-received"></pre></details><details><summary>Recent request attempts</summary><pre id="ai-attempts"></pre></details>';
   connection.setAttribute('aria-controls','resident-ai-details');connection.setAttribute('aria-expanded','false');
   function renderDiagnostics(next){
     if(diagnostics.hidden)return;
@@ -29,6 +30,7 @@ export function mountResidentView({initial,player,arrival,welcome,getWorld,onLoc
     diagnostics.querySelector('#ai-attempts').textContent=JSON.stringify(t.recent||[],null,2);
   }
   connection.onclick=()=>{diagnostics.hidden=!diagnostics.hidden;connection.setAttribute('aria-expanded',String(!diagnostics.hidden));if(!diagnostics.hidden){panel.hidden=true;toggle.setAttribute('aria-expanded','false');renderDiagnostics(snapshot);}};
+  diagnostics.querySelector('#ai-export-csv').onclick=()=>downloadAiCsv(snapshot.ai,diagnostics.querySelector('#ai-export-payloads').checked);
   diagnostics.querySelector('header button').onclick=()=>{diagnostics.hidden=true;connection.setAttribute('aria-expanded','false');connection.focus();};
   const panel=document.createElement('section');panel.id='resident-panel';panel.hidden=true;panel.setAttribute('aria-label','Character brain');
   panel.innerHTML=`<header class="brain-header"><div><small>THE MIND OF YOUR RESIDENT</small><h2>A thought becomes a step.</h2></div><button id="resident-brain-close" aria-label="Close brain view">×</button></header>
