@@ -1,3 +1,4 @@
+import {rateLimitDetails} from './rate-limits.js';
 const safeNumber=value=>Number.isFinite(value)&&value>=0?value:null;
 export function trackedProviderFetch(fetchImpl,provider,model,secrets=[]){
   let latest=null;
@@ -11,7 +12,7 @@ export function trackedProviderFetch(fetchImpl,provider,model,secrets=[]){
       if(response.clone){try{const data=await response.clone().json();
         if(data.usage)latest.usage={input:safeNumber(data.usage.prompt_tokens),output:safeNumber(data.usage.completion_tokens),total:safeNumber(data.usage.total_tokens)};
         latest.received={finishReason:data.choices?.[0]?.finish_reason||null,content:data.choices?.[0]?.message?.content||null};
-        if(!response.ok)latest.error=redact(data.error?.message||data.message||`HTTP ${response.status}`);
+        if(!response.ok){latest.error=redact(data.error?.message||data.message||`HTTP ${response.status}`);if(response.status===429)latest.quota=rateLimitDetails(data.error?.message||data.message||'',response.headers);}
       }catch{latest.error=response.ok?'Response was not valid JSON.':`HTTP ${response.status}`;}}
       return response;
     }catch(error){latest.status='error';latest.error=/timeout|abort/i.test(error.name||'')?'Request timed out or was cancelled.':'Network connection failed.';throw error;}
