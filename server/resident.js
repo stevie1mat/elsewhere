@@ -1,5 +1,5 @@
 import {createPlayer,SPAWN,canOccupy,groundElevation,LANDMARKS,PORTO_BOUNDS} from './shared/movement.js';
-import {createArrival,stepArrival,dropArrival,JOURNEY_SECONDS} from '../src/arrival.js';
+import {createArrival,stepArrival,dropArrival,JOURNEY_SECONDS} from './shared/arrival.js';
 
 export function createResident(now=Date.now()) {
   return {version:1,player:{...createPlayer(),mode:'walking'},arrival:createArrival(SPAWN),welcome:{phase:'waiting'},obstacles:null,route:[],routeIndex:0,visit:0,rest:0,thought:'I wonder what life in Porto Sol will be like.',events:[],updatedAt:now};

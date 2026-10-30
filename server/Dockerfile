@@ -1,17 +1,9 @@
-# Build from the project root: docker build -f server/Dockerfile .
-FROM node:22-alpine AS build
-WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci
-COPY . .
-RUN npm run build
-
+# API and simulation service; supports Render's existing server-only context
+# and a repository-root context. Vercel builds and serves the frontend.
 FROM node:22-alpine
 WORKDIR /app
-COPY --from=build /app/dist ./dist
-COPY --from=build /app/server ./server
-COPY --from=build /app/src/arrival.js ./src/arrival.js
-COPY --from=build /app/src/movement.js ./src/movement.js
+COPY . /source
+RUN mkdir -p /app/server && if [ -f /source/server/private.js ]; then cp -R /source/server/. /app/server/; else cp -R /source/. /app/server/; fi
 ENV HOST=0.0.0.0
 ENV PORT=8788
 ENV PRIVATE_DATA_DIR=/data

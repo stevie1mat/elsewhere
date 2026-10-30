@@ -25,6 +25,7 @@ export function createPrivateServer({code=process.env.PRIVATE_ACCESS_CODE||'2792
     try{
       const url=new URL(req.url,'http://localhost');
       if(req.method==='POST'&&req.headers.origin&&req.headers.origin!==`http://${req.headers.host}`&&req.headers.origin!==`https://${req.headers.host}`){json(res,403,{error:'Origin rejected'});return;}
+      if(url.pathname==='/health'&&req.method==='GET'){json(res,200,{ok:true,service:'private-resident'});return;}
       if(url.pathname==='/api/login'&&req.method==='POST'){
         const ip=req.socket.remoteAddress,now=Date.now();let limit=attempts.get(ip);
         if(!limit||limit.until<now){limit={count:0,until:now+900000};attempts.set(ip,limit);}

@@ -332,3 +332,27 @@ unavailability instead of inventing an AI reply. `npm run groq:check -- --mistra
 tests only Mistral; `npm run groq:check -- --fallback` tests the combined client.
 Mistral's initial live check returned HTTP 429; the backup cannot supply decisions
 until that account's quota or access permits requests.
+
+
+### Hosted frontend and Render backend
+
+The Vercel API proxy defaults to `https://elsewhere-ocqx.onrender.com`.
+Set Vercel's server-side `PRIVATE_SERVER_URL` to override that address.
+The proxy forwards login/session cookies and the resident APIs; no AI keys go
+into the frontend. Deploy the current private server on Render from the project
+root (`npm ci`, then `npm start`), or build the root Docker context using
+`server/Dockerfile`. Set `HOST=0.0.0.0`, `COOKIE_SECURE=true`, provider API keys,
+and persistent storage settings in Render's environment. `/health` reports
+`private-resident` for deployment checks. The previous multiplayer server does
+not implement the private game API and must be redeployed.
+
+
+### Render Docker compatibility
+
+The Render Docker image now runs only the private API and autonomous simulation;
+Vercel builds and serves the frontend separately. The server is self-contained,
+including shared flight and movement rules, and needs no npm build or installed
+packages. Existing Render settings with Root Directory `server`, Dockerfile
+`Dockerfile`, and context `.` can stay as they are. The same Dockerfile also
+accepts repository-root context with Dockerfile `server/Dockerfile`. Local
+`npm start` still builds and serves the whole game.
