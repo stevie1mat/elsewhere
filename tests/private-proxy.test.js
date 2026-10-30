@@ -16,7 +16,7 @@ test('proxy forwards session cookies and login cookies without exposing provider
 });
 
 test('each deployed API path has an explicit Vercel function entry',async()=>{
- for(const path of ['login','resident','resident/world','resident/chat']){
+ for(const path of ['login','resident','resident/world','resident/chat','resident/control']){
   const entry=await import(`../api/${path}.js`);assert.equal(entry.default,handler);
  }
 });

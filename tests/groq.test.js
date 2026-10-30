@@ -64,3 +64,18 @@ test('long provider backoff reports actual retry time instead of a five-second e
  await assert.rejects(brain.chat(s,'hello'),/Provider limit/);
  await assert.rejects(brain.chat(s,'hello'),e=>e.status===429&&e.retryMs===120000&&/120 seconds/.test(e.message));brain.stop();
 });
+test('manual pause freezes actions and AI calls, and resume preserves the saved activity',async()=>{
+ const s=ready();let calls=0;const brain=createResidentBrain({client:{configured:true,provider:'Groq',model:'test',complete:async()=>{calls++;return decision;}},now:()=>1000});brain.initialize(s);
+ s.route=[{x:47,z:65}];s.rest=25;brain.setPaused(s,true);
+ const before=JSON.stringify({route:s.route,rest:s.rest,events:s.events,needs:s.needs});
+ for(let i=0;i<50;i++){await brain.update(s);stepResident(s,.1,1000+i*100);}
+ assert.equal(calls,0);assert.equal(JSON.stringify({route:s.route,rest:s.rest,events:s.events,needs:s.needs}),before);
+ await assert.rejects(brain.chat(s,'hello'),/Game paused/);
+ assert.equal(JSON.parse(JSON.stringify(s)).paused,true);
+ brain.setPaused(s,false);await brain.update(s);assert.equal(calls,1);assert.equal(s.rest,25);assert.equal(s.route.length,1);assert.equal(s.ai.connected,true);brain.stop();
+});
+test('pausing discards a late in-flight model decision without creating memories',async()=>{
+ let resolve;const s=ready();const brain=createResidentBrain({client:{configured:true,model:'test',complete:()=>new Promise(r=>{resolve=r;})},now:()=>1000});brain.initialize(s);
+ const pending=brain.update(s);brain.setPaused(s,true);resolve(decision);await pending;
+ assert.equal(s.pendingDecision,undefined);assert.equal(s.events.length,0);assert.equal(s.ai.connected,false);assert.equal(s.ai.status,'manually_paused');brain.stop();
+});

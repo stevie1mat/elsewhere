@@ -68,6 +68,12 @@ export function createPrivateServer({code=process.env.PRIVATE_ACCESS_CODE||'2792
           state.obstacles=input.obstacles.map(({minX,maxX,minZ,maxZ})=>({minX,maxX,minZ,maxZ}));remember(state,'Began the balloon journey to Porto Sol.',Date.now());save();void writeCloud();
         }json(res,200,residentSnapshot(state));return;
       }
+      if(url.pathname==='/api/resident/control'&&req.method==='POST'){
+        const input=await body(req);
+        if(!['pause','resume','restart'].includes(input.action)){json(res,400,{error:'Choose pause, resume or restart.'});return;}
+        brain.setPaused(state,input.action==='pause');save();if(cloudWrite)await cloudWrite;await writeCloud();
+        json(res,200,{...residentSnapshot(state),saveError:saveError||cloudError,storage:storageStatus()});return;
+      }
       if(url.pathname==='/api/resident/chat'&&req.method==='POST'){
         const input=await body(req);
         if(typeof input.message!=='string'||!input.message.trim()||input.message.length>1200){json(res,400,{error:'Enter a message of up to 1200 characters.'});return;}

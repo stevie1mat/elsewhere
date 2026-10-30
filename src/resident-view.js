@@ -8,9 +8,9 @@ export function mountResidentView({initial,player,arrival,welcome,getWorld,onLoc
   const connection=document.createElement('button');connection.type='button';connection.id='resident-ai-connection';connection.setAttribute('role','status');connection.setAttribute('aria-live','polite');
   const dot=document.createElement('span');dot.className='ai-connection-dot';dot.setAttribute('aria-hidden','true');const connectionText=document.createElement('span');connection.append(dot,connectionText);
   function showConnection(ai,offline=false){
-    const online=!offline&&ai?.enabled&&ai.connected===true&&!ai.error&&!ai.fallback;
+    const online=!snapshot?.paused&&!offline&&ai?.enabled&&ai.connected===true&&!ai.error&&!ai.fallback;
     connection.dataset.state=online?'online':'offline';
-    const text=offline?'AI disconnected · reconnecting':!ai?.enabled?'AI not configured':online?`AI connected · ${ai.provider||'AI'}${ai.status==='thinking'?' · thinking':''}`:ai.error||ai.fallback?'AI unavailable · retrying':'AI connecting…';
+    const text=snapshot?.paused?'Paused · AI stopped':offline?'AI disconnected · reconnecting':!ai?.enabled?'AI not configured':online?`AI connected · ${ai.provider||'AI'}${ai.status==='thinking'?' · thinking':''}`:ai.error||ai.fallback?'AI unavailable · retrying':'AI connecting…';
     const count=ai?.telemetry?.total;const label=text+(count?` · ${count.toLocaleString()} tokens total`:'');
     if(connectionText.textContent!==label)connectionText.textContent=label;
     connection.title=offline?'The game server cannot be reached.':ai?.error||'Status of the last AI response; provider availability is checked when a request is made.';
@@ -32,6 +32,17 @@ export function mountResidentView({initial,player,arrival,welcome,getWorld,onLoc
   connection.onclick=()=>{diagnostics.hidden=!diagnostics.hidden;connection.setAttribute('aria-expanded',String(!diagnostics.hidden));if(!diagnostics.hidden){panel.hidden=true;toggle.setAttribute('aria-expanded','false');renderDiagnostics(snapshot);}};
   diagnostics.querySelector('#ai-export-csv').onclick=()=>downloadAiCsv(snapshot.ai,diagnostics.querySelector('#ai-export-payloads').checked);
   diagnostics.querySelector('header button').onclick=()=>{diagnostics.hidden=true;connection.setAttribute('aria-expanded','false');connection.focus();};
+  const playback=document.createElement('div');playback.id='resident-playback';
+  playback.innerHTML='<button id="resident-pause" type="button">Ⅱ Pause life & AI</button><button id="resident-restart" type="button" title="Reconnect AI and continue the saved life">↻ Restart AI</button><span id="resident-pause-status" role="status"></span>';
+  let controlBusy=false;
+  async function control(action){
+    if(controlBusy)return;controlBusy=true;for(const b of playback.querySelectorAll('button'))b.disabled=true;
+    try{const response=await fetch('/api/resident/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action})});if(response.status===401){location.replace('/');return;}const next=await response.json();if(!response.ok)throw Error(next.error||'Unable to update playback.');apply(next);}
+    catch(error){playback.querySelector('#resident-pause-status').textContent=error.message;}
+    finally{controlBusy=false;for(const b of playback.querySelectorAll('button'))b.disabled=false;}
+  }
+  playback.querySelector('#resident-pause').onclick=()=>control(snapshot.paused?'resume':'pause');
+  playback.querySelector('#resident-restart').onclick=()=>control('restart');
   const panel=document.createElement('section');panel.id='resident-panel';panel.hidden=true;panel.setAttribute('aria-label','Character brain');
   panel.innerHTML=`<header class="brain-header"><div><small>THE MIND OF YOUR RESIDENT</small><h2>A thought becomes a step.</h2></div><button id="resident-brain-close" aria-label="Close brain view">×</button></header>
     <p id="resident-status" role="status"></p>
@@ -53,12 +64,12 @@ export function mountResidentView({initial,player,arrival,welcome,getWorld,onLoc
   const setOpen=open=>{if(open){diagnostics.hidden=true;connection.setAttribute('aria-expanded','false');}panel.hidden=!open;toggle.setAttribute('aria-expanded',String(open));if(open)panel.querySelector('#resident-brain-close').focus();else toggle.focus();};
   toggle.onclick=()=>setOpen(panel.hidden);panel.querySelector('#resident-brain-close').onclick=()=>setOpen(false);panel.addEventListener('keydown',event=>{if(event.key==='Escape'){event.stopPropagation();setOpen(false);}});
   const bubble=document.createElement('div');bubble.id='resident-thought';bubble.setAttribute('aria-label','Current intention');
-  document.querySelector('#app').append(toggle,connection,diagnostics,panel,bubble);
+  document.querySelector('#app').append(toggle,connection,playback,diagnostics,panel,bubble);
   let snapshot=initial,busy=false,geometrySent=false,lastEvents='',lastMessages='',receivedAt=Date.now();
   let chatBusy=false;
   const motion=new ResidentMotion(initial.player,performance.now());
   function apply(next){motion.receive(next.player,performance.now(),{snap:next.arrival.phase!==snapshot.arrival.phase||next.arrival.phase!=='landed'});snapshot=next;Object.assign(arrival,next.arrival);Object.assign(welcome,next.welcome);receivedAt=Date.now();
-    showConnection(next.ai);renderDiagnostics(next);
+    showConnection(next.ai);renderDiagnostics(next);playback.querySelector('#resident-pause').textContent=next.paused?'▶ Resume life & AI':'Ⅱ Pause life & AI';playback.querySelector('#resident-pause-status').textContent=next.paused?'Paused · no new AI requests or memories':'';
     document.body.classList.toggle('arriving',next.arrival.phase!=='landed');
     document.querySelector('#arrival-title').textContent=next.arrival.phase==='parachute'?'Coming in to land.':'Your island is on the horizon.';
     document.querySelector('#arrival-detail').textContent=next.thought;
@@ -76,7 +87,7 @@ export function mountResidentView({initial,player,arrival,welcome,getWorld,onLoc
     for(const node of panel.querySelectorAll('[data-node]'))node.classList.toggle('is-active',node.dataset.node===(next.ai?.status==='thinking'?'planner':'action'));
     const messages=JSON.stringify(next.messages||[]);
     if(messages!==lastMessages){lastMessages=messages;const list=panel.querySelector('#resident-messages');list.replaceChildren();for(const message of (next.messages||[]).slice(-12)){const p=document.createElement('p'),name=document.createElement('strong');name.textContent=message.role==='user'?'You: ':'Resident: ';p.append(name,document.createTextNode(message.content));list.append(p);}list.scrollTop=list.scrollHeight;}
-    panel.querySelector('#resident-chat-form button').disabled=!next.ai?.enabled||chatBusy;
+    panel.querySelector('#resident-chat-form button').disabled=next.paused||!next.ai?.enabled||chatBusy;
     const signature=JSON.stringify(next.events);
     if(signature!==lastEvents){lastEvents=signature;const list=panel.querySelector('#resident-history');list.replaceChildren();
       for(const event of [...next.events].reverse().slice(0,80)){const li=document.createElement('li'),time=document.createElement('time');time.dateTime=new Date(event.at).toISOString();time.textContent=new Date(event.at).toLocaleString();li.append(time,document.createTextNode(event.message));list.append(li);}
@@ -85,25 +96,26 @@ export function mountResidentView({initial,player,arrival,welcome,getWorld,onLoc
   panel.querySelector('#resident-chat-form').onsubmit=async event=>{
     event.preventDefault();if(chatBusy)return;
     const input=panel.querySelector('#resident-message'),button=panel.querySelector('#resident-chat-form button'),error=panel.querySelector('#resident-chat-error');
-    if(!input.value.trim())return;
+    if(snapshot.paused||!input.value.trim())return;
     chatBusy=true;button.disabled=true;button.textContent='Listening…';error.textContent='';
     const message=input.value.trim();input.disabled=true;
     try{
       for(;;){
+        if(snapshot.paused)throw Error('Game paused. Resume to chat.');
         const response=await fetch('/api/resident/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message})});
         if(response.status===401){location.replace('/');return;}
         const data=await response.json();
         if(!response.ok){
           if([429,503].includes(response.status)&&Number.isFinite(data.retryAfterMs)&&data.retryAfterMs>0){
             const until=Date.now()+Math.max(1000,data.retryAfterMs);
-            while(Date.now()<until){const seconds=Math.ceil((until-Date.now())/1000);button.textContent=`Queued · ${seconds}s`;error.textContent='Your message is queued. Waiting for the AI connection…';await new Promise(resolve=>setTimeout(resolve,Math.min(1000,Math.max(1,until-Date.now()))));}
+            while(Date.now()<until){if(snapshot.paused)throw Error('Game paused. Resume to chat.');const seconds=Math.ceil((until-Date.now())/1000);button.textContent=`Queued · ${seconds}s`;error.textContent='Your message is queued. Waiting for the AI connection…';await new Promise(resolve=>setTimeout(resolve,Math.min(1000,Math.max(1,until-Date.now()))));}
             button.textContent='Listening…';error.textContent='';continue;
           }
           throw Error(data.error||'Unable to send message.');
         }
         input.value='';error.textContent='';await sync();break;
       }
-    }catch(e){error.textContent=e.message;}finally{chatBusy=false;input.disabled=false;button.disabled=!snapshot.ai?.enabled;button.textContent='Send';}
+    }catch(e){error.textContent=e.message;}finally{chatBusy=false;input.disabled=false;button.disabled=snapshot.paused||!snapshot.ai?.enabled;button.textContent='Send';}
 
   };
   apply(initial);Object.assign(player,initial.player);
@@ -122,7 +134,7 @@ export function mountResidentView({initial,player,arrival,welcome,getWorld,onLoc
   const interval=setInterval(sync,400);sync();window.addEventListener('pagehide',()=>clearInterval(interval),{once:true});
   const marker=document.createElement('button');marker.type='button';marker.id='resident-marker';marker.setAttribute('aria-label','Move camera close to your resident');marker.onclick=onLocate;marker.innerHTML='<span aria-hidden="true">◆</span> YOUR RESIDENT';document.querySelector('#app').append(marker);
   const point=new THREE.Vector3();
-  return {update(camera){
+  return {get paused(){return snapshot.paused===true;},update(camera){
     // Never advance the saved life in the browser: all tabs observe one server state.
     const pitch=player.pitch;Object.assign(player,motion.sample(performance.now()));player.pitch=pitch;player.arrival=arrival;
     if(Date.now()-receivedAt>3000){player.speed=0;player.moving=false;showConnection(snapshot.ai,true);}

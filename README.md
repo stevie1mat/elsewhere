@@ -447,3 +447,18 @@ messages redact the configured key before being exposed to the private UI.
 
 Click YOUR RESIDENT above the character (or its off-screen marker) to move the
 spectator camera close to them. This frames once; the camera remains independent.
+
+
+## Pause, resume and restart AI
+
+The top-left playback controls pause the saved life or resume it. Manual pause
+blocks autonomous decisions, chat and simulation, freezes needs/activity timers,
+and creates no new character memories. It aborts pending model work and discards
+late replies. A request already sent may have used tokens before cancellation.
+Pause is persisted in Supabase and survives browser reloads and redeployments.
+Saving and API polling continue so progress remains protected and all tabs agree.
+
+Restart AI reconnects and continues the same character with its existing route,
+memories and needs; it does not reset the game or erase progress. Provider-side
+rate-limit cooldowns are still respected. Spectator camera controls and exports
+remain usable while paused.

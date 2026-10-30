@@ -52,7 +52,7 @@ export function applyResidentDecision(s,decision,now=Date.now()){
 }
 const visits=['home','cafe','garden','bikes','home','south'];
 export function stepResident(s,dt,now=Date.now()) {
-  if(s.ai&&s.ai.connected!==true){s.player.speed=0;s.player.moving=false;return;}
+  if(s.paused||s.ai&&s.ai.connected!==true){s.player.speed=0;s.player.moving=false;return;}
   if(!s.obstacles)return;
   const p=s.player,clear=(x,z)=>canOccupy(x,z,s.obstacles,.6);
   s.updatedAt=now;ensureMind(s);if(s.arrival.phase==='landed')stepMind(s,dt);

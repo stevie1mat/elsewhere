@@ -401,7 +401,7 @@ function initialize(){
   function frame(now){
     const dt=Math.min((now-previous)/1000,.05);previous=now;
     if(!document.hidden){
-      elapsed+=dt;
+      if(!residentView?.paused)elapsed+=dt;
       if(ready&&world.cyclist&&airborne()&&!residentSession){
         stepArrival(arrival,dt,{player,input:movementInput(keys,'cycling'),canLand:(x,z)=>canOccupy(x,z,world.obstacles)});document.body.classList.toggle('arriving',airborne());
         const canDrop=arrival.phase==='balloon'&&arrival.elapsed>=JOURNEY_SECONDS;
@@ -467,7 +467,7 @@ function initialize(){
       if(camera.near!==nearPlane){camera.near=nearPlane;camera.updateProjectionMatrix();}
       camera.lookAt(cameraAim);
       }
-      world.update(elapsed,modalOpen()?0:dt,camera);
+      world.update(elapsed,modalOpen()||residentView?.paused?0:dt,camera);
       renderer.render(scene,camera);residentView?.render(camera,arrivalView);
       uiClock+=dt;frameClock+=dt;frames++;
       if(frameClock>1){$('#performance').textContent=`${player.swimming?'Swimming · ':player.mode==='walking'?'Walking · ':''}${Math.round(Math.abs(player.speed)*3.6)} km/h · ${Math.round(frames/frameClock)} fps`;frameClock=0;frames=0;}

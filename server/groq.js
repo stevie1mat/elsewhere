@@ -98,36 +98,42 @@ export function createResilientClient({clients=[createGroqClient(),createMistral
   };
 }
 export function createResidentBrain({client=createResilientClient(),now=()=>Date.now(),sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms))}={}){
-  let chatWaiting=0,busy=false,stopped=false,nextAt=0,failures=0;const abort=new AbortController();
+  let chatWaiting=0,busy=false,stopped=false,nextAt=0,failures=0,generation=0;let abort=new AbortController();
   function initialize(s){s.messages??=[];s.ai={...s.ai,enabled:client.configured,model:client.model,status:client.configured?'ready':'unconfigured',provider:client.provider||'Groq',providers:client.providers||['Groq'],fallback:false,connected:false,error:null};delete s.pendingDecision;}
   async function request(s,message){
     if(busy||now()<nextAt)throw new GroqError(busy?'The character is finishing another thought. Your message will retry automatically.':`AI connection is cooling down. Retrying in ${Math.max(1,Math.ceil((nextAt-now())/1000))} seconds.`,{status:429,retryMs:busy?1000:Math.max(1000,nextAt-now())});
-    busy=true;
-    try{const decision=await client.complete(residentContext(s),message,abort.signal);failures=0;nextAt=now()+5000;s.ai.provider=client.provider||'Groq';s.ai.model=client.model;s.ai.connected=true;s.ai.lastResponseAt=now();s.ai.error=null;return decision;}
-    catch(error){s.ai.connected=false;s.ai.error=error.message;failures++;nextAt=now()+Math.max(error.retryMs||60000,Math.min(900000,30000*2**Math.min(failures,5)));throw error;}
+    if(s.paused)throw new GroqError('Game paused. Resume to use AI.',{retryMs:0});
+    const requestGeneration=generation;busy=true;
+    try{const decision=await client.complete(residentContext(s),message,abort.signal);if(requestGeneration!==generation||s.paused||stopped)throw new GroqError('Game paused or request cancelled.',{retryMs:0});failures=0;nextAt=now()+5000;s.ai.provider=client.provider||'Groq';s.ai.model=client.model;s.ai.connected=true;s.ai.lastResponseAt=now();s.ai.error=null;return decision;}
+    catch(error){if(requestGeneration!==generation||s.paused||stopped)throw new GroqError('Game paused or request cancelled.',{retryMs:0});s.ai.connected=false;s.ai.error=error.message;failures++;nextAt=now()+Math.max(error.retryMs||60000,Math.min(900000,30000*2**Math.min(failures,5)));throw error;}
     finally{recordTelemetry(s.ai,client);s.ai.retryAt=nextAt;busy=false;}
   }
-  return {initialize,async update(s){
-    if(stopped||chatWaiting||!client.configured||busy||now()<nextAt||!s.obstacles)return;
-    const reconnecting=s.ai.connected!==true;
+  return {initialize,setPaused(s,paused){
+    generation++;abort.abort();abort=new AbortController();s.paused=paused;s.updatedAt=now();s.player.speed=0;s.player.moving=false;
+    s.ai.connected=false;s.ai.status=paused?'manually_paused':'connecting';s.ai.error=null;
+    if(!paused)nextAt=now();
+  },async update(s){
+    if(stopped||s.paused||chatWaiting||!client.configured||busy||now()<nextAt||!s.obstacles)return;
+    const updateGeneration=generation;const reconnecting=s.ai.connected!==true;
     if(!reconnecting&&(s.arrival.phase!=='landed'||s.route.length||s.rest>0||s.pendingDecision))return;
     s.ai.status=reconnecting?'connecting':'thinking';s.ai.fallback=false;
     if(reconnecting){s.player.speed=0;s.player.moving=false;}
     try{
       const decision=await request(s,reconnecting?'Reconnect to the character. If there is an activity or arrival already in progress, retain that activity; otherwise choose the next activity.':'Choose and execute your next autonomous activity.');
-      if(stopped)return;
+      if(stopped||s.paused||updateGeneration!==generation)return;
       s.ai.status='ready';s.ai.fallback=false;
       if(reconnecting&&(s.arrival.phase!=='landed'||s.route.length||s.rest>0||s.pendingDecision))return;
       s.pendingDecision=decision;s.ai.goal=decision.goal;s.ai.lastDecisionAt=now();
       remember(s,`Chose to ${decision.action==='visit'?'visit '+RESIDENT_PLACES.find(p=>p.id===decision.destination).name:decision.action}. Goal: ${decision.goal}`,now());
-    }catch(error){if(!stopped){s.ai.status='paused';s.ai.fallback=false;s.ai.connected=false;s.ai.error=error.message;}}
+    }catch(error){if(!stopped&&!s.paused&&updateGeneration===generation){s.ai.status='paused';s.ai.fallback=false;s.ai.connected=false;s.ai.error=error.message;}}
   },async chat(s,message){
     if(stopped)throw new GroqError('Server is stopping.');
+    if(s.paused)throw new GroqError('Game paused. Resume to use AI.',{retryMs:0});
     if(!client.configured)throw new GroqError('AI chat is not configured on the server.',{retryMs:0});
     let decision;chatWaiting++;
     try{
       const deadline=now()+7000;
-      while(!stopped&&(busy||now()<nextAt)&&now()<deadline){
+      while(!stopped&&!s.paused&&(busy||now()<nextAt)&&now()<deadline){
         if(!busy&&nextAt-now()>7000)break;
         await sleep(Math.min(100,Math.max(1,deadline-now())));
       }
@@ -136,6 +142,7 @@ export function createResidentBrain({client=createResilientClient(),now=()=>Date
     }finally{chatWaiting--;}
 
     if(stopped)throw new GroqError('Server is stopping.');
+    if(s.paused)throw new GroqError('Game paused. Resume to use AI.',{retryMs:0});
     let reply=decision.reply;
     if(decision.changePlan){
       if(s.arrival.phase!=='landed'||!s.obstacles){reply='Let me finish landing first, then we can choose where to go.';}
