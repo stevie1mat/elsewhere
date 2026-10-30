@@ -19,7 +19,7 @@ test('an AI choice drives the actual character instead of the fixed visit schedu
  const s=ready();let calls=0;const brain=createResidentBrain({client:{configured:true,model:'test',complete:async()=>{calls++;return decision;}},now:()=>1000});brain.initialize(s);
  stepResident(s,.1,1000);assert.equal(s.route.length,0,'wait for a model choice rather than choose a scripted destination');
  await brain.update(s);stepResident(s,.1,1100);
- assert.equal(s.destination,'Jardim do Sol');assert.equal(s.thought,decision.intention);assert.ok(s.route.length);assert.ok(s.player.moving);
+ assert.equal(s.destination,'Jardim do Sol');assert.match(s.thought,/walking to Jardim do Sol/);assert.ok(s.route.length);assert.ok(s.player.moving);
  await brain.update(s);assert.equal(calls,1,'do not request another plan while walking');brain.stop();
 });
 test('rest decisions and chat are saved without chat replies executing actions',async()=>{

@@ -1,3 +1,4 @@
+import {executionMessage} from './execution-replies.js';
 import {ACTIVITY_ACTIONS} from './action-catalog.js';
 import {applyCommand,stepCommands,dismountForAction,stopBody} from './resident-commands.js';
 import {stepPlayer} from './shared/movement.js';
@@ -43,6 +44,13 @@ export function residentRoute(start,target,obstacles,goalRadius=2,bodyRadius=.6)
   return [];
 }
 export function applyResidentDecision(s,decision,now=Date.now()){
+ if(decision.action==='eat'&&s.preferences?.seatedMeals&&!decision.parameters?.value)decision={...decision,parameters:{...decision.parameters,value:'seated'}};
+ const result=executeResidentDecision(s,decision,now);
+ if(result.error){s.lastRejectedCommand={action:decision.action,message:result.error,at:now};s.executionFeedback??=[];s.executionFeedback.push({at:now,action:decision.action,status:'blocked',message:result.error,source:'command executor'});s.executionFeedback=s.executionFeedback.slice(-10);}
+ else{if(decision.action==='eat'&&decision.parameters?.value==='seated'){s.preferences??={};s.preferences.seatedMeals=true;}s.awaitingInstruction=decision.action==='stop';delete s.lastRejectedCommand;result.message??=executionMessage(s,decision);s.thought=result.message;}
+ return result;
+}
+function executeResidentDecision(s,decision,now){
   ensureMind(s);
   const command=applyCommand(s,decision,now,residentRoute);if(command)return command;
   s.awaitingInstruction=false;
@@ -112,7 +120,7 @@ export function stepResident(s,dt,now=Date.now()) {
     const destination=LANDMARKS.find(l=>l.id===(decision?activityDestination(decision):visits[s.visit%visits.length]));
     if(!s.route.length){s.route=residentRoute(p,destination,s.obstacles);s.routeIndex=0;s.destination=destination.name;s.activityOnArrival=decision||null;}
     if(!s.route.length){invalidatePlan(s,'No walkable route to '+destination.name);s.thought=`I could not find a safe route to ${destination.name}. I'll try somewhere else.`;remember(s,s.thought,now);s.visit++;s.rest=10;return;}
-    s.thought=decision?.intention||`I'm walking to ${destination.name}.`;remember(s,`Set off for ${destination.name}.`,now);
+    s.thought=decision?executionMessage(s,decision):`I'm walking to ${destination.name}.`;remember(s,`Set off for ${s.destination||destination?.name||'the target'}.`,now);
   }
   const travelSpeed=p.mode==='cycling'?6:s.routeMode==='run'?4.8:1.65;
   let budget=dt*travelSpeed;
@@ -132,7 +140,7 @@ export function stepResident(s,dt,now=Date.now()) {
     if(distance===d)s.routeIndex++;
   }
   if(s.routeIndex===s.route.length){
-    if(s.pendingCommand){const command=s.pendingCommand;delete s.pendingCommand;s.route=[];p.speed=0;p.moving=false;const result=applyCommand(s,command,now,residentRoute);if(result?.error){s.thought=result.error;invalidatePlan(s,result.error);remember(s,result.error,now);}return;}
+    if(s.pendingCommand){const command=s.pendingCommand;delete s.pendingCommand;s.route=[];p.speed=0;p.moving=false;const result=applyResidentDecision(s,command,now);if(result?.error){s.thought=result.error;invalidatePlan(s,result.error);remember(s,result.error,now);}return;}
     if(s.pendingInteraction){
       const d=s.pendingInteraction,object=(s.objects||[]).find(o=>o.id===d.objectId);delete s.pendingInteraction;s.route=[];p.speed=0;p.moving=false;
       const result=object?beginInteraction(s,object,d.verb,d.seconds,now):{error:'The target object is no longer available.'};

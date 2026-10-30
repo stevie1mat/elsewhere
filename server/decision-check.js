@@ -28,7 +28,10 @@ export function humanActionIssue(d,constraints,{chat=false}={}){
 export function decisionIssue(s,d){
  if(d.action==='rest'&&/\b(sit|sitting|seated)\b/i.test(d.intention||'')&&!/\b(cannot|unable|standing|unavailable)\b/i.test(d.intention||''))return 'Your intention promises sitting but rest is standing-only. Use interact with a usable objectId and verb=sit.';
  const steps=[d,...(d.nextSteps||[])],o=d.objective;
+ if(/\btraffic\b/i.test(d.reply||'')&&!/\b(?:no|cannot|unverified|not provided)\b/i.test(d.reply||''))return 'No traffic observations are supplied. Do not invent traffic as an explanation; report the actual mode, active command or executionFeedback blocker.';
  if(steps.every(x=>x.action==='phone')&&['energy','hunger','thirst'].includes(o?.metric)&&o.amount>0)return 'Phone use cannot improve energy, hunger or thirst. For a phone-only task use objective metric=none, amount=0; do not invent a physical benefit.';
+ if(o?.amount>0&&o.direction==='decrease'&&o.metric==='hunger'&&!steps.some(x=>x.action==='eat'))return 'Reducing hunger requires an eat command. Visiting/observing the cafe alone does not consume food; include an executable eat step.';
+ if(o?.amount>0&&o.direction==='decrease'&&o.metric==='thirst'&&!steps.some(x=>['eat','drink'].includes(x.action)))return 'Reducing thirst requires a drink or eat service command; observation does not consume anything.';
  for(const step of steps)if(step.action==='interact'){
   const object=(s.objects||[]).find(x=>x.id===step.objectId);
   if(!object?.affordances.includes(step.verb))return 'The selected objectId/verb is not in the usable object registry. Choose a perceived or remembered object with the affordance.';

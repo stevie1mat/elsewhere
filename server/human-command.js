@@ -4,13 +4,16 @@ import {NPCS} from './resident-commands.js';
 export const PLACE_ALIASES={home:['home','my room','your room','casa aurora'],cafe:['cafe','café','café luma'],garden:['garden','jardim do sol'],bikes:['bike shop','cycle shop','porto cycle house','bike rental','bicycle rental'],coast:['beach','coast','costa dourada'],pier:['pier','old pier'],skyway:['skyway'],north:['bairro do mar'],south:['mercado sul','south market'],palms:['parque das palmeiras'],olives:['parque das oliveiras'],village:['vila poente']};
 export function requestedPlace(message){const text=message.toLowerCase();return LANDMARKS.find(l=>PLACE_ALIASES[l.id]?.some(alias=>new RegExp('(?:^|\\b)'+alias+'(?:\\b|$)','i').test(text)));}
 export function parseHumanCommand(s,message){
- const m=message.trim().toLowerCase().replace(/[.!?]+$/,'');
+ const raw=message.trim().toLowerCase().replace(/[.!?]+$/,'');
+ const m=raw.replace(/^(?:(?:please|you should|can you|could you|lets|let's|i want you to)\s+)+/,'');
  if(/^(?:what|why|how|where|when|explain|tell me)\b/.test(m)||/\b(?:don't|dont|do not|never)\s+(?:walk|go|run|ride|swim|jump|take|collect|eat|drink)\b/.test(m))return null;
+ if(/\b(?:raise|reduce|increase|decrease|lower|gain|restore)\b/.test(m)&&/\bby\s+(?:at least\s+)?\d+\b/.test(m))return null;
  const base={destination:'here',seconds:15,intention:message.slice(0,160),goal:message.slice(0,180),reply:'Executing your instruction.',changePlan:true,objectId:'',verb:'',parameters:{x:0,z:0,yaw:0,choice:0,value:''},nextSteps:[],objective:{metric:'none',direction:'increase',amount:0,interaction:'none'}};
  const make=(action,extra={})=>({...base,action,...extra});
  if(/^(?:please\s+)?(?:stop|cancel|halt)(?:\s+(?:now|walking|moving|riding|everything|the plan|this task))?$/.test(m))return make('stop');
+ if(/^(?:get down from|get off|dismount|sit|eat|have|go|walk)\b/.test(m)&&/\b(?:eat|eating|food|meal|lunch|soup)\b/.test(m)&&!/\b(?:dont|don't|do not|never|not)\b/.test(m))return make('eat',{destination:'cafe',parameters:{...base.parameters,value:! /\bstanding\b/.test(m)&&(s.preferences?.seatedMeals||/\b(?:sit|sitting|chair|seated)\b/.test(m))?'seated':'standing'}});
  if(/^(?:please\s+)?(?:stand up|get up|leave the bed|get out of bed)(?:\s+now)?$/.test(m))return make('stand_up');
- if(/^(?:please\s+)?(?:dismount|get off(?: the| your| my)? (?:bike|bicycle)|park(?: the| your| my)? (?:bike|bicycle))$/.test(m))return make('dismount');
+ if(/^(?:please\s+)?(?:dismount|get down from(?: the| your| my)? (?:bike|bicycle)|get off(?: the| your| my)? (?:bike|bicycle)|park(?: the| your| my)? (?:bike|bicycle))$/.test(m))return make('dismount');
  if(/^(?:please\s+)?(?:mount|remount|get on|return to)(?: the| your| my)? (?:bike|bicycle)$/.test(m))return make('mount_bicycle');
  if(/^(?:play|pause|stop) (?:the )?(?:video|music|playback)$/.test(m))return make('media_control',{verb:m.split(' ')[0]});
  if(/^(?:please\s+)?(?:put (?:the|your) phone away|stop (?:the )?(?:phone|youtube|music|video))$/.test(m))return make('stop_phone');
@@ -23,7 +26,7 @@ export function parseHumanCommand(s,message){
  if(/^(?:please\s+)?brake(?: now)?$/.test(m))return make('brake');
  if(/^(?:please\s+)?(?:reverse|back up)$/.test(m))return make('reverse');
  if(/^(?:please\s+)?(?:wait|wait here)(?: for (\d+) seconds?)?$/.test(m)){const seconds=Number(m.match(/\d+/)?.[0]||30);return make('wait',{seconds:Math.max(15,Math.min(180,seconds))});}
- if(/\b(?:get|take|collect|pick up|rent)\b/.test(m)&&/\b(?:bike|bicycle|cycle)\b/.test(m))return make(/\b(?:coral|challenge)\b/.test(m)?'collect_challenge_bicycle':'collect_bicycle',{destination:'bikes'});
+ if(/^(?:go (?:and )?)?(?:get|take|collect|pick up|rent) (?:me )?(?:(?:a|the|your|my) )?(?:(?:coral|challenge) )?(?:bike|bicycle|cycle)(?: now)?$/.test(m))return make(/\b(?:coral|challenge)\b/.test(m)?'collect_challenge_bicycle':'collect_bicycle',{destination:'bikes'});
  if(/^(?:please\s+)?(?:drink|have|take|get) (?:some |a cup of |a glass of )?water(?: now)?$/.test(m))return make('drink',{destination:'cafe'});
  if(/^(?:please\s+)?(?:eat|have|get|buy) (?:a |some )?(?:meal|food|lunch|soup)(?: now)?$/.test(m))return make('eat',{destination:'cafe'});
  if(/^(?:enter|start)(?: the)? skyway(?: ride)?$/.test(m))return make('enter_skyway',{destination:'skyway'});

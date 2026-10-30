@@ -1,3 +1,4 @@
+import {executionAnswer} from './execution-replies.js';
 import {parseHumanCommand} from './human-command.js';
 import {createMacWorkerBroker,routeResidentClient} from './mac-worker.js';
 import {createMediaService} from './resident-media.js';
@@ -103,7 +104,7 @@ export function createPrivateServer({code=process.env.PRIVATE_ACCESS_CODE||'2792
       if(url.pathname==='/api/resident/chat'&&req.method==='POST'){
         const input=await body(req);
         if(typeof input.message!=='string'||!input.message.trim()||input.message.length>1200){json(res,400,{error:'Enter a message of up to 1200 characters.'});return;}
-        if(parseHumanCommand(state,input.message.trim())){
+        if(executionAnswer(state,input.message.trim())||parseHumanCommand(state,input.message.trim())){
           try{const reply=await brain.chat(state,input.message.trim());save();void writeCloud();json(res,200,{reply,messages:state.messages});}catch(error){json(res,409,{error:error.message});}return;
         }
         if(mac.enabled){

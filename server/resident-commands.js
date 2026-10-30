@@ -1,6 +1,6 @@
 import {COMMAND_ACTIONS} from './command-catalog.js';
 import {canOccupy,canTravelOnFoot,groundElevation,LANDMARKS,BIKE_SHOP,CHALLENGE_BIKE,collectBicycle,toggleTravelMode,stepPlayer,stepWalker} from './shared/movement.js';
-import {finishInteraction} from './interaction-skills.js';
+import {beginInteraction,finishInteraction} from './interaction-skills.js';
 import {startActivity} from './resident-mind.js';
 import {recordObservation} from './cognition.js';
 import {restoreLife,lifeStep,advanceLife} from './shared/settling-story.js';
@@ -17,6 +17,7 @@ const clamp=n=>Math.max(0,Math.min(100,n));
 const distance=(p,t)=>Math.hypot(p.x-t.x,p.z-t.z);
 function log(s,message,now){s.events.push({at:now,message});s.events=s.events.slice(-500);}
 export function stopBody(s,now){
+ if(s.activity?.kind==='eat'&&s.activity.executionMode==='service_consumption'&&s.mealOrder?.paid){s.mealOrder.remaining=s.rest;s.player.carriedMeal=s.rest>0;}
  if(s.commandTask?.status==='active'){s.commandTask.status='cancelled';s.commandTask.endedAt=now;}
  finishInteraction(s,now,false);s.route=[];s.routeIndex=0;s.rest=0;s.activity=null;s.activityOnArrival=null;
  delete s.pendingDecision;delete s.pendingInteraction;delete s.pendingCommand;delete s.afterMount;delete s.motionCommand;delete s.player.consuming;delete s.player.exercising;
@@ -47,7 +48,7 @@ function arcade(s){
 function owned(s){return s.player.mode==='cycling'||!!s.player.bike;}
 export function commandContext(s){
  const life=s.life||restoreLife(null),step=lifeStep(life),quest=s.parcelQuest||restoreQuest(null),stop=activeStop(quest);
- return {execution:{last:s.lastCommand||null,task:s.commandTask||null},body:{mode:s.player.mode,parkedBicycle:s.player.bike||null,pose:s.player.interactionPose?.kind,awaitingInstruction:!!s.awaitingInstruction},
+ return {preferences:s.preferences||{},execution:{last:s.lastCommand||null,task:s.commandTask||null},body:{mode:s.player.mode,parkedBicycle:s.player.bike||null,pose:s.player.interactionPose?.kind,awaitingInstruction:!!s.awaitingInstruction},
  services:SERVICES.map(({id,name,approach,affordances})=>({id,name,...approach,affordances})),npcs:NPCS,
  story:step?{id:step.id,place:step.place,x:step.x,z:step.z,choices:step.choices.map((c,i)=>({index:i,label:c.label})),items:life.items,friends:life.friends}: {complete:true},
  quest:stop?{id:stop.id,objective:stop.objective,x:stop.x,z:stop.z}: {complete:true},
@@ -58,6 +59,7 @@ function targetFor(s,d){
  if(d.action==='mount_bicycle')return s.player.bike&&{...s.player.bike,name:'Parked bicycle',radius:1.5};
  if(d.action==='collect_challenge_bicycle')return {...CHALLENGE_BIKE,name:'Coral bicycle'};
  if(d.action==='enter_skyway')return {...SKYWAY_GATE,z:-374,name:'Skyway entrance',radius:2};
+ if(d.action==='eat'&&d.parameters?.value==='seated'&&s.mealOrder?.paid){const chair=(s.objects||[]).find(o=>o.id===s.mealOrder.chairId);return chair&&{...chair.approach,name:chair.name,radius:.8};}
  if(['eat','drink'].includes(d.action))return {...SERVICES.find(o=>o.affordances.includes(d.action)).approach,name:d.action==='eat'?'Café meal service':'Café water service',radius:1};
  if(d.action==='quest'){const stop=activeStop(s.parcelQuest||restoreQuest(null));return stop&&{...stop,name:stop.speaker,radius:2};}
  if(d.action==='story_choice'||d.action==='talk'&&!d.objectId&&d.verb!=='hello'){
@@ -79,8 +81,15 @@ export function applyCommand(s,d,now,route){
  if(d.action==='move'&&!['','forward','backward','left','right'].includes(d.verb||''))return {error:'Unknown movement input.'};
  if(s.skyway&&!['exit_skyway','skyway_input','jump','stop','wait','stop_phone'].includes(d.action))return {error:'Exit the Skyway before doing a city activity.'};
  const p=s.player;
- if(d.action==='eat'&&s.wallet<4)return {error:'A meal costs €4.'};
+ if(d.action==='eat'&&!s.mealOrder?.paid&&s.wallet<4)return {error:'A meal costs €4.'};
  if(routed.includes(d.action)){
+  if(d.action==='eat'&&d.parameters?.value==='seated'){
+   const service=SERVICES.find(o=>o.id==='cafe-meal');
+   let chair=(s.objects||[]).find(o=>o.id===s.mealOrder?.chairId&&o.affordances.includes('sit'));
+   if(!chair)chair=(s.objects||[]).filter(o=>o.affordances.includes('sit')&&distance(o.approach,service.approach)<=12&&canOccupy(o.approach.x,o.approach.z,s.obstacles,.6)).sort((a,b)=>distance(a.approach,service.approach)-distance(b.approach,service.approach)).find(o=>route(service.approach,o.approach,s.obstacles,.8).length);
+   if(!chair)return {error:'I cannot eat seated yet: no usable, reachable chair is registered near the café meal service. I have not bought a new meal.'};
+   if(!s.mealOrder)s.mealOrder={chairId:chair.id,paid:false};else s.mealOrder.chairId=chair.id;
+  }
   if(['eat','drink'].includes(d.action)&&!(s.objects||[]).some(o=>o.id===(d.action==='eat'?'cafe-meal':'cafe-water')&&o.affordances.includes(d.action)))return {error:d.action==='eat'?'No usable food service is registered. Reload the updated city.':'No usable water service is registered. Reload the updated city.'};
   if(d.action==='enter_skyway'&&!owned(s))return {error:'Collect a bicycle before entering the Skyway.'};
   if(d.action==='ride'&&!owned(s))return {error:'Collect a bicycle first.'};
@@ -141,10 +150,16 @@ export function applyCommand(s,d,now,route){
   stopBody(s,now);delete s.settling;s.motionCommand={kind:d.action,verb,target,remaining:d.action==='jump'?2:Math.min(d.seconds,30),startedAt:now,decision:d};s.awaitingInstruction=false;return {started:true};
  }
  if(d.action==='eat'||d.action==='drink'){
-  if(d.action==='eat'&&s.wallet<4)return {error:'A meal costs €4.'};
-  stopBody(s,now);const before={needs:{...s.needs},money:s.wallet};if(d.action==='eat')s.wallet-=4;
-  p.consuming=d.action;s.activity={kind:d.action,executionMode:'service_consumption',before,total:15,remaining:15,place:d.action==='eat'?'Café meal service':'Café water service',startedAt:now};s.rest=15;
-  return {started:true,message:d.action==='eat'?'Eating the purchased meal.':'Drinking water from the café service.'};
+  const seated=d.action==='eat'&&d.parameters?.value==='seated';
+  if(seated&&!s.mealOrder.paid){const before={needs:{...s.needs},money:s.wallet};s.wallet-=4;s.mealOrder={...s.mealOrder,paid:true,before,remaining:15};p.carriedMeal=true;return applyCommand(s,d,now,route);}
+  if(d.action==='eat'&&!s.mealOrder?.paid&&s.wallet<4)return {error:'A meal costs €4.'};
+  const before=seated?s.mealOrder.before:{needs:{...s.needs},money:s.wallet};stopBody(s,now);
+  if(seated){const chair=(s.objects||[]).find(o=>o.id===s.mealOrder.chairId);const interaction=beginInteraction(s,chair,'sit',15,now);if(interaction.error)return interaction;}
+  else if(d.action==='eat'){if(s.mealOrder?.paid){Object.assign(before,s.mealOrder.before);}else{s.wallet-=4;s.mealOrder={paid:true,before,remaining:15};}}
+  delete p.carriedMeal;
+  const duration=d.action==='eat'?(s.mealOrder?.remaining??15):15;
+  p.consuming=d.action;s.activity={kind:d.action,executionMode:'service_consumption',before,total:duration,remaining:duration,place:d.action==='eat'?'Café meal service':'Café water service',startedAt:now};s.rest=duration;
+  return {started:true,message:d.action==='eat'?(seated?'I parked the bicycle and am seated on the chair, eating the purchased meal.':'I am on foot, eating the purchased meal.'):'Drinking water from the café service.'};
  }
  if(d.action==='talk'){
   stopBody(s,now);

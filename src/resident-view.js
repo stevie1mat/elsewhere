@@ -156,7 +156,7 @@ export function mountResidentView({initial,player,arrival,welcome,getWorld,onLoc
   const point=new THREE.Vector3();
   return {get snapshot(){return snapshot;},get paused(){return snapshot.paused===true;},update(camera){
     // Never advance the saved life in the browser: all tabs observe one server state.
-    const pitch=player.pitch;Object.assign(player,motion.sample(performance.now()));player.pitch=pitch;if(!snapshot.player.phone)delete player.phone;if(!snapshot.player.interactionPose)delete player.interactionPose;if(!snapshot.player.consuming)delete player.consuming;if(!snapshot.player.exercising)delete player.exercising;player.arrival=arrival;
+    const pitch=player.pitch;Object.assign(player,motion.sample(performance.now()));player.pitch=pitch;if(!snapshot.player.phone)delete player.phone;if(!snapshot.player.interactionPose)delete player.interactionPose;if(!snapshot.player.consuming)delete player.consuming;if(!snapshot.player.carriedMeal)delete player.carriedMeal;if(!snapshot.player.exercising)delete player.exercising;player.arrival=arrival;
     if(Date.now()-receivedAt>3000){player.speed=0;player.moving=false;showConnection(snapshot.ai,true);}
   },render(camera,pose){
     const rect=document.querySelector('#viewport').getBoundingClientRect(),width=rect.width,height=rect.height;

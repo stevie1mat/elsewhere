@@ -39,7 +39,7 @@ test('the exact phone button request reaches the AI planner instead of sensory r
  const {PHONE_SEARCH_REQUEST}=await import('../server/shared/phone-request.js');const {createResidentBrain}=await import('../server/groq.js');const {groundedRecall}=await import('../server/cognition.js');
  const s=person();assert.equal(groundedRecall(s,PHONE_SEARCH_REQUEST),null);let calls=0;
  const brain=createResidentBrain({client:{configured:true,model:'test',complete:async()=>{calls++;return {...d,changePlan:true};}}});brain.initialize(s);s.ai.connected=true;
- const reply=await brain.chat(s,PHONE_SEARCH_REQUEST);assert.equal(calls,1);assert.equal(reply,d.reply);assert.equal(s.player.phone,true);assert.equal(s.activity.kind,'phone');assert.equal(s.media.query,d.mediaQuery);assert.equal(s.ai.localRecallHits,undefined);
+ const reply=await brain.chat(s,PHONE_SEARCH_REQUEST);assert.equal(calls,1);assert.match(reply,/piano improvisation/);assert.match(reply,/Playback has not been confirmed/);assert.equal(s.player.phone,true);assert.equal(s.activity.kind,'phone');assert.equal(s.media.query,d.mediaQuery);assert.equal(s.ai.localRecallHits,undefined);
  let searches=0;const service=createMediaService({instances:['https://first.example'],fetchImpl:async()=>{searches++;return Response.json([video]);}});await service.update(s);assert.equal(searches,1);assert.equal(s.media.status,'ready');brain.stop();
 });
 test('factual sensory recall stays local while mixed action requests go to the planner',async()=>{

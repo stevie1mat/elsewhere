@@ -171,7 +171,7 @@ export class Explorer {
       this.walker.position.set(p.x,p.y||0,p.z);this.walker.rotation.set(0,Math.PI-p.yaw,0,'YXZ');
       if(!applyObjectPose(this.walker,p.interactionPose))this.footContact.align(p);
       applyPhonePose(this.walker,this.phone,p.phone===true);
-      this.consumptionClock+=dt;applyConsumptionPose(this.walker,this.consumptionProps,p.consuming,this.consumptionClock);
+      this.consumptionClock+=dt;applyConsumptionPose(this.walker,this.consumptionProps,p.consuming||(p.carriedMeal?'carry':null),this.consumptionClock);
       if(p.exercising){const bend=(Math.sin(this.consumptionClock*3)+1)*.1;this.walker.position.y-=bend;for(const side of ['L','R']){const thigh=this.walker.getObjectByName('Bip01_'+side+'_Thigh');if(thigh)thigh.rotation.x+=bend*2;}}
       if(p.swimming){
         this.swimClock=(this.swimClock||0)+Math.min(.1,dt);

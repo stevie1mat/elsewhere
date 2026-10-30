@@ -1,3 +1,4 @@
+import {executionAnswer} from './execution-replies.js';
 import {parseHumanCommand} from './human-command.js';
 import {commandContext} from './resident-commands.js';
 import {validateDecision,RESIDENT_PLACES,RESIDENT_DECISION_SCHEMA as schema,RESIDENT_SYSTEM_PROMPT as SYSTEM} from './decision-contract.js';
@@ -124,7 +125,8 @@ export function createResidentBrain({client=createResilientClient(),now=()=>Date
     const constraints=humanActionConstraints(s.messages,chat?message.slice('Chat with the human. Their message: '.length):'');
     try{const context={...compactContext(residentContext(s),{chat}),humanActionConstraints:constraints};let decision=await complete(context,message);
       const required=requestedObjective(message);
-      let issue=humanActionIssue(decision,constraints,{chat})||objectiveIssue(decision,required)||(message.includes(PHONE_SEARCH_REQUEST)&&decision.action==='phone'&&decision.changePlan!==true?'You selected a phone search for an explicit use-phone request but changePlan=false will not execute it. Set changePlan=true if accepting the phone task; otherwise decline clearly without promising playback.':message.startsWith('Chat with the human.')&&decision.changePlan!==true?null:decisionIssue(s,decision));
+      const promisedActionIssue=d=>chat&&d.changePlan!==true&&/\b(?:I am|I'm|I will|I'll)\s+(?:now\s+)?(?:dismounting|dismount|getting off|getting down|sitting|sit down|eating|eat|drinking|drink)\b/i.test(d.reply||'')?'An action promise with changePlan=false executes nothing. Execute the requested action or explain the actual blocker; do not claim movement, a pose or consumption.':null;
+      let issue=promisedActionIssue(decision)||humanActionIssue(decision,constraints,{chat})||objectiveIssue(decision,required)||(message.includes(PHONE_SEARCH_REQUEST)&&decision.action==='phone'&&decision.changePlan!==true?'You selected a phone search for an explicit use-phone request but changePlan=false will not execute it. Set changePlan=true if accepting the phone task; otherwise decline clearly without promising playback.':message.startsWith('Chat with the human.')&&decision.changePlan!==true?null:decisionIssue(s,decision));
       if(issue){
         if(requestGeneration!==generation||s.paused||stopped)throw new GroqError('Request cancelled.',{retryMs:0});
         // Human targets survive repair. An invented physical benefit from a
@@ -133,7 +135,7 @@ export function createResidentBrain({client=createResilientClient(),now=()=>Date
         const originalObjective=required||(invalidPhoneObjective?null:decision.objective);
         const repairRule=originalObjective?'Repair the commands, retaining the same requested metric, amount, direction and interaction.':'Correct the impossible objective too. A phone-only plan must use objective metric=none, amount=0, interaction=none. You may choose another supported action and attainable goal. Do not claim physical benefits from phone use.';
         decision=await complete(context,message+'\nYour proposed plan failed the execution check: '+issue+' '+repairRule+' Original decision: '+JSON.stringify(decision));
-        issue=humanActionIssue(decision,constraints,{chat})||objectiveIssue(decision,required)||(message.includes(PHONE_SEARCH_REQUEST)&&decision.action==='phone'&&decision.changePlan!==true?'Phone action was still not marked for execution after repair.':decisionIssue(s,decision));
+        issue=promisedActionIssue(decision)||humanActionIssue(decision,constraints,{chat})||objectiveIssue(decision,required)||(message.includes(PHONE_SEARCH_REQUEST)&&decision.action==='phone'&&decision.changePlan!==true?'Phone action was still not marked for execution after repair.':decisionIssue(s,decision));
         if(originalObjective&&JSON.stringify(decision.objective)!==JSON.stringify(originalObjective)){
           if(['metric','amount','direction','interaction'].some(k=>decision.objective?.[k]!==originalObjective[k]))issue='The repair changed the requested objective instead of fixing the plan.';
         }
@@ -168,6 +170,7 @@ export function createResidentBrain({client=createResilientClient(),now=()=>Date
   },async chat(s,message){
     if(stopped)throw new GroqError('Server is stopping.');
     if(s.paused)throw new GroqError('Game paused. Resume to use AI.',{retryMs:0});
+    const answer=executionAnswer(s,message);if(answer){s.messages.push({role:'user',content:message,at:now()},{role:'assistant',content:answer,at:now(),source:'execution state'});s.messages=s.messages.slice(-100);return answer;}
     const direct=parseHumanCommand(s,message);
     if(direct){
       if(s.arrival.phase!=='landed'||!s.obstacles)return 'Let me finish landing and load the city before executing that command.';
