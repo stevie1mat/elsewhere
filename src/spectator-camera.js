@@ -11,7 +11,7 @@ export function createSpectatorCamera(camera,canvas){
   canvas.addEventListener('contextmenu',e=>e.preventDefault());
   canvas.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY,pan:e.shiftKey||e.button===2};canvas.setPointerCapture(e.pointerId);});
   canvas.addEventListener('pointermove',e=>{if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;drag.x=e.clientX;drag.y=e.clientY;
-    if(drag.pan){const scale=distance*.0018;target.x+=(-Math.cos(yaw)*dx+Math.sin(yaw)*dy)*scale;target.z+=(Math.sin(yaw)*dx+Math.cos(yaw)*dy)*scale;}
+    if(drag.pan){const scale=distance*.0018;target.x+=(Math.cos(yaw)*dx-Math.sin(yaw)*dy)*scale;target.z-=(Math.sin(yaw)*dx+Math.cos(yaw)*dy)*scale;}
     else{yaw-=dx*.005;pitch=Math.max(.15,Math.min(1.4,pitch+dy*.004));}
   });
   canvas.addEventListener('pointerup',()=>{drag=null;});canvas.addEventListener('pointercancel',()=>{drag=null;});
