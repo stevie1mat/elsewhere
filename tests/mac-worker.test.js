@@ -12,3 +12,15 @@ test('pause cancellation discards late local decisions and expires worker lease'
 test('invalid local action is never executed',async()=>{
  const b=createMacWorkerBroker();b.connect('w','local');const promise=b.complete({},'Choose');const job=b.poll('w');assert.throws(()=>b.result('w',{id:job.id,decision:{...d,action:'arbitrary_code'}}));await assert.rejects(promise,/Unknown action/);
 });
+test('heartbeat keeps the lease alive without claiming a queued decision',async()=>{
+ let time=1000;const b=createMacWorkerBroker({now:()=>time});b.connect('w','local');
+ const promise=b.complete({},'Choose');time+=19000;b.heartbeat('w');time+=19000;b.heartbeat('w');assert.equal(b.online,true);
+ const job=b.poll('w');assert.ok(job);b.result('w',{id:job.id,decision:d});await promise;
+});
+test('memory suspension cancels work, preserves the reason and permits reconnection',async()=>{
+ const b=createMacWorkerBroker();b.connect('w','local');const pending=b.complete({},'Choose');
+ const reason='Mac worker waiting for memory to recover. It will reconnect automatically.';
+ b.disconnect('w',reason);await assert.rejects(pending,/waiting for memory/);assert.equal(b.online,false);
+ await assert.rejects(b.complete({},'Choose'),/waiting for memory/);assert.equal(b.diagnostics[0].error,reason);
+ b.connect('w','local');assert.equal(b.online,true);assert.equal(b.diagnostics[0].error,null);
+});

@@ -15,3 +15,17 @@ export function memoryIssue(current,baseline){
  if(current.swapMB>baseline.swapMB+32)return 'swap usage increased by more than 32 MB';
  return null;
 }
+// Keep the original swap baseline: recovery must not silently accept more swap.
+export function createMemoryRecovery({baseline,now=()=>Date.now(),stableMs=60000}={}){
+ let waiting=false,stableSince=null,resumeAfter=0,trips=0,reason=null;
+ return {get waiting(){return waiting;},get reason(){return reason;},sample(current){
+  const issue=current?memoryIssue(current,baseline):'memory monitoring failed';
+  if(issue){stableSince=null;reason=issue;if(waiting)return null;
+   waiting=true;trips++;resumeAfter=now()+Math.min(600000,stableMs*2**Math.min(trips-1,4));return 'pause';
+  }
+  if(!waiting)return null;
+  stableSince??=now();
+  if(now()-stableSince<stableMs||now()<resumeAfter)return null;
+  waiting=false;reason=null;stableSince=null;return 'resume';
+ }};
+}

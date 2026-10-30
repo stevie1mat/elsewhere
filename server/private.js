@@ -81,8 +81,9 @@ export function createPrivateServer({code=process.env.PRIVATE_ACCESS_CODE||'2792
           if(input.op==='connect'){mac.connect(input.workerId,input.model);state.ai.localWorkerMode=true;state.ai.enabled=true;brain.setPaused(state,!!state.paused);state.ai.provider='Mac LM Studio';state.ai.model=input.model;save();void writeCloud();json(res,200,{ok:true,paused:state.paused});return;}
           if(input.op==='cloud'){mac.cloud();state.ai.localWorkerMode=false;state.ai.enabled=groqClient.configured;brain.setPaused(state,!!state.paused);save();void writeCloud();json(res,200,{ok:true});return;}
           if(input.op==='poll'){if(!mac.enabled){json(res,410,{error:'Cloud mode selected. Mac worker should stop.'});return;}json(res,200,{job:mac.poll(input.workerId),paused:!!state.paused});return;}
+          if(input.op==='heartbeat'){if(!mac.enabled){json(res,410,{error:'Cloud mode selected. Mac worker should stop.'});return;}mac.heartbeat(input.workerId);json(res,200,{ok:true});return;}
           if(input.op==='result'){mac.result(input.workerId,input);json(res,200,{ok:true});return;}
-          if(input.op==='disconnect'){if(!mac.disconnect(input.workerId))throw Error('Worker already disconnected.');state.ai.connected=false;state.ai.status='paused';state.ai.error='Mac worker disconnected.';json(res,200,{ok:true});return;}
+          if(input.op==='disconnect'){const memory=input.reason==='memory',reason=memory?'Mac worker waiting for memory to recover. It will reconnect automatically.':'Mac worker disconnected.';if(!mac.disconnect(input.workerId,reason))throw Error('Worker already disconnected.');state.ai.connected=false;state.ai.status=memory?'memory_wait':'paused';state.ai.error=reason;json(res,200,{ok:true});return;}
           json(res,400,{error:'Invalid worker operation'});
         }catch(e){json(res,409,{error:e.message});}return;
       }

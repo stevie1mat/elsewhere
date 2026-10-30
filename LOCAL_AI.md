@@ -8,11 +8,12 @@ The local model uses the same action validation, measured memories and task veri
 
 Double-click `Start-Mac-AI.command` to start. It first stops previous workers from this project and waits for them to exit, then starts one replacement. Other Node apps and LM Studio are left running. An active old generation is cancelled before the worker disconnects.
 
-Start LM Studio and load the model if it is not already running:
+The launcher starts LM Studio's local API. The worker loads the model only when a decision is requested, then unloads it after the answer. You do not need to load the model manually.
+
+To start just the API manually:
 
 ```sh
 '/Applications/LM Studio.app/Contents/Resources/app/.webpack/lms' server start --port 1234 --bind 127.0.0.1
-'/Applications/LM Studio.app/Contents/Resources/app/.webpack/lms' load qwen3.5-4b-mlx --context-length 4096 --identifier resident-local --parallel 1 --ttl 300 --yes
 ```
 
 From this project:
@@ -40,6 +41,6 @@ The local adapter uses the Qwen chat template through the completion endpoint to
 
 Local tokens are counted for research but do not consume Groq/Mistral quota. Model computation requires RAM, power and an awake Mac. The local service and model remain installed after stopping the worker.
 
-The reduced context and single-request limit reduce memory use. The model unloads after five idle minutes; the worker reloads it with the same low-memory settings when the next decision is needed. Stop local inference if memory pressure rises or swap begins increasing.
+Low-memory mode allows one generation at a time, caps output at 512 tokens and one follow-up step, and keeps public descriptions short. All action choices, task targets, validation and measured memories remain available. The model is unloaded after every decision to release its memory and accumulated runtime cache. Loading for the next decision adds roughly ten seconds on this Mac. A one-minute idle unload also protects against a lost worker connection. The context stays at 4,096 tokens to accommodate the observed game prompts.
 
-The worker checks macOS memory pressure every five seconds. It cancels inference, unloads the model and disconnects when pressure rises or swap increases by more than 32 MB relative to startup. This polling guard cannot guarantee that no swap occurs between checks.
+The worker checks macOS memory pressure every five seconds. On elevated pressure, monitoring failure or swap growth over 32 MB relative to startup, it cancels inference, unloads the model and disconnects the resident while staying running. The site shows that it is waiting for Mac memory. It reconnects only after a full minute of healthy readings; repeated trips lengthen the cooldown from one minute up to ten minutes. The original swap baseline is preserved. Manual game pause is preserved across recovery. This polling guard cannot guarantee that no swap occurs between checks. If the model cannot fit comfortably alongside your other apps, the worker will keep waiting or pausing rather than force it to run.

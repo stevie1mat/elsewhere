@@ -3,6 +3,8 @@ const d={action:'phone',destination:'',mediaQuery:'calm music',seconds:120,goal:
 test('local client uses loopback, shared JSON contract and public-response telemetry only',async()=>{
  let request;const c=createLocalClient({fetchImpl:async(u,o)=>{request={u,body:JSON.parse(o.body)};return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(d),reasoning_content:'private reasoning'}}],usage:{prompt_tokens:100,completion_tokens:40,total_tokens:140}});}});
  const result=await c.complete({needs:{energy:71}},'Use phone');assert.equal(result.destination,'here');assert.equal(request.u,'http://127.0.0.1:1234/v1/completions');assert.equal(request.body.response_format.json_schema.strict,true);assert.equal(c.lastAttempt.provider,'Mac LM Studio');assert.equal(c.lastAttempt.usage.total,140);assert.ok(!JSON.stringify(c.lastAttempt).includes('private reasoning'));assert.equal(request.body.stream,false);
+ assert.equal(request.body.max_tokens,512);assert.equal(request.body.response_format.json_schema.schema.properties.nextSteps.maxItems,1);
+ assert.equal(request.body.response_format.json_schema.schema.properties.reply.maxLength,240);
 });
 test('local client rejects public endpoints, malformed output and incomplete output',async()=>{
  assert.throws(()=>createLocalClient({url:'http://0.0.0.0:1234/v1'}),/loopback/);assert.throws(()=>createLocalClient({url:'https://public.example/v1'}),/loopback/);

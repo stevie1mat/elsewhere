@@ -9,6 +9,9 @@ test('worker endpoint requires game authentication and preserves pause without i
  const connected=await post('/api/resident/worker',{op:'connect',workerId:'w',model:'resident-local'});assert.equal(connected.status,200);assert.equal(server.state.paused,true);assert.equal(server.state.ai.localWorkerMode,true);assert.equal(server.state.ai.enabled,true);
  const poll=await post('/api/resident/worker',{op:'poll',workerId:'w'});assert.deepEqual(await poll.json(),{job:null,paused:true});assert.equal(cloudCalls,0);
  const chat=await post('/api/resident/chat',{message:'Use phone now'});assert.equal(chat.status,409);
+ const beat=await post('/api/resident/worker',{op:'heartbeat',workerId:'w'});assert.equal(beat.status,200);
+ const wait=await post('/api/resident/worker',{op:'disconnect',workerId:'w',reason:'memory'});assert.equal(wait.status,200);assert.match(server.state.ai.error,/waiting for memory/);assert.equal(server.state.ai.connected,false);assert.equal(server.state.paused,true);
+ await post('/api/resident/worker',{op:'connect',workerId:'w',model:'resident-local'});assert.equal(server.state.paused,true);
  const switched=await post('/api/resident/worker',{op:'cloud'});assert.equal(switched.status,200);assert.equal(server.state.ai.localWorkerMode,false);assert.equal(server.state.paused,true);assert.equal(cloudCalls,0);
  }finally{await server.close();}
 });
