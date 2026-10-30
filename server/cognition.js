@@ -1,3 +1,4 @@
+import {recordProgress,contextualOutcome} from './learning-progress.js';
 import {perceivedObjects} from './object-perception.js';
 import {LANDMARKS} from './shared/movement.js';
 const rounded=values=>Object.fromEntries(Object.entries(values||{}).map(([k,v])=>[k,Math.round(v)]));
@@ -24,6 +25,7 @@ export function learnOutcome(s,activity,now){
   s.learning.totalOutcomes++;
   const result={at:now,activity:activity.kind,place:activity.place,source:'measured simulation outcome',before:b,after,moneyChange,reward:Math.round(reward*1000)/1000};
   s.outcomes??=[];s.outcomes.push(result);s.outcomes=s.outcomes.slice(-12);
+  contextualOutcome(s,activity,result);recordProgress(s,result);
   return result;
 }
 export function cachedMemory(s){

@@ -1,3 +1,4 @@
+import {mountLearningScore} from './learning-score-view.js';
 const residentRequests=s=>(s?.worldRequests||[]).filter(r=>r.source!=='action capability check');
 const time=value=>new Date(value).toLocaleString();
 const node=(tag,text,className)=>{const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(className)e.className=className;return e;};
@@ -7,6 +8,7 @@ export function mountLearningView(){
   const panel=node('section',undefined,'learning-inspector');panel.hidden=true;panel.setAttribute('aria-label','Learning evidence and memory reuse');
   panel.innerHTML='<header><div><small>EXPERIENCE → OUTCOME → MEMORY</small><h2>What is being learned?</h2></div><button id="learning-close" type="button" aria-label="Close learning inspector">×</button></header><p id="learning-overview"></p><h3>Recent action feedback</h3><div id="learning-execution-gaps"></div><details open><summary>📁 Assets to implement</summary><p>Only additions requested by the AI resident appear here.</p><button id="learning-assets-download" type="button">Download asset list (JSON)</button><p>Requests written by the AI and saved with its life. Proposals need review before implementation.</p><div id="learning-world-requests"></div></details><h3>Usable objects & reusable skills</h3><p id="learning-objects"></p><ul id="learning-skills"></ul><h3>My self-written plan</h3><p id="learning-plan-status"></p><ol id="learning-plan"></ol><details><summary>Executable plan data</summary><pre id="learning-plan-code"></pre></details><h3>Latest measured outcome</h3><div id="learning-outcome"></div><h3>Learned activity preferences</h3><p>Scores compare measured need relief and money spent or earned. More trials provide more evidence; these scores do not retrain the AI model.</p><div class="learning-table-wrap"><table><thead><tr><th>Activity / place</th><th>Trials</th><th>Mean score</th><th>Updated</th></tr></thead><tbody id="learning-preferences"></tbody></table></div><h3>New verified observations</h3><p>These come from game state, not camera images or sounds.</p><ol id="learning-observations"></ol><h3>Recent completed experiences</h3><ol id="learning-outcomes"></ol><h3>Memory cache & reuse</h3><p id="learning-cache"></p><details open><summary>Cached memory summary</summary><pre id="learning-summary"></pre></details><details><summary>Memory actually sent in the last AI request</summary><pre id="learning-used"></pre></details>';
   document.querySelector('#app').append(card,panel);
+  const scoreView=mountLearningScore(card.querySelector('.learning-live-content'));
   let signature='',latest=null,minimized=false;
   panel.querySelector('#learning-assets-download').onclick=()=>{
     const data={exportedAt:new Date().toISOString(),residentRequests:residentRequests(latest)};
@@ -16,7 +18,7 @@ export function mountLearningView(){
   card.querySelector('#learning-open').onclick=()=>{panel.hidden=false;render(latest,true);panel.querySelector('#learning-close').focus();};
   panel.querySelector('#learning-close').onclick=()=>{panel.hidden=true;card.querySelector('#learning-open').focus();};
   function render(s,force=false){
-    if(!s)return;latest=s;const learning=s.learning||{},cache=s.memoryCache||{},last=s.outcomes?.at(-1);
+    if(!s)return;scoreView.update(s);latest=s;const learning=s.learning||{},cache=s.memoryCache||{},last=s.outcomes?.at(-1);
     card.querySelector('#learning-counts').textContent=`${learning.totalOutcomes||0} outcomes learned · ${cache.hits||0} cache reuses`;
     card.querySelector('#learning-requests-count').textContent=residentRequests(s).length?`${residentRequests(s).length} world additions requested · open to review`:'';
     card.querySelector('#learning-new').textContent=last?`${last.activity} at ${last.place} · measured score ${last.reward>=0?'+':''}${last.reward}`:'Learning begins after the next activity finishes.';
