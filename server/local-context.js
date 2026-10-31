@@ -1,6 +1,6 @@
 // Keep decision evidence and usable targets; remove repeated narrative for 4096-token local models.
 export function localContext(context,message){
- if(context.trainingLab)return {trainingLab:true,goal:context.goal,position:context.perception?.position,body:context.commands?.body,inventory:context.trainingInventory,money:context.money,needs:context.needs,objects:context.trainingObjects,trainingCommands:context.trainingCommands,availableActions:context.trainingAvailableActions,executionFeedback:(context.executionFeedback||[]).slice(-2),trainingMemory:context.trainingMemory,verifiedSkills:context.verifiedTrainingSkills};
+ if(context.trainingLab)return {trainingLab:true,goal:context.goal,position:context.perception?.position,body:context.commands?.body,inventory:context.trainingInventory,money:context.money,needs:context.needs,objects:context.trainingObjects,trainingCommands:context.trainingCommands,availableActions:context.trainingAvailableActions,executionFeedback:(context.executionFeedback||[]).slice(-2),trainingMemory:context.trainingMemory,teacherExamples:context.teacherExamples,verifiedSkills:context.verifiedTrainingSkills};
  const relevant=new Set(['visit','rest','interact','collect_bicycle','eat','drink','talk','stop']);
  for(const action of context.capabilities||[])if(message.toLowerCase().includes(action.replaceAll('_',' ')))relevant.add(action);
  const {actionSupport={},memory,mechanics,phone,plan,...rest}=context;

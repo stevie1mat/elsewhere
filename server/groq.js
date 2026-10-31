@@ -34,7 +34,7 @@ export function residentContext(s){ensureMind(s);recordObservation(s,s.updatedAt
   measuredEffects:retrieveEffects(s),mechanics:EFFECT_FACTS,needAwareness:needAwareness(s),task:s.task||null,
   lessonsForCurrentNeeds:relevantLessons(s),
   memory:cachedMemory(s),recentEvents:s.events.slice(-4).map(e=>e.message),
-  ...(s.trainingLab?{trainingLab:true,trainingMemory:s.trainingLessons||[]}:{}),
+  ...(s.trainingLab?{trainingLab:true,trainingMemory:s.trainingLessons||[],teacherExamples:s.trainingExamples||[]}:{}),
   places:RESIDENT_PLACES.map(({id,name})=>({id,name})),
   conversation:(s.messages||[]).slice(-6).map(({role,content})=>({role,content:content.slice(0,400)}))
 };}

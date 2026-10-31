@@ -51,3 +51,13 @@ test('blocked route cannot be bypassed by purchasing from a distance',()=>{
 test('walking to an already reached target reports no progress instead of another successful move',()=>{
  const s=createTrainingResident('normal');applyTrainingAction(s,command('dismount'),1000);Object.assign(s.player,{x:35,z:12});assert.match(applyTrainingAction(s,command('walk','cafe-meal'),1000).error,/No progress: already at/);assert.equal(s.wallet,20);assert.equal(s.player.carriedMeal,undefined);
 });
+test('interactive teacher executes one observed action at a time and exports only verified demonstrations',async()=>{
+ let time=1000;const live=createResident(0);let modelCalls=0;const service=createTrainingService({getState:()=>live,now:()=>time,decide:async()=>{modelCalls++;throw Error('Teacher must not call student');}});
+ service.start({mode:'teacher'});service.tick(.1);const id=service.snapshot().active.id;
+ for(const c of sequence()){
+  const a=service.snapshot().active;assert.equal(a.status,'awaiting_teacher');assert.throws(()=>service.teacherStep({trialId:'old',expectedDecisions:a.decisions.length,choice:{task:'inspect',target:'',reply:'Inspect.'}}),/Stale/);
+  service.teacherStep({trialId:id,expectedDecisions:a.decisions.length,choice:{task:c.plannerTask,target:c.objectId,reply:c.reply}});
+  for(let i=0;i<500;i++){time+=100;service.tick(.1);await Promise.resolve();const status=service.snapshot().active.status;if(['awaiting_teacher','passed','failed'].includes(status))break;}
+ }
+ const s=service.snapshot();assert.equal(s.active.status,'passed');assert.equal(modelCalls,0);assert.equal(s.skills.length,0,'teacher demonstration does not count as student learning');const dataset=service.export();assert.equal(dataset.teacherExamples.length,7);assert.equal(dataset.weightsUpdated,false);assert.equal(dataset.teacherExamples.at(-1).choice.task,'eat');assert.ok(dataset.teacherExamples.at(-1).result.hunger<80);
+});

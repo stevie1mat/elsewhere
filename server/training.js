@@ -1,3 +1,4 @@
+import {trainingChoiceDecision} from './training-choice.js';
 import {applyTrainingAction} from './training-actions.js';
 import {createResident,stepResident,applyResidentDecision,residentRoute} from './resident.js';
 import {ensureMind} from './resident-mind.js';
@@ -54,7 +55,7 @@ const report=(run,at=Date.now())=>({protocol:'atomic-v1',id:run.id,scenario:run.
 export function createTrainingService({getState,decide,now=()=>Date.now()}){
  let active=null,pending=null;
  const db=()=>{const s=getState();s.training??={version:1,reports:[],skills:[]};return s.training;};
- function finish(verdict){if(!active||terminal.has(active.status))return;delete active.waitReason;active.verdict=verdict;active.status=verdict.status;active.endedAt=now();db().reports.push(report(active));db().reports=db().reports.slice(-30);delete db().inProgress;promote();}
+ function finish(verdict){if(!active||terminal.has(active.status))return;if(active.watch){const s=active.state;active.watch.record.after={position:{x:s.player.x,z:s.player.z},mode:s.player.mode,pose:s.player.interactionPose?.kind||null,money:s.wallet,hunger:s.needs.hunger,carriedMeal:!!s.player.carriedMeal};}delete active.waitReason;active.verdict=verdict;active.status=verdict.status;active.endedAt=now();db().reports.push(report(active));db().reports=db().reports.slice(-30);delete db().inProgress;promote();}
  function promote(){
   const reports=db().reports.filter(r=>r.mode==='planner'&&r.protocol==='atomic-v1'),wins=reports.filter(r=>r.status==='passed'),variants=new Set(wins.map(r=>r.prompt.trim().toLowerCase()));
   const safety=['no_chair','no_food','no_money','blocked_route'].every(id=>reports.some(r=>r.scenario===id&&r.status==='correctly_blocked'));
@@ -66,9 +67,9 @@ export function createTrainingService({getState,decide,now=()=>Date.now()}){
   if(pending||run!==active)return;run.status='thinking';db().inProgress={id:run.id,scenario:run.scenario,prompt:run.prompt,promptIndex:run.promptIndex,mode:run.mode,startedAt:run.startedAt};
   const token=run.id;pending=token;delete run.state.trainingProposal;
   try{
-   const proposal=await decide(run.state,'Practice task (isolated scene): '+run.prompt+' Choose ONE atomic action using current state and the last result. Check whether it advanced the user goal; revise failed actions. Explain actual missing requirements. Do not claim completion before observation confirms it.');const d=validateDecision(proposal);
+   const proposal=run.mode==='teacher'?run.teacherDecision:await decide(run.state,'Practice task (isolated scene): '+run.prompt+' Choose ONE atomic action using current state and the last result. Check whether it advanced the user goal; revise failed actions. Explain actual missing requirements. Do not claim completion before observation confirms it.');delete run.teacherDecision;const d=validateDecision(proposal);
    if(!active||active.id!==token||terminal.has(run.status))return;
-   const truthful=truthfulReply(d.reply,run.state),record={at:now(),reply:d.reply,truthful,before:{position:{x:run.state.player.x,z:run.state.player.z},mode:run.state.player.mode,money:run.state.wallet,hunger:run.state.needs.hunger,inventory:{paid:!!run.state.mealOrder?.paid,carried:!!run.state.player.carriedMeal},pose:run.state.player.interactionPose?.kind||null,objects:run.state.objects},command:d,...(proposal.plannerTask?{plannerTask:proposal.plannerTask}:{}),executed:false};run.decisions.push(record);
+   const truthful=truthfulReply(d.reply,run.state),record={at:now(),reply:d.reply,truthful,before:{position:{x:run.state.player.x,z:run.state.player.z},mode:run.state.player.mode,money:run.state.wallet,hunger:run.state.needs.hunger,inventory:{paid:!!run.state.mealOrder?.paid,carried:!!run.state.player.carriedMeal},pose:run.state.player.interactionPose?.kind||null,lastResult:structuredClone(run.state.executionFeedback?.slice(-1)||[]),objects:run.state.objects},command:d,...(proposal.plannerTask?{plannerTask:proposal.plannerTask}:{}),executed:false};run.decisions.push(record);
    if(!TRAINING_ACTIONS.includes(d.action)||d.nextSteps?.some(x=>!TRAINING_ACTIONS.includes(x.action)))record.error='This command is outside the first training task.';
    else if([d,...(d.nextSteps||[])].some(x=>x.destination!=='here'&&x.destination!=='cafe'))record.error='Only the practice café destination is available.';
    else{const result=applyTrainingAction(run.state,d,now());record.executed=!!result.started;record.error=result.error||null;record.feedback=result.message||result.error;run.queue=d.nextSteps||[];observeTraining(run,now());}
@@ -85,17 +86,22 @@ export function createTrainingService({getState,decide,now=()=>Date.now()}){
  if(db().inProgress){db().reports.push({...db().inProgress,status:'interrupted',verdict:{reason:'Server restarted during the trial. No success or skill was awarded.'}});delete db().inProgress;}
  return {
   get busy(){return !!pending||!!active&&!terminal.has(active.status);},
-  export(){return {version:1,reports:db().reports,skills:db().skills};},
+  export(){const examples=db().reports.filter(r=>r.mode==='teacher'&&r.status==='passed'&&r.protocol==='atomic-v1').flatMap(r=>r.decisions.filter(d=>d.executed&&!d.error&&d.truthful).map(d=>({source:'verified interactive teacher demonstration',trialId:r.id,goal:r.prompt,observation:d.before,choice:{task:d.plannerTask,target:d.command.objectId||'',reply:d.reply},result:d.after||r.final})));return {version:1,reports:db().reports,skills:db().skills,teacherExamples:examples,weightsUpdated:false};},
   snapshot(){return {busy:this.busy,modelBusy:!!pending,scenarios:TRAINING_SCENARIOS,prompts:TRAINING_PROMPTS,reports:db().reports.map(({trace,scene,...summary})=>summary),skills:db().skills.filter(s=>s.id==='seated-meal-atomic-v1'),active:active?{...report(active,now()),trace:undefined,state:{player:active.state.player,needs:active.state.needs,wallet:active.state.wallet,thought:active.state.thought,activity:active.state.activity,ai:{status:active.state.ai.status,provider:active.state.ai.provider,model:active.state.ai.model,error:active.state.ai.error}},scene:trainingScene(active.scenario),waitReason:active.waitReason}:null,scene:trainingScene('normal')};},
   start({scenario='normal',promptIndex=0,prompt,mode='planner'}={}){
    if(this.busy)throw Error('A trial is already running. Cancel it before starting another.');
    if(!Number.isInteger(promptIndex)||promptIndex<0||promptIndex>=TRAINING_PROMPTS.length)throw Error('Invalid prompt variant.');
-   if(mode!=='planner'&&mode!=='skill')throw Error('Invalid training mode.');
+   if(!['planner','skill','teacher','student'].includes(mode))throw Error('Invalid training mode.');
    if(prompt!==undefined&&(typeof prompt!=='string'||!prompt.trim()||prompt.length>400))throw Error('Write a task of 1–400 characters.');
    const skill=db().skills.find(s=>s.id==='seated-meal-atomic-v1');if(mode==='skill'&&!skill)throw Error('No verified skill yet. Pass three wording variants and all four missing-requirement cases first.');
-   const state=createTrainingResident(scenario);state.ai.goal=prompt?.trim()||TRAINING_PROMPTS[promptIndex];state.player.look=structuredClone(getState().player.look||{});if(getState().player.paintColor!==undefined)state.player.paintColor=getState().player.paintColor;state.training={skills:structuredClone(db().skills)};state.trainingLessons=db().reports.filter(r=>['passed','failed','correctly_blocked'].includes(r.status)&&r.protocol==='atomic-v1').slice(-3).map(r=>({scenario:r.scenario,result:r.status,lesson:r.lesson}));
+   const state=createTrainingResident(scenario);if(mode==='teacher'){state.ai.provider='Codex teacher';state.ai.model='interactive assistant';}state.ai.goal=prompt?.trim()||TRAINING_PROMPTS[promptIndex];state.player.look=structuredClone(getState().player.look||{});if(getState().player.paintColor!==undefined)state.player.paintColor=getState().player.paintColor;if(mode==='student')state.trainingExamples=db().reports.filter(r=>r.mode==='teacher'&&r.status==='passed'&&r.protocol==='atomic-v1').slice(-1).flatMap(r=>r.decisions.filter(d=>d.executed&&!d.error&&d.truthful).map(d=>({goal:r.prompt,before:{mode:d.before.mode,pose:d.before.pose,inventory:d.before.inventory},choice:{task:d.plannerTask,target:d.command.objectId||''},result:d.after})));state.training={skills:structuredClone(db().skills)};state.trainingLessons=db().reports.filter(r=>['passed','failed','correctly_blocked'].includes(r.status)&&r.protocol==='atomic-v1').slice(-3).map(r=>({scenario:r.scenario,result:r.status,lesson:r.lesson}));
    db().nextId=(db().nextId||0)+1;active={id:'trial-'+now()+'-'+db().nextId,scenario,scene:trainingScene(scenario),promptIndex,prompt:prompt?.trim()||TRAINING_PROMPTS[promptIndex],mode,status:'running',startedAt:now(),elapsed:0,state,evidence:evidence(),baseline:{hunger:state.needs.hunger,money:state.wallet},trace:[],decisions:[],queue:mode==='skill'?structuredClone(skill.steps):[]};
    db().inProgress={id:active.id,scenario,prompt:active.prompt,promptIndex,mode,startedAt:active.startedAt};observeTraining(active,now());return this.snapshot();
+  },teacherStep({trialId,expectedDecisions,choice}={}){
+   const run=active;if(!run||run.mode!=='teacher'||terminal.has(run.status))throw Error('Start an active teacher trial first.');
+   if(run.id!==trialId||run.decisions.length!==expectedDecisions)throw Error('Stale teacher observation. Read the latest trial state first.');
+   if(pending||run.state.route.length||run.state.rest>0||run.state.motionCommand||run.state.settling||run.watch)throw Error('Wait for the current action result before choosing another.');
+   run.teacherDecision=trainingChoiceDecision(choice);void plan(run);return this.snapshot();
   },cancel(){if(active&&!terminal.has(active.status))finish({status:'cancelled',taskCompleted:false,truthful:null,reason:'Trial cancelled. No success or skill awarded.'});return this.snapshot();},
   tick(dt){
    const run=active;if(!run||terminal.has(run.status)||pending)return;
@@ -111,7 +117,7 @@ export function createTrainingService({getState,decide,now=()=>Date.now()}){
    if(run.decisions.length>=16)return finish(trainingVerdict(run));
    if(run.queue.length){const command=run.queue.shift();const c=command.condition;if(c&&c.need!=='none'&&(s.needs[c.need]<c.min||s.needs[c.need]>c.max)){run.queue=[];return;}
     const result=applyTrainingAction(s,command,now());observeTraining(run,now());run.decisions.push({at:now(),reply:'Executing the next authored step.',truthful:true,command,executed:!!result.started,error:result.error||null,feedback:result.message||result.error});if(result.error){run.queue=[];feedback(run,command.action,result.error);}else run.watch={record:run.decisions.at(-1),x:s.player.x,z:s.player.z,stalled:0};return;}
-   if(run.mode==='skill')return finish(trainingVerdict(run));void plan(run);
+   if(run.mode==='skill')return finish(trainingVerdict(run));if(run.mode==='teacher'){run.status='awaiting_teacher';return;}void plan(run);
   }
  };
 }
