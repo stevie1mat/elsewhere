@@ -11,3 +11,7 @@ build/
 
 # Persistent private world and session data
 .private-data/
+
+# Local training environment and adapter checkpoints
+.venv-training/
+.training/

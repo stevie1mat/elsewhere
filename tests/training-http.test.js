@@ -11,5 +11,8 @@ test('training page and API use existing authentication, route and persistence w
  const initial=JSON.stringify({player:app.state.player,wallet:app.state.wallet,paused:app.state.paused});
  const start=await fetch(base+'/api/resident/training',{method:'POST',headers:{Cookie,'Content-Type':'application/json'},body:JSON.stringify({action:'start',scenario:'no_chair'})});assert.equal(start.status,200);assert.equal((await start.json()).active.mode,'planner');
  await new Promise(r=>setTimeout(r,350));const data=await (await fetch(base+'/api/resident/training',{headers:{Cookie}})).json();assert.equal(data.active.status,'correctly_blocked');assert.equal(data.reports.length,1);assert.equal(JSON.stringify({player:app.state.player,wallet:app.state.wallet,paused:app.state.paused}),initial);
+ const control=await fetch(base+'/api/resident/training',{method:'POST',headers:{Cookie,'Content-Type':'application/json'},body:JSON.stringify({action:'automation',enabled:true})});assert.equal((await control.json()).automation.enabled,true);
+ const preparing=await fetch(base+'/api/resident/training',{method:'POST',headers:{Cookie,'Content-Type':'application/json'},body:JSON.stringify({action:'fine_tune_status',stage:'preparing',message:'Preparing test candidate.',examples:24})});assert.equal((await preparing.json()).fineTuning.activeModelUpdated,false);
+ assert.equal((await fetch(base+'/api/resident/training',{method:'POST',headers:{Cookie,'Content-Type':'application/json'},body:JSON.stringify({action:'start'})})).status,409);
  }finally{await app.close();}
 });

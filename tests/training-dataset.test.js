@@ -1,0 +1,12 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {buildTrainingDataset,loraConfig} from '../server/training-dataset.js';
+import {createTrainingTeacher} from '../server/training-teacher.js';
+import {createTrainingResident} from '../server/training.js';
+const example=i=>({source:'automatic_teacher',trialId:'trial-'+Math.floor(i/8),scenario:'normal',modelInput:{position:{x:i,z:0}},request:'Have lunch.',result:{money:16},choice:{task:'inspect',target:'',reply:'I will inspect.'}});
+test('fine-tuning requires verified examples and splits entire trials instead of leaking states across sets',()=>{
+ const raw=Array.from({length:24},(_,i)=>example(i)),d=buildTrainingDataset(raw);assert.equal(d.ready,true);assert.equal(d.train.length,16);assert.equal(d.valid.length,8);assert.equal(d.weightsUpdated,false);const train=d.train.map(r=>JSON.parse(r.prompt.split('<|im_start|>user\n')[1].split('<|im_end|>')[0]).world.position.x);assert.ok(train.every(x=>x<16));assert.equal(buildTrainingDataset([...raw,...raw]).examples,24);assert.equal(buildTrainingDataset(raw.slice(0,7)).ready,false);assert.equal(buildTrainingDataset([{...example(1),source:'student'},{...example(2),choice:{task:'invented'}},{...example(3),modelInput:null}]).examples,0);
+});
+test('QLoRA config uses separate adapters and bounded low-memory training',()=>{const c=loraConfig({model:'/base',data:'/data',adapterPath:'/candidate'});assert.equal(c.batch_size,1);assert.equal(c.num_layers,1);assert.equal(c.mask_prompt,true);assert.equal(c.adapter_path,'/candidate');assert.equal(c.grad_checkpoint,true);});
+test('automatic teacher uses a separate configured model, returns one validated action and does not expose credentials',async()=>{
+ let sent;const teacher=createTrainingTeacher({apiKey:'test-secret',model:'test-teacher',fetchImpl:async(u,o)=>{sent=JSON.parse(o.body);return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({task:'dismount',target:'',reply:'I will park the bike.'})}}]});}});const d=await teacher.correct(createTrainingResident('normal'),'Failed to walk.');assert.equal(d.plannerTask,'dismount');assert.equal(d.teacherModel,'test-teacher');assert.ok(!JSON.stringify(d).includes('test-secret'));assert.deepEqual(sent.response_format.json_schema.schema.properties.task.enum,['dismount','inspect','stop']);
+});

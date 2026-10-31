@@ -1,0 +1,40 @@
+import {existsSync,mkdirSync,writeFileSync,readFileSync,openSync,closeSync,unlinkSync} from 'node:fs';
+import {resolve,dirname} from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {spawn,execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+import {buildTrainingDataset,loraConfig} from '../server/training-dataset.js';
+import {readMemory,memoryIssue} from './mac-memory.js';
+import {stopMacWorkers} from './stop-mac-workers.js';
+const root=fileURLToPath(new URL('../',import.meta.url));if(existsSync(resolve(root,'.env')))process.loadEnvFile(resolve(root,'.env'));
+const output=resolve(root,'.training'),server=process.env.PRIVATE_SERVER_URL||'https://elsewhere-ocqx.onrender.com';mkdirSync(output,{recursive:true});
+const lock=resolve(output,'trainer.lock');if(existsSync(lock)){const pid=Number(readFileSync(lock,'utf8'));let live=false;try{process.kill(pid,0);live=true;}catch{}if(live)throw Error('An automatic trainer is already running.');unlinkSync(lock);}closeSync(openSync(lock,'wx'));writeFileSync(lock,String(process.pid));
+let cookie,child,stopped=false;const statusPath=resolve(output,'status.json');let status=existsSync(statusPath)?JSON.parse(readFileSync(statusPath,'utf8')):{};
+async function api(body){if(!cookie){const r=await fetch(server+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:process.env.PRIVATE_ACCESS_CODE||'279279'}),signal:AbortSignal.timeout(15000)});if(!r.ok)throw Error('Trainer sign-in failed.');cookie=r.headers.get('set-cookie')?.split(';')[0];}
+ const r=await fetch(server+'/api/resident/training',{method:body?'POST':'GET',headers:{Cookie:cookie,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(30000)});if(r.status===401){cookie=null;throw Error('Trainer reconnecting after session expiry.');}const data=await r.json();if(!r.ok)throw Error(data.error||'Training API unavailable.');return data;}
+async function publish(stage,message,extra={}){status={...status,stage,message,updatedAt:Date.now(),...extra};writeFileSync(statusPath,JSON.stringify(status,null,2));console.log(stage+': '+message);await api({action:'fine_tune_status',stage,message,examples:status.examples||0});}
+async function train(dataset){
+ const model=process.env.TRAINING_MODEL_PATH||resolve(process.env.HOME,'.lmstudio/models/lmstudio-community/Qwen3.5-4B-MLX-4bit'),executable=resolve(root,'.venv-training/bin/mlx_lm.lora');
+ if(!existsSync(executable)||!existsSync(resolve(model,'config.json')))throw Error('Missing MLX training runtime or local base model.');
+ const baseline=readMemory();if(baseline.pressure!==1)throw Error('Mac memory pressure is elevated; fine-tuning deferred.');
+ const runDir=resolve(output,'runs',dataset.hash.slice(0,16)),data=resolve(runDir,'data'),adapterPath=resolve(runDir,'adapter');mkdirSync(data,{recursive:true});
+ for(const [name,rows]of Object.entries({train:dataset.train,valid:dataset.valid}))writeFileSync(resolve(data,name+'.jsonl'),rows.map(x=>JSON.stringify(x)).join('\n')+'\n');
+ const config=resolve(runDir,'config.json');writeFileSync(config,JSON.stringify(loraConfig({model,data,adapterPath}),null,2));
+ await promisify(execFile)(resolve(root,'.venv-training/bin/python'),[resolve(root,'scripts/validate-training-data.py'),model,data,'2048'],{timeout:30000});
+ await publish('preparing','Preparing local adapter training; new trials are temporarily paused.');if((await api()).busy)throw Error('A trial started before training preparation; fine-tuning deferred.');await stopMacWorkers(root);await publish('training','Training a separate LoRA candidate; inference is paused.',{attemptedHash:dataset.hash,examples:dataset.examples});
+ const log=openSync(resolve(runDir,'training.log'),'a');let guard;
+ try{
+  await new Promise((ok,fail)=>{child=spawn(executable,['--config',config],{cwd:root,stdio:['ignore',log,log],env:process.env});let issue;
+   guard=setInterval(()=>{try{issue=memoryIssue(readMemory(),baseline);if(issue)child.kill('SIGTERM');}catch{issue='Memory monitoring unavailable';child.kill('SIGTERM');}},2000);
+   child.once('error',fail);child.once('exit',(code)=>code===0&&!issue?ok():fail(Error(issue||'MLX training exited '+code)));});
+  if(!existsSync(resolve(adapterPath,'adapters.safetensors')))throw Error('No trained adapter checkpoint was produced.');
+  await publish('candidate','Adapter trained. It is not active; independent game evaluation is required.',{adapterPath,baseModel:model,datasetHash:dataset.hash,examples:dataset.examples});
+ }finally{clearInterval(guard);closeSync(log);child=null;if(!stopped){const worker=spawn(process.execPath,[resolve(root,'scripts/mac-ai-worker.js')],{cwd:root,stdio:'ignore',detached:true});worker.unref();}}
+}
+async function cycle(){const snapshot=await api();if(process.argv.includes('--collect')&&!snapshot.automation?.enabled){console.log('Automatic training paused from the training page.');return;}if(snapshot.busy){console.log('Waiting for the active trial to finish.');return;}const exported=await api({action:'export'}),dataset=buildTrainingDataset(exported.teacherExamples);writeFileSync(resolve(output,'dataset-summary.json'),JSON.stringify({...dataset,train:dataset.train.length,valid:dataset.valid.length},null,2));
+ if(!dataset.ready){await publish('collecting',dataset.reason,{examples:dataset.examples,trials:dataset.trials});if(process.argv.includes('--collect')&&snapshot.automation?.enabled){if(!snapshot.teacherConfigured)throw Error('Configure the automatic teacher before collecting trials.');const completed=(status.completedTrials||0);if(completed>=12){await api({action:'automation',enabled:false});throw Error('Automatic collection reached its 12-trial budget. Review results before restarting.');}const scenarios=['normal','moved_objects','no_chair','no_food','no_money','blocked_route'];await api({action:'start',mode:'coach',scenario:scenarios[completed%scenarios.length],promptIndex:completed%3});status.completedTrials=completed+1;writeFileSync(statusPath,JSON.stringify(status,null,2));}return;}
+ if(status.attemptedHash===dataset.hash){console.log('This dataset has already been attempted. Waiting for new verified data.');return;}
+ await train(dataset);
+}
+for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>{stopped=true;child?.kill('SIGTERM');if(existsSync(lock))unlinkSync(lock);process.exit(0);});
+try{if(['preparing','training'].includes(status.stage))await publish('error','Previous local training process ended before completion. Active model unchanged.').catch(()=>{});do{try{await cycle();}catch(error){await publish('error',error.message.slice(0,500)).catch(()=>console.log(error.message));}if(!process.argv.includes('--watch'))break;await new Promise(r=>setTimeout(r,30000));}while(!stopped);}finally{if(existsSync(lock))unlinkSync(lock);}

@@ -1,3 +1,4 @@
+import {createTrainingTeacher} from './training-teacher.js';
 import {createTrainingService} from './training.js';
 import {executionAnswer} from './execution-replies.js';
 import {parseHumanCommand} from './human-command.js';
@@ -43,7 +44,7 @@ export function createPrivateServer({code=process.env.PRIVATE_ACCESS_CODE||'2792
     return cloudWrite;
   }
   const storageStatus=()=>({provider:cloud.configured?'supabase':'local',ready:cloudReady,lastCloudSave,error:cloudError});
-  let training=null;const trainingService=()=>training??=createTrainingService({getState:()=>state,decide:(s,m)=>brain.trainingDecision(s,m)});
+  let training=null;const trainingService=()=>training??=createTrainingService({teacher:createTrainingTeacher(),getState:()=>state,decide:(s,m)=>brain.trainingDecision(s,m)});
   let localChat=null;
   if(state.ai.chatTask?.status==='thinking')state.ai.chatTask={...state.ai.chatTask,status:'error',error:'Server restarted during local chat. Please retry.'};
   const sessions=new Map(),attempts=new Map();let saveError=null;
@@ -75,7 +76,7 @@ export function createPrivateServer({code=process.env.PRIVATE_ACCESS_CODE||'2792
       if(url.pathname.startsWith('/api/resident/')&&!cloudReady&&!hadLocal){json(res,503,{error:'Waiting for the saved life from Supabase.'});return;}
       if(url.pathname==='/api/resident/training'&&req.method==='GET'){json(res,200,trainingService().snapshot());return;}
       if(url.pathname==='/api/resident/training'&&req.method==='POST'){
-        const input=await body(req);try{const service=trainingService();let result;if(input.action==='export'){json(res,200,service.export());return;}if(input.action==='start')result=service.start(input);else if(input.action==='teacher_step')result=service.teacherStep(input);else if(input.action==='cancel')result=service.cancel();else{json(res,400,{error:'Choose start, teacher_step, cancel or export.'});return;}save();void writeCloud();json(res,200,result);}catch(error){json(res,409,{error:error.message});}return;
+        const input=await body(req);try{const service=trainingService();let result;if(input.action==='export'){json(res,200,service.export());return;}if(input.action==='automation')result=service.automation(input.enabled);else if(input.action==='fine_tune_status')result=service.fineTuneStatus(input);else if(input.action==='start')result=service.start(input);else if(input.action==='teacher_step')result=service.teacherStep(input);else if(input.action==='cancel')result=service.cancel();else{json(res,400,{error:'Choose start, teacher_step, cancel or export.'});return;}save();void writeCloud();json(res,200,result);}catch(error){json(res,409,{error:error.message});}return;
       }
       if(url.pathname==='/api/resident/world'&&req.method==='POST'){
         const input=await body(req);if(input.objects!==undefined){if(!validateObjects(input.objects)){json(res,400,{error:'Invalid interaction object registry'});return;}state.objects=input.objects;}
@@ -131,7 +132,7 @@ export function createPrivateServer({code=process.env.PRIVATE_ACCESS_CODE||'2792
       res.writeHead(200,{'Content-Type':types[extname(path)]||'application/octet-stream','Cache-Control':'no-store'});res.end(req.method==='HEAD'?undefined:readFileSync(path));
     }catch(error){console.error(error.message);if(!res.headersSent)json(res,500,{error:'Unable to process request'});else res.end();}
   });
-  let last=Date.now();const tick=setInterval(()=>{const now=Date.now(),dt=Math.min(1,(now-last)/1000);last=now;try{if(!cloudReady&&!hadLocal)return;if(mac.enabled&&!mac.online&&state.ai.connected){state.ai.connected=false;state.ai.error='Mac worker offline. Start npm run ai:mac.';}if(!training?.busy)void brain.update(state);training?.tick(dt);stepResident(state,dt,now);void mediaService.update(state);}catch(e){console.error('Resident simulation failed:',e.message);}},100);
+  let last=Date.now();const tick=setInterval(()=>{const now=Date.now(),dt=Math.min(1,(now-last)/1000);last=now;try{if(!cloudReady&&!hadLocal)return;if(mac.enabled&&!mac.online&&state.ai.connected){state.ai.connected=false;state.ai.error='Mac worker offline. Start npm run ai:mac.';}if(!training?.busy&&!['preparing','training'].includes(state.training?.fineTuning?.stage))void brain.update(state);training?.tick(dt);stepResident(state,dt,now);void mediaService.update(state);}catch(e){console.error('Resident simulation failed:',e.message);}},100);
   const persistence=setInterval(()=>{save();if(cloudReady)void writeCloud();else void loadCloud();const now=Date.now();for(const [key,until] of sessions)if(until<now)sessions.delete(key);for(const [key,limit] of attempts)if(limit.until<now)attempts.delete(key);},5000);
   const ready=loadCloud();
   return {http,get state(){return state;},ready,storageStatus,close:async()=>{brain.stop();clearInterval(tick);clearInterval(persistence);await ready;if(cloudWrite)await cloudWrite;save();await writeCloud();await new Promise(resolve=>http.close(resolve));}};

@@ -17,7 +17,9 @@
     "groq:check": "node scripts/check-groq.js",
     "ai:mac": "node scripts/mac-ai-worker.js",
     "ai:local:check": "node scripts/check-local-ai.js",
-    "training:preview": "npm run build && node scripts/preview-training.js"
+    "training:preview": "npm run build && node scripts/preview-training.js",
+    "training:auto": "node scripts/auto-fine-tune.js --watch --collect",
+    "training:prepare": "node scripts/auto-fine-tune.js"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",
