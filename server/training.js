@@ -1,3 +1,4 @@
+import {applyTrainingAction} from './training-actions.js';
 import {createResident,stepResident,applyResidentDecision,residentRoute} from './resident.js';
 import {ensureMind} from './resident-mind.js';
 import {validateDecision} from './decision-contract.js';
@@ -14,7 +15,7 @@ const evidence=()=>({parked:false,collected:false,seatedEating:false,hungerReduc
 export function observeTraining(run,now){
  const s=run.state,p=s.player,e=run.evidence;
  e.parked ||=p.mode==='walking'&&!!p.bike;
- e.collected ||=!!s.mealOrder?.paid||s.lastCommand?.action==='eat'&&s.lastCommand.status==='completed';
+ e.collected ||=!!p.carriedMeal||s.lastCommand?.action==='eat'&&s.lastCommand.status==='completed';
  e.seatedEating ||=p.mode==='walking'&&p.interactionPose?.kind==='sit'&&p.consuming==='eat';
  e.hungerReduced ||=run.baseline.hunger-s.needs.hunger>=10;
  e.finishedMeal ||=e.seatedEating&&s.lastCommand?.action==='eat'&&s.lastCommand.status==='completed'&&!s.mealOrder;
@@ -36,7 +37,8 @@ function expectedBlocker(run){
  if(!s.objects.some(o=>o.affordances.includes('eat')))return 'food';
  if(!s.objects.some(o=>o.affordances.includes('sit')))return 'chair';
  if(run.baseline.money<4)return 'money';
- if(!residentRoute({x:32,z:9},{x:35,z:12},s.obstacles,1).length)return 'route';
+ const counter=s.objects.find(o=>o.affordances.includes('eat'));
+ if(!residentRoute(s.player.interactionPose?.exit||s.player,counter.approach,s.obstacles,1).length)return 'route';
  return null;
 }
 export function trainingVerdict(run){
@@ -48,28 +50,28 @@ export function trainingVerdict(run){
  if(diagnosed&&truthful&&!run.evidence.seatedEating)return {status:'correctly_blocked',taskCompleted:false,truthful,blocker,reason:'The model correctly explained the missing '+blocker+' requirement; no consumption was fabricated.'};
  return {status:'failed',taskCompleted:false,truthful,blocker,reason:!truthful?'The model made an unsupported completion claim.':blocker?'The '+blocker+' requirement was not correctly explained.':'Not verified: '+Object.entries(run.evidence).filter(([,done])=>!done).map(([key])=>({parked:'bicycle parked',collected:'meal collected',seatedEating:'eating while seated',hungerReduced:'hunger relief',finishedMeal:'meal completed'})[key]).join(', ')+'.'};
 }
-const report=(run,at=Date.now())=>({id:run.id,scenario:run.scenario,scene:run.scene,prompt:run.prompt,promptIndex:run.promptIndex,mode:run.mode,status:run.status,startedAt:run.startedAt,endedAt:run.endedAt,elapsed:run.elapsed,wallSeconds:Math.round(((run.endedAt||at)-run.startedAt)/1000),evidence:run.evidence,verdict:run.verdict,decisions:run.decisions,trace:run.trace,baseline:run.baseline,final:{hunger:run.state.needs.hunger,money:run.state.wallet,mode:run.state.player.mode},provider:run.state.ai.provider,model:run.state.ai.model,usage:run.state.ai.telemetry?{input:run.state.ai.telemetry.input,output:run.state.ai.telemetry.output,total:run.state.ai.telemetry.total}:null,lesson:run.verdict?.reason});
+const report=(run,at=Date.now())=>({protocol:'atomic-v1',id:run.id,scenario:run.scenario,scene:run.scene,prompt:run.prompt,promptIndex:run.promptIndex,mode:run.mode,status:run.status,startedAt:run.startedAt,endedAt:run.endedAt,elapsed:run.elapsed,wallSeconds:Math.round(((run.endedAt||at)-run.startedAt)/1000),evidence:run.evidence,verdict:run.verdict,decisions:run.decisions,trace:run.trace,baseline:run.baseline,final:{hunger:run.state.needs.hunger,money:run.state.wallet,mode:run.state.player.mode},provider:run.state.ai.provider,model:run.state.ai.model,usage:run.state.ai.telemetry?{input:run.state.ai.telemetry.input,output:run.state.ai.telemetry.output,total:run.state.ai.telemetry.total}:null,lesson:run.verdict?.reason});
 export function createTrainingService({getState,decide,now=()=>Date.now()}){
  let active=null,pending=null;
  const db=()=>{const s=getState();s.training??={version:1,reports:[],skills:[]};return s.training;};
  function finish(verdict){if(!active||terminal.has(active.status))return;delete active.waitReason;active.verdict=verdict;active.status=verdict.status;active.endedAt=now();db().reports.push(report(active));db().reports=db().reports.slice(-30);delete db().inProgress;promote();}
  function promote(){
-  const reports=db().reports.filter(r=>r.mode==='planner'),wins=reports.filter(r=>r.status==='passed'),variants=new Set(wins.map(r=>r.prompt.trim().toLowerCase()));
+  const reports=db().reports.filter(r=>r.mode==='planner'&&r.protocol==='atomic-v1'),wins=reports.filter(r=>r.status==='passed'),variants=new Set(wins.map(r=>r.prompt.trim().toLowerCase()));
   const safety=['no_chair','no_food','no_money','blocked_route'].every(id=>reports.some(r=>r.scenario===id&&r.status==='correctly_blocked'));
-  if(variants.size<3||!safety||db().skills.some(s=>s.id==='seated-meal-v1'))return;
-  const example=wins.at(-1);db().skills.push({id:'seated-meal-v1',name:'Park, collect food, sit and eat',verifiedAt:now(),source:'training state verification',trials:wins.length,safetyCases:4,steps:example.decisions.filter(d=>d.executed).map(d=>d.command),evidenceIds:[...wins.map(r=>r.id),...reports.filter(r=>r.status==='correctly_blocked').map(r=>r.id)]});
+  if(variants.size<3||!safety||db().skills.some(s=>s.id==='seated-meal-atomic-v1'))return;
+  const example=wins.at(-1);db().skills.push({id:'seated-meal-atomic-v1',name:'Park, collect food, sit and eat',verifiedAt:now(),source:'training state verification',trials:wins.length,safetyCases:4,protocol:'atomic-v1',steps:example.decisions.filter(d=>d.executed).map(d=>d.command),evidenceIds:[...wins.map(r=>r.id),...reports.filter(r=>r.status==='correctly_blocked').map(r=>r.id)]});
  }
- function feedback(run,action,message){const s=run.state;s.executionFeedback??=[];s.executionFeedback.push({action,status:'blocked',message,at:now(),source:'training executor'});s.executionFeedback=s.executionFeedback.slice(-10);s.thought=message;}
+ function feedback(run,action,message,status='blocked'){const s=run.state;s.executionFeedback??=[];s.executionFeedback.push({action,status,message,at:now(),source:'training executor'});s.executionFeedback=s.executionFeedback.slice(-10);s.thought=message;}
  async function plan(run){
   if(pending||run!==active)return;run.status='thinking';db().inProgress={id:run.id,scenario:run.scenario,prompt:run.prompt,promptIndex:run.promptIndex,mode:run.mode,startedAt:run.startedAt};
   const token=run.id;pending=token;delete run.state.trainingProposal;
   try{
-   const proposal=await decide(run.state,'Practice task (isolated scene): '+run.prompt+' Choose and execute your next command. Command examples: eat with destination=cafe and parameters.value=seated runs the supported collect/pay/sit/eat sequence, including dismounting. dismount with destination=here only parks the bike. visit only travels/observes and never collects or eats; verb=eat or intention text does not change action=visit. Check actual food, chair, money and route availability before acting. Use only the provided practice objects. Explain actual missing requirements. A visit alone does not eat. Do not claim completed actions before state evidence confirms them.');const d=validateDecision(proposal);
+   const proposal=await decide(run.state,'Practice task (isolated scene): '+run.prompt+' Choose ONE atomic action using current state and the last result. Check whether it advanced the user goal; revise failed actions. Explain actual missing requirements. Do not claim completion before observation confirms it.');const d=validateDecision(proposal);
    if(!active||active.id!==token||terminal.has(run.status))return;
-   const truthful=truthfulReply(d.reply,run.state),record={at:now(),reply:d.reply,truthful,before:{position:{x:run.state.player.x,z:run.state.player.z},mode:run.state.player.mode,money:run.state.wallet,hunger:run.state.needs.hunger,objects:run.state.objects},command:d,...(proposal.plannerTask?{plannerTask:proposal.plannerTask}:{}),executed:false};run.decisions.push(record);
+   const truthful=truthfulReply(d.reply,run.state),record={at:now(),reply:d.reply,truthful,before:{position:{x:run.state.player.x,z:run.state.player.z},mode:run.state.player.mode,money:run.state.wallet,hunger:run.state.needs.hunger,inventory:{paid:!!run.state.mealOrder?.paid,carried:!!run.state.player.carriedMeal},pose:run.state.player.interactionPose?.kind||null,objects:run.state.objects},command:d,...(proposal.plannerTask?{plannerTask:proposal.plannerTask}:{}),executed:false};run.decisions.push(record);
    if(!TRAINING_ACTIONS.includes(d.action)||d.nextSteps?.some(x=>!TRAINING_ACTIONS.includes(x.action)))record.error='This command is outside the first training task.';
    else if([d,...(d.nextSteps||[])].some(x=>x.destination!=='here'&&x.destination!=='cafe'))record.error='Only the practice café destination is available.';
-   else{const result=applyResidentDecision(run.state,d,now());record.executed=!!result.started;record.error=result.error||null;record.feedback=result.message||result.error;run.queue=d.nextSteps||[];observeTraining(run,now());}
+   else{const result=applyTrainingAction(run.state,d,now());record.executed=!!result.started;record.error=result.error||null;record.feedback=result.message||result.error;run.queue=d.nextSteps||[];observeTraining(run,now());}
    run.status='running';delete run.waitReason;run.state.ai.connected=true;
    if(!truthful)return finish(trainingVerdict(run));
    if(d.action==='stop')return finish(trainingVerdict(run));
@@ -84,14 +86,14 @@ export function createTrainingService({getState,decide,now=()=>Date.now()}){
  return {
   get busy(){return !!pending||!!active&&!terminal.has(active.status);},
   export(){return {version:1,reports:db().reports,skills:db().skills};},
-  snapshot(){return {busy:this.busy,modelBusy:!!pending,scenarios:TRAINING_SCENARIOS,prompts:TRAINING_PROMPTS,reports:db().reports.map(({trace,scene,...summary})=>summary),skills:db().skills,active:active?{...report(active,now()),trace:undefined,state:{player:active.state.player,needs:active.state.needs,wallet:active.state.wallet,thought:active.state.thought,activity:active.state.activity,ai:{status:active.state.ai.status,provider:active.state.ai.provider,model:active.state.ai.model,error:active.state.ai.error}},scene:trainingScene(active.scenario),waitReason:active.waitReason}:null,scene:trainingScene('normal')};},
+  snapshot(){return {busy:this.busy,modelBusy:!!pending,scenarios:TRAINING_SCENARIOS,prompts:TRAINING_PROMPTS,reports:db().reports.map(({trace,scene,...summary})=>summary),skills:db().skills.filter(s=>s.id==='seated-meal-atomic-v1'),active:active?{...report(active,now()),trace:undefined,state:{player:active.state.player,needs:active.state.needs,wallet:active.state.wallet,thought:active.state.thought,activity:active.state.activity,ai:{status:active.state.ai.status,provider:active.state.ai.provider,model:active.state.ai.model,error:active.state.ai.error}},scene:trainingScene(active.scenario),waitReason:active.waitReason}:null,scene:trainingScene('normal')};},
   start({scenario='normal',promptIndex=0,prompt,mode='planner'}={}){
    if(this.busy)throw Error('A trial is already running. Cancel it before starting another.');
    if(!Number.isInteger(promptIndex)||promptIndex<0||promptIndex>=TRAINING_PROMPTS.length)throw Error('Invalid prompt variant.');
    if(mode!=='planner'&&mode!=='skill')throw Error('Invalid training mode.');
    if(prompt!==undefined&&(typeof prompt!=='string'||!prompt.trim()||prompt.length>400))throw Error('Write a task of 1–400 characters.');
-   const skill=db().skills.find(s=>s.id==='seated-meal-v1');if(mode==='skill'&&!skill)throw Error('No verified skill yet. Pass three wording variants and all four missing-requirement cases first.');
-   const state=createTrainingResident(scenario);state.ai.goal=prompt?.trim()||TRAINING_PROMPTS[promptIndex];state.player.look=structuredClone(getState().player.look||{});if(getState().player.paintColor!==undefined)state.player.paintColor=getState().player.paintColor;state.training={skills:structuredClone(db().skills)};state.trainingLessons=db().reports.filter(r=>['passed','failed','correctly_blocked'].includes(r.status)).slice(-3).map(r=>({scenario:r.scenario,result:r.status,lesson:r.lesson}));
+   const skill=db().skills.find(s=>s.id==='seated-meal-atomic-v1');if(mode==='skill'&&!skill)throw Error('No verified skill yet. Pass three wording variants and all four missing-requirement cases first.');
+   const state=createTrainingResident(scenario);state.ai.goal=prompt?.trim()||TRAINING_PROMPTS[promptIndex];state.player.look=structuredClone(getState().player.look||{});if(getState().player.paintColor!==undefined)state.player.paintColor=getState().player.paintColor;state.training={skills:structuredClone(db().skills)};state.trainingLessons=db().reports.filter(r=>['passed','failed','correctly_blocked'].includes(r.status)&&r.protocol==='atomic-v1').slice(-3).map(r=>({scenario:r.scenario,result:r.status,lesson:r.lesson}));
    db().nextId=(db().nextId||0)+1;active={id:'trial-'+now()+'-'+db().nextId,scenario,scene:trainingScene(scenario),promptIndex,prompt:prompt?.trim()||TRAINING_PROMPTS[promptIndex],mode,status:'running',startedAt:now(),elapsed:0,state,evidence:evidence(),baseline:{hunger:state.needs.hunger,money:state.wallet},trace:[],decisions:[],queue:mode==='skill'?structuredClone(skill.steps):[]};
    db().inProgress={id:active.id,scenario,prompt:active.prompt,promptIndex,mode,startedAt:active.startedAt};observeTraining(active,now());return this.snapshot();
   },cancel(){if(active&&!terminal.has(active.status))finish({status:'cancelled',taskCompleted:false,truthful:null,reason:'Trial cancelled. No success or skill awarded.'});return this.snapshot();},
@@ -105,9 +107,10 @@ export function createTrainingService({getState,decide,now=()=>Date.now()}){
      if(w.stalled>=3){const message='No task progress: visit produced no movement for three seconds and did not collect or eat food. Choose an executable next action; eat with parameters.value=seated requests a seated meal. Explain a real missing requirement if blocked.';w.record.feedback=message;w.record.noProgress=true;feedback(run,'visit',message);s.route=[];s.rest=0;s.activity=null;s.activityOnArrival=null;s.player.moving=false;s.player.speed=0;run.queue=[];delete run.watch;}
     }
     if(run.evidence.finishedMeal)return finish(trainingVerdict(run));if(run.elapsed>=90)return finish(trainingVerdict(run));return;}
-   if(run.decisions.length>=5)return finish(trainingVerdict(run));
+   if(run.watch){const record=run.watch.record;record.after={position:{x:s.player.x,z:s.player.z},mode:s.player.mode,pose:s.player.interactionPose?.kind||null,money:s.wallet,hunger:s.needs.hunger,carriedMeal:!!s.player.carriedMeal};feedback(run,record.command.action,record.error||s.lastCommand?.message||record.feedback||'Action finished; inspect current state.',record.error?'blocked':'completed');delete run.watch;}
+   if(run.decisions.length>=16)return finish(trainingVerdict(run));
    if(run.queue.length){const command=run.queue.shift();const c=command.condition;if(c&&c.need!=='none'&&(s.needs[c.need]<c.min||s.needs[c.need]>c.max)){run.queue=[];return;}
-    const result=applyResidentDecision(s,command,now());observeTraining(run,now());run.decisions.push({at:now(),reply:'Executing the next authored step.',truthful:true,command,executed:!!result.started,error:result.error||null,feedback:result.message||result.error});if(result.error){run.queue=[];feedback(run,command.action,result.error);}else run.watch={record:run.decisions.at(-1),x:s.player.x,z:s.player.z,stalled:0};return;}
+    const result=applyTrainingAction(s,command,now());observeTraining(run,now());run.decisions.push({at:now(),reply:'Executing the next authored step.',truthful:true,command,executed:!!result.started,error:result.error||null,feedback:result.message||result.error});if(result.error){run.queue=[];feedback(run,command.action,result.error);}else run.watch={record:run.decisions.at(-1),x:s.player.x,z:s.player.z,stalled:0};return;}
    if(run.mode==='skill')return finish(trainingVerdict(run));void plan(run);
   }
  };
