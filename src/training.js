@@ -37,7 +37,7 @@ export async function mountTraining(){
   if(run&&(selected===run.id||!selected))details(run);
  }
  async function request(body){busy=true;$('tr-message').textContent='';try{const r=await fetch('/api/resident/training',{method:body?'POST':'GET',headers:body?{'Content-Type':'application/json'}:undefined,body:body?JSON.stringify(body):undefined,cache:'no-store'});if(r.status===401){location.reload();return;}const value=await r.json();if(!r.ok)throw Error(value.error||'Unable to reach training service.');render(value);}catch(error){$('tr-message').textContent=error.message;}finally{busy=false;if(data)render(data);}}
- $('tr-train-task').onclick=()=>request({action:'automation',enabled:true,taskId:$('tr-task').value});
+ $('tr-train-task').onclick=()=>request({action:'automation',enabled:true,newSession:true,taskId:$('tr-task').value});
  $('tr-auto-toggle').onclick=()=>request({action:'automation',enabled:!data?.automation?.enabled,taskId:$('tr-task').value});
  $('tr-start').onclick=()=>request({action:'start',taskId:$('tr-task').value,scenario:$('tr-scenario').value,promptIndex:Number($('tr-variant').value),prompt:$('tr-prompt').value,mode:$('tr-mode').value});$('tr-cancel').onclick=()=>request({action:'cancel'});
  $('tr-task').onchange=()=>{selectTask($('tr-task').value);preview=true;scene.setScene(trainingScene($('tr-scenario').value));};
