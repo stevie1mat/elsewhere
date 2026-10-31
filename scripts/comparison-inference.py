@@ -11,7 +11,7 @@ for line in sys.stdin:
         request = json.loads(line)
         mx.random.seed(request['seed'])
         with contextlib.redirect_stdout(sys.stderr):
-            output = generate(model, tokenizer, prompt=request['prompt'], max_tokens=256, sampler=make_sampler(temp=0), verbose=False)
+            output = generate(model, tokenizer, prompt=request['prompt'], max_tokens=request.get("max_tokens", 256), sampler=make_sampler(temp=0), verbose=False)
         print(json.dumps({'text': output}), flush=True)
         mx.clear_cache()
     except Exception as error:

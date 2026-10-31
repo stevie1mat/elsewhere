@@ -15,16 +15,17 @@ export function mountTrainingScene(host,onStatus=()=>{}){
  let props=null,rider=null,current=null,motion=null,lastTime=performance.now(),disposed=false;
  const mats={teak:new T.MeshStandardMaterial({color:0x98704b,roughness:.82}),dark:new T.MeshStandardMaterial({color:0x30484a,roughness:.6}),trim:new T.MeshStandardMaterial({color:0xe4d0ac})};
  function setScene(config){
+  renderer.domElement.setAttribute('aria-label',config.id.startsWith('bike_')?'Bicycle practice scene with a resident and any available parked bicycle':'Meal practice scene with a resident, bicycle, chairs, table and food service');
   if(props){props.removeFromParent();props.traverse(o=>{if(o.isMesh)o.geometry.dispose();});}
   props=new T.Group();scene.add(props);
   const mesh=(geometry,material,x,y,z)=>{const o=new T.Mesh(geometry,material);o.position.set(x,y,z);o.castShadow=true;o.receiveShadow=true;props.add(o);return o;};
   const w={m:mats,interactionObjects:[],obstacle(){},box:(a,h,b,x,y,z,m)=>mesh(new T.BoxGeometry(a,h,b),m,x,y,z),cylinder:(a,b,h,x,y,z,m,n=12)=>mesh(new T.CylinderGeometry(a,b,h,n),m,x,y,z)};
-  buildCafeTable(w,config.table.x,config.table.z,{chairs:config.table.chairs});
+  if(config.table)buildCafeTable(w,config.table.x,config.table.z,{chairs:config.table.chairs});
   const service=config.objects.find(o=>o.id==='cafe-meal');
   if(service){const x=service.x+1.2,z=service.z;w.box(.65,.06,.65,x,.85,z,mats.teak);w.box(.12,.85,.12,x,.425,z,mats.dark);const bowl=mesh(new T.SphereGeometry(.18,12,8,0,Math.PI*2,0,Math.PI/2),mats.trim,x,1,z);bowl.rotation.x=Math.PI;}
-  if(config.id==='blocked_route'){const material=new T.MeshStandardMaterial({color:0xca6a54,roughness:.8});for(const o of config.obstacles.filter(o=>o.minX===33.9))w.box(o.maxX-o.minX,1.2,o.maxZ-o.minZ,(o.minX+o.maxX)/2,.6,(o.minZ+o.maxZ)/2,material);}
+  if(['blocked_route','bike_blocked'].includes(config.id)){const material=new T.MeshStandardMaterial({color:0xca6a54,roughness:.8});for(const o of config.obstacles.filter(o=>o.minX===33.9||o.minX===33.7))w.box(o.maxX-o.minX,1.2,o.maxZ-o.minZ,(o.minX+o.maxX)/2,.6,(o.minZ+o.maxZ)/2,material);}
   for(const x of [26,40])w.box(.12,.15,16,x,0,13,mats.trim);for(const z of [5,21])w.box(14,.15,.12,33,0,z,mats.trim);
-  current={...config.start,y:0,mode:'cycling',speed:0,walked:0,grounded:true,bike:null};motion=new ResidentMotion(current,performance.now());
+  current={...config.start,y:0,mode:config.start.mode||'cycling',speed:0,walked:0,grounded:true,bike:config.bike||null};motion=new ResidentMotion(current,performance.now());
  }
  async function avatar(){
   onStatus('Loading existing character…');const gltf=await new GLTFLoader().loadAsync('/assets/people/traveler-man.glb');

@@ -1,3 +1,4 @@
+import {checkpointHash} from './model-deployment.js';
 import {spawn,execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {createInterface} from 'node:readline';
@@ -12,6 +13,7 @@ import {readMemory,memoryIssue} from './mac-memory.js';
 import {stopMacWorkers} from './stop-mac-workers.js';
 export async function runModelComparison({root,job,model,adapterPath,api,signal}){
  if(!model||!adapterPath||!existsSync(resolve(adapterPath,'adapters.safetensors')))throw Error('The candidate checkpoint is not available on this Mac.');
+ if(!job.checkpointHash||checkpointHash(adapterPath)!==job.checkpointHash)throw Error('Adapter checkpoint differs from the comparison request.');
  const baseline=readMemory();if(baseline.pressure!==1)throw Error('Mac memory pressure is elevated. Comparison deferred.');
  const cases=comparisonCases(),rows=[];let child,guard,pending,cancelled=false;const dir=resolve(root,'.training/comparisons',job.id);mkdirSync(dir,{recursive:true});
  const abort=()=>{cancelled=true;child?.kill('SIGTERM');};signal?.addEventListener('abort',abort,{once:true});
@@ -29,14 +31,14 @@ export async function runModelComparison({root,job,model,adapterPath,api,signal}
    for(const test of cases){
     if(cancelled)throw Error('Comparison stopped.');let simTime=0;const live=createResident(0);const service=createTrainingService({getState:()=>live,now:()=>simTime,prepareState:s=>{
      // Both arms get identical held-out shifts and zero teacher/skill memory.
-     for(const o of s.objects){o.x+=test.offset.x;o.z+=test.offset.z;o.approach={x:o.approach.x+test.offset.x,z:o.approach.z+test.offset.z};}
+     if(s.player.bike){s.player.bike.x+=test.offset.x;s.player.bike.z+=test.offset.z;}for(const o of s.objects){o.x+=test.offset.x;o.z+=test.offset.z;o.approach={x:o.approach.x+test.offset.x,z:o.approach.z+test.offset.z};}
      for(const o of s.obstacles.slice(4)){o.minX+=test.offset.x;o.maxX+=test.offset.x;o.minZ+=test.offset.z;o.maxZ+=test.offset.z;}
     },decide:async(s,message)=>{s.trainingLessons=[];s.trainingExamples=[];s.training={skills:[]};s.ai.provider='MLX comparison';s.ai.model=arm;const prompt=trainingPrompt(trainingInput(s),message);let timer;
      const text=await new Promise((ok,fail)=>{timer=setTimeout(()=>{pending=null;fail(Error('Comparison inference timed out.'));child?.kill('SIGTERM');},120000);pending={ok,fail};child.stdin.write(JSON.stringify({prompt,seed:test.repeat})+'\n');}).finally(()=>clearTimeout(timer));
      try{return trainingChoiceDecision(JSON.parse(text.split('<|im_end|>')[0].trim()));}catch(error){error.kind='decision';throw error;}
-    }});service.start({scenario:test.scenario,prompt:test.prompt});
+    }});service.start({taskId:test.taskId,scenario:test.scenario,prompt:test.prompt});
     for(let ticks=0;service.busy;){if(cancelled)throw Error('Comparison stopped.');if(service.snapshot().modelBusy){await new Promise(r=>setTimeout(r,25));continue;}if(++ticks>20000)throw Error('Evaluation simulation exceeded its time limit.');simTime+=100;service.tick(.1);await new Promise(r=>setImmediate(r));}
-    const report=service.snapshot().active;if(!['passed','failed','correctly_blocked','interrupted'].includes(report.status))throw Error('Evaluation trial did not finish.');const row={arm,caseId:test.id,scenario:test.scenario,prompt:test.prompt,repeat:test.repeat,...comparisonMetrics(report)};rows.push(row);writeFileSync(resolve(dir,'results.json'),JSON.stringify({id:job.id,rows},null,2));await update('running',`${rows.length}/${cases.length*2} trials complete. Testing ${arm}.`);
+    const report=service.snapshot().active;if(!['passed','failed','correctly_blocked','interrupted'].includes(report.status))throw Error('Evaluation trial did not finish.');const row={arm,caseId:test.id,taskId:test.taskId,scenario:test.scenario,prompt:test.prompt,repeat:test.repeat,...comparisonMetrics(report)};rows.push(row);writeFileSync(resolve(dir,'results.json'),JSON.stringify({id:job.id,rows},null,2));await update('running',`${rows.length}/${cases.length*2} trials complete. Testing ${arm}.`);
    }
    clearInterval(guard);child.stdin.end();await new Promise(ok=>{const current=child;const timer=setTimeout(()=>{current.kill('SIGTERM');ok();},5000);current.once('exit',()=>{clearTimeout(timer);ok();});});child=null;
   }

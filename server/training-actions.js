@@ -10,6 +10,7 @@ export function applyTrainingAction(s,d,now){
  if(d.nextSteps?.length)return {error:'Choose one action at a time; queued plans are disabled during discovery.'};
  if(d.action==='walk'&&p.mode==='walking'){const target=(s.objects||[]).find(o=>o.id===d.objectId);if(target&&Math.hypot(p.x-target.approach.x,p.z-target.approach.z)<=.8)return {error:'No progress: already at '+target.name+'. No movement occurred. Choose a different action using current inventory and object affordances.'};}
  if(d.action==='walk'&&p.mode==='cycling')return {error:'Walking requires being on foot. No movement occurred.'};
+ if(d.action==='mount_bicycle'){if(!p.bike)return {error:'No parked bicycle is available.'};if(p.mode!=='walking')return {error:'Already on the bicycle.'};if(Math.hypot(p.x-p.bike.x,p.z-p.bike.z)>1.1)return {error:'The parked bicycle is out of reach. No mounting occurred.'};}
  if(d.action==='buy'){
   if(!['purchase_meal','collect_meal'].includes(value))return {error:'Only atomic purchase_meal or collect_meal is available.'};
   if(!counter)return {error:'No food service is available.'};

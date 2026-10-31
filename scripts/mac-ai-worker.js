@@ -1,4 +1,5 @@
-import {existsSync} from 'node:fs';
+import {createAdapterClient} from './adapter-client.js';
+import {existsSync,readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {randomUUID} from 'node:crypto';
 import {execFile} from 'node:child_process';
@@ -10,7 +11,8 @@ const env=fileURLToPath(new URL('../.env',import.meta.url));
 if(existsSync(env))process.loadEnvFile(env);
 const server=new URL(process.env.PRIVATE_SERVER_URL||'https://elsewhere-ocqx.onrender.com');
 if(server.protocol!=='https:'&&!['127.0.0.1','localhost'].includes(server.hostname))throw Error('Hosted worker connection requires HTTPS.');
-const client=createLocalClient(),workerId=randomUUID();
+const root=fileURLToPath(new URL('../',import.meta.url)),manifestPath=fileURLToPath(new URL('../.training/active-adapter.json',import.meta.url)),deploymentManifest=existsSync(manifestPath)?JSON.parse(readFileSync(manifestPath,'utf8')):null,adapterManifest=deploymentManifest?.active==='candidate'?deploymentManifest:null;
+const client=adapterManifest?createAdapterClient({root,manifest:adapterManifest}):createLocalClient(),workerId=randomUUID();
 const localUrl=(process.env.LOCAL_AI_URL||'http://127.0.0.1:1234/v1').replace(/\/$/,'');
 const lms='/Applications/LM Studio.app/Contents/Resources/app/.webpack/lms';
 const run=promisify(execFile),pause=ms=>new Promise(r=>setTimeout(r,ms));
@@ -94,10 +96,10 @@ try{
   await checkMemory();if(recovery.waiting||generation.signal.aborted){await pause(5000);continue;}
   if(needsCleanup)await releaseModel();
   if(!cookie)await login();
-  if(!connected){await post({op:'connect',model:client.model});connected=true;console.log('Connected to hosted resident using Mac LM Studio. Manual pause state preserved.');}
+  if(!connected){await post({op:'connect',model:adapterManifest?'resident-local + LoRA '+adapterManifest.candidateId.slice(0,12):client.model,deploymentId:deploymentManifest?.requestId,adapterId:adapterManifest?.candidateId});connected=true;console.log('Connected to hosted resident using Mac LM Studio. Manual pause state preserved.');}
   const {job}=await post({op:'poll'});if(stopped)break;if(!job){await pause(1500);continue;}
   try{
-   await ensureModel();console.log('Generating local decision…');
+   if(adapterManifest){await checkMemory();if(recovery.waiting)throw Error('Waiting for Mac memory to recover.');await releaseModel();}else await ensureModel();console.log('Generating local decision…');
    const decision=await client.complete(job.context,job.message,generation.signal);
    if(recovery.waiting||generation.signal.aborted||stopped)continue;
    await post({op:'result',id:job.id,decision,usage:client.lastAttempt?.usage,sent:client.lastAttempt?.sent});

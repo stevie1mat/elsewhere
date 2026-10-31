@@ -6,7 +6,7 @@ export function buildTrainingDataset(examples,{minExamples=24,minTrials=3}={}){
  for(const e of examples||[]){
   if(!e.modelInput||!e.request||!e.trialId||!e.result||!['interactive_teacher','automatic_teacher','teacher_reviewed_student'].includes(e.source))continue;
   try{trainingChoiceDecision(e.choice);}catch{continue;}
-  if(['no_chair','no_food','no_money','blocked_route'].includes(e.scenario)&&e.choice.task!=='stop')continue;
+  if(['no_chair','no_food','no_money','blocked_route','bike_missing','bike_blocked'].includes(e.scenario)&&e.choice.task!=='stop')continue;
   const row={prompt:trainingPrompt(e.modelInput,e.request),completion:JSON.stringify(e.choice)+'<|im_end|>'},key=createHash('sha256').update(JSON.stringify(row)).digest('hex');
   if(!seen.has(key)){rows.push({...row,trialId:e.trialId,scenario:e.scenario});seen.add(key);}
  }
