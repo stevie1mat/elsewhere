@@ -48,3 +48,6 @@ test('moved furniture uses current registry targets, not memorized coordinates',
 test('blocked route cannot be bypassed by purchasing from a distance',()=>{
  const s=createTrainingResident('blocked_route');applyTrainingAction(s,command('dismount'),1000);assert.ok(applyTrainingAction(s,command('walk','cafe-meal'),1000).error);assert.ok(applyTrainingAction(s,command('purchase_meal'),1000).error);assert.equal(s.wallet,20);assert.equal(s.player.carriedMeal,undefined);
 });
+test('walking to an already reached target reports no progress instead of another successful move',()=>{
+ const s=createTrainingResident('normal');applyTrainingAction(s,command('dismount'),1000);Object.assign(s.player,{x:35,z:12});assert.match(applyTrainingAction(s,command('walk','cafe-meal'),1000).error,/No progress: already at/);assert.equal(s.wallet,20);assert.equal(s.player.carriedMeal,undefined);
+});

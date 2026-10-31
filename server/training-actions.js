@@ -8,6 +8,7 @@ export function applyTrainingAction(s,d,now){
  const counter=(s.objects||[]).find(o=>o.affordances.includes('eat'));
  const near=o=>o&&Math.hypot(p.x-o.approach.x,p.z-o.approach.z)<=1.1;
  if(d.nextSteps?.length)return {error:'Choose one action at a time; queued plans are disabled during discovery.'};
+ if(d.action==='walk'&&p.mode==='walking'){const target=(s.objects||[]).find(o=>o.id===d.objectId);if(target&&Math.hypot(p.x-target.approach.x,p.z-target.approach.z)<=.8)return {error:'No progress: already at '+target.name+'. No movement occurred. Choose a different action using current inventory and object affordances.'};}
  if(d.action==='walk'&&p.mode==='cycling')return {error:'Walking requires being on foot. No movement occurred.'};
  if(d.action==='buy'){
   if(!['purchase_meal','collect_meal'].includes(value))return {error:'Only atomic purchase_meal or collect_meal is available.'};
