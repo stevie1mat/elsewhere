@@ -2,7 +2,7 @@ import {checkpointHash} from './model-deployment.js';
 import {spawn,execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {createInterface} from 'node:readline';
-import {existsSync,mkdirSync,writeFileSync,readFileSync} from 'node:fs';
+import {existsSync,mkdirSync,writeFileSync,readFileSync,appendFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {createTrainingService} from '../server/training.js';
 import {createResident} from '../server/resident.js';
@@ -35,8 +35,9 @@ export async function runModelComparison({root,job,model,adapterPath,api,signal}
      if(s.player.bike){s.player.bike.x+=test.offset.x;s.player.bike.z+=test.offset.z;}for(const o of s.objects){o.x+=test.offset.x;o.z+=test.offset.z;o.approach={x:o.approach.x+test.offset.x,z:o.approach.z+test.offset.z};}
      for(const o of s.obstacles.slice(4)){o.minX+=test.offset.x;o.maxX+=test.offset.x;o.minZ+=test.offset.z;o.maxZ+=test.offset.z;}
     },decide:async(s,message)=>{s.trainingLessons=[];s.trainingExamples=[];s.training={skills:[]};s.ai.provider='MLX comparison';s.ai.model=arm;const prompt=trainingPrompt(trainingInput(s),message);let timer;
-     const text=await new Promise((ok,fail)=>{timer=setTimeout(()=>{pending=null;fail(Error('Comparison inference timed out.'));child?.kill('SIGTERM');},120000);pending={ok,fail};child.stdin.write(JSON.stringify({prompt,seed:test.repeat})+'\n');}).finally(()=>clearTimeout(timer));
-     try{return trainingChoiceDecision(JSON.parse(text.split('<|im_end|>')[0].trim()));}catch(error){error.kind='decision';throw error;}
+     const text=await new Promise((ok,fail)=>{timer=setTimeout(()=>{pending=null;fail(Error('Comparison inference timed out.'));child?.kill('SIGTERM');},120000);pending={ok,fail};child.stdin.write(JSON.stringify({prompt,seed:test.repeat,max_tokens:512})+'\n');}).finally(()=>clearTimeout(timer));
+     const response={arm,caseId:test.id,prompt,text};
+     try{const decision=trainingChoiceDecision(JSON.parse(text.split('<|im_end|>')[0].trim()));response.valid=true;return decision;}catch(error){response.valid=false;response.error=error.message;error.kind='decision';throw error;}finally{const path=resolve(dir,'responses.jsonl');appendFileSync(path,JSON.stringify(response)+'\n');}
     }});service.start({taskId:test.taskId,scenario:test.scenario,prompt:test.prompt});
     for(let ticks=0;service.busy;){if(cancelled)throw Error('Comparison stopped.');if(service.snapshot().modelBusy){await new Promise(r=>setTimeout(r,25));continue;}if(++ticks>20000)throw Error('Evaluation simulation exceeded its time limit.');simTime+=100;service.tick(.1);await new Promise(r=>setImmediate(r));}
     const report=service.snapshot().active;if(!['passed','failed','correctly_blocked','interrupted'].includes(report.status))throw Error('Evaluation trial did not finish.');const row={arm,caseId:test.id,taskId:test.taskId,scenario:test.scenario,prompt:test.prompt,repeat:test.repeat,...comparisonMetrics(report)};rows.push(row);writeFileSync(resolve(dir,'results.json'),JSON.stringify({id:job.id,rows},null,2));await update('running',`${rows.length}/${cases.length*2} trials complete. Testing ${arm}.`);
