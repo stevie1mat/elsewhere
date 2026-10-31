@@ -33,7 +33,7 @@ Teacher mode accepts one authenticated `teacher_step` with trialId, expectedDeci
 
 Automatic coaching and adapter training
 
-Select Automatic coaching to run the local student with a separate cloud teacher (existing GROQ_API_KEY, optional TRAINING_TEACHER_MODEL). The teacher reviews proposals, corrects mistakes or cycles, and validates each action through real simulation. Teacher source, original student proposal, corrections and results remain visible. The interactive Codex chat is not the unattended teacher. Automatic sessions are capped at 12 trials; each trial at 24 decisions and 12 corrections.
+Select Automatic coaching to run the local student with a separate cloud teacher (existing GROQ_API_KEY, default openai/gpt-oss-120b, optional TRAINING_TEACHER_MODEL). The teacher reviews proposals, corrects mistakes or cycles, and validates each action through real simulation. Teacher source, original student proposal, corrections and results remain visible. The interactive Codex chat is not the unattended teacher. Automatic sessions are capped at 12 trials; each trial at 24 decisions and 12 corrections.
 
 Run `npm run training:auto` on the Mac after installing `requirements-training.txt` in `.venv-training`. Enable/resume automatic training on /training. The local daemon collects coached scenarios, retains only teacher-labelled actions from state-verified passed/correctly-blocked trials, and automatically trains a separate QLoRA adapter once there are 24 unique usable examples across at least 3 trials. Whole trials are held out for validation. Failed, fabricated and legacy examples lacking the exact model input are excluded. Reports and labels are persisted separately so the last-30-trial display does not erase the dataset.
 
