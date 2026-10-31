@@ -14,5 +14,8 @@ test('training page and API use existing authentication, route and persistence w
  const control=await fetch(base+'/api/resident/training',{method:'POST',headers:{Cookie,'Content-Type':'application/json'},body:JSON.stringify({action:'automation',enabled:true})});assert.equal((await control.json()).automation.enabled,true);
  const preparing=await fetch(base+'/api/resident/training',{method:'POST',headers:{Cookie,'Content-Type':'application/json'},body:JSON.stringify({action:'fine_tune_status',stage:'preparing',message:'Preparing test candidate.',examples:24})});assert.equal((await preparing.json()).fineTuning.activeModelUpdated,false);
  assert.equal((await fetch(base+'/api/resident/training',{method:'POST',headers:{Cookie,'Content-Type':'application/json'},body:JSON.stringify({action:'start'})})).status,409);
+ await fetch(base+'/api/resident/training',{method:'POST',headers:{Cookie,'Content-Type':'application/json'},body:JSON.stringify({action:'fine_tune_status',stage:'candidate',message:'Fixture checkpoint ready.',examples:24})});
+ const comparison=await fetch(base+'/api/resident/training',{method:'POST',headers:{Cookie,'Content-Type':'application/json'},body:JSON.stringify({action:'comparison_start'})});assert.equal(comparison.status,200);assert.equal((await comparison.json()).comparison.status,'queued');
+ const cancelled=await fetch(base+'/api/resident/training',{method:'POST',headers:{Cookie,'Content-Type':'application/json'},body:JSON.stringify({action:'comparison_cancel'})});assert.equal((await cancelled.json()).comparison.status,'cancelled');
  }finally{await app.close();}
 });
