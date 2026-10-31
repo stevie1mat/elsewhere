@@ -2,7 +2,7 @@ import {checkpointHash} from './model-deployment.js';
 import {spawn,execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {createInterface} from 'node:readline';
-import {existsSync,mkdirSync,writeFileSync} from 'node:fs';
+import {existsSync,mkdirSync,writeFileSync,readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {createTrainingService} from '../server/training.js';
 import {createResident} from '../server/resident.js';
@@ -14,6 +14,7 @@ import {stopMacWorkers} from './stop-mac-workers.js';
 export async function runModelComparison({root,job,model,adapterPath,api,signal}){
  if(!model||!adapterPath||!existsSync(resolve(adapterPath,'adapters.safetensors')))throw Error('The candidate checkpoint is not available on this Mac.');
  if(!job.checkpointHash||checkpointHash(adapterPath)!==job.checkpointHash)throw Error('Adapter checkpoint differs from the comparison request.');
+ let baselineAdapter=null;if(job.baselineCandidateId){const manifest=JSON.parse(readFileSync(resolve(root,'.training/active-adapter.json'),'utf8'));if(manifest.candidateId!==job.baselineCandidateId||checkpointHash(manifest.adapterPath)!==job.baselineCheckpointHash)throw Error('Active baseline differs from the comparison request.');baselineAdapter=manifest.adapterPath;}
  const baseline=readMemory();if(baseline.pressure!==1)throw Error('Mac memory pressure is elevated. Comparison deferred.');
  const cases=comparisonCases(),rows=[];let child,guard,pending,cancelled=false;const dir=resolve(root,'.training/comparisons',job.id);mkdirSync(dir,{recursive:true});
  const abort=()=>{cancelled=true;child?.kill('SIGTERM');};signal?.addEventListener('abort',abort,{once:true});
@@ -22,7 +23,7 @@ export async function runModelComparison({root,job,model,adapterPath,api,signal}
  try{try{const inventory=await fetch((process.env.LOCAL_AI_URL||'http://127.0.0.1:1234/v1')+'/models',{signal:AbortSignal.timeout(5000)});if(inventory.ok&&(await inventory.json()).data?.some(m=>m.id===(process.env.LOCAL_AI_MODEL||'resident-local')))await promisify(execFile)('/Applications/LM Studio.app/Contents/Resources/app/.webpack/lms',['unload',process.env.LOCAL_AI_MODEL||'resident-local'],{timeout:30000});}catch(error){if(error.code)throw error;}await update('running','Running paired trials with the same MLX runtime, no teacher and no examples.');
   for(const arm of ['original','candidate']){
    let ready;const readyPromise=new Promise((ok,fail)=>ready={ok,fail});
-   child=spawn(resolve(root,'.venv-training/bin/python'),[resolve(root,'scripts/comparison-inference.py'),model,...(arm==='candidate'?[adapterPath]:[])],{cwd:root,stdio:['pipe','pipe','pipe']});
+   child=spawn(resolve(root,'.venv-training/bin/python'),[resolve(root,'scripts/comparison-inference.py'),model,...(arm==='candidate'?[adapterPath]:baselineAdapter?[baselineAdapter]:[])],{cwd:root,stdio:['pipe','pipe','pipe']});
    child.stdin.on('error',e=>pending?.fail(e));let stderr='';child.stderr.on('data',chunk=>{stderr=(stderr+chunk.toString()).slice(-2000);});
    createInterface({input:child.stdout}).on('line',line=>{try{const value=JSON.parse(line);if(value.ready)ready.ok();else if(pending){const p=pending;pending=null;value.error?p.fail(Error(value.error)):p.ok(value.text);}}catch{pending?.fail(Error('Invalid local evaluation response.'));}});
    child.on('error',e=>{ready.fail(e);pending?.fail(e);});child.on('exit',code=>{const e=Error('Local comparison process exited '+code+'. '+stderr.slice(-200));ready.fail(e);pending?.fail(e);pending=null;});
