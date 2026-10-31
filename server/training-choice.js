@@ -6,3 +6,15 @@ export function trainingChoiceDecision(c){
  const action={purchase_meal:'buy',collect_meal:'buy',sit:'interact',inspect:'scan'}[c.task]||c.task;
  return {plannerTask:c.task,action,destination:action==='eat'?'cafe':'here',seconds:15,goal:c.task,intention:c.reply,reply:c.reply,changePlan:true,nextSteps:[],assetRequests:[],objectId:c.target,verb:c.task==='sit'?'sit':'',mediaQuery:'',parameters:{x:0,z:0,yaw:0,choice:0,value:['purchase_meal','collect_meal','eat'].includes(c.task)?c.task:''},objective:{metric:'none',direction:'increase',amount:0,interaction:'none'},successCriterion:'Check actual action result against the user goal.'};
 }
+export function availableTrainingTasks(context){
+ const body=context.commands?.body,inventory=context.trainingInventory,objects=context.trainingObjects;
+ if(!body||!inventory||!Array.isArray(objects))return TRAINING_TASKS;
+ const tasks=['inspect','stop'];
+ if(body.mode==='cycling')return ['dismount',...tasks];
+ tasks.unshift('walk');
+ const counter=objects.find(o=>o.affordances?.includes('eat'));
+ if(counter?.inReach&&!body.pose){if(!inventory.paid&&context.money>=4)tasks.unshift('purchase_meal');if(inventory.paid&&!inventory.carried)tasks.unshift('collect_meal');}
+ if(!body.pose&&objects.some(o=>o.affordances?.includes('sit')&&o.inReach))tasks.unshift('sit');
+ if(inventory.carried&&!inventory.consuming)tasks.unshift('eat');
+ return tasks;
+}
