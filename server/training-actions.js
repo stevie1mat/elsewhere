@@ -25,7 +25,7 @@ export function applyTrainingAction(s,d,now){
  if(d.action==='interact'){
   const chair=(s.objects||[]).find(o=>o.id===d.objectId&&o.affordances.includes('sit'));
   if(!chair)return {error:'No usable chair matches that target.'};
-  if(p.mode!=='walking'||!near(chair))return {error:'Chair approach is out of reach; no sitting occurred.'};
+  if(p.mode!=='walking'||!near(chair))return {error:'Chair approach is out of reach; no sitting occurred. walk with this chair target moves to its approach; sit never moves you.'};
   const r=beginInteraction(s,chair,'sit',15,now);if(r.error)return r;
   s.rest=0;s.activity=null;return result('Now seated on '+chair.name+'. No food consumed.');
  }

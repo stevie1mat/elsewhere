@@ -21,3 +21,8 @@ test('training sends a small task schema and retains correction evidence in the 
  const result=await c.complete({trainingLab:true,capabilities:['eat','dismount','scan','stop'],executionFeedback:[{message:'The previous visit did not eat.'}],trainingCommands:{eat:{parameters:{value:'seated'}}}},'Have a meal.');
  assert.deepEqual(request.response_format.json_schema.schema.properties.task.enum,['dismount','walk','purchase_meal','collect_meal','sit','eat','inspect','stop']);assert.match(request.prompt,/previous visit did not eat/);assert.match(request.prompt,/trainingCommands/);assert.equal(result.action,'eat');assert.equal(result.parameters.value,'eat');assert.equal(result.changePlan,true);assert.equal(result.objective.metric,'none');assert.equal(result.plannerTask,'eat');
 });
+test('training context keeps live reach and inventory evidence and excludes generic city action guidance',async()=>{
+ let request;const c=createLocalClient({fetchImpl:async(u,o)=>{request=JSON.parse(o.body);return Response.json({choices:[{finish_reason:'stop',text:JSON.stringify({task:'walk',target:'chair-a',reply:'I will approach the chair.'})}]});}});
+ await c.complete({trainingLab:true,trainingObjects:[{id:'chair-a',distance:5,inReach:false}],trainingInventory:{paid:true,carried:true},trainingCommands:{sit:'Sit at nearby chair approach.'},actionSupport:{eat:'Legacy combined meal sequence'},commands:{body:{mode:'walking'}},executionFeedback:[{message:'Chair out of reach.'}]},'Have lunch sitting down.');
+ assert.match(request.prompt,/inReach/);assert.match(request.prompt,/Chair out of reach/);assert.match(request.prompt,/carried/);assert.ok(!request.prompt.includes('Legacy combined meal sequence'));assert.ok(!request.prompt.includes('eat_seated'));
+});
