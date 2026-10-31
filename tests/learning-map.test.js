@@ -8,5 +8,5 @@ test('student-approved choices do not create imaginary correction links or phant
 
 test('every column explains actual example counts and can filter its supporting records',()=>{
  const e={source:'automatic_teacher',studentProposal:{task:'walk'},observation:{mode:'cycling'},choice:{task:'stop'}};
- assert.equal(explainNode('cycling',[e]).count,1);assert.match(explainNode('cycling',[e]).countExplanation,/1 recorded examples started/);assert.equal(matchesNode(e,'cycling'),true);assert.equal(matchesNode(e,'out:blocked'),true);assert.equal(matchesNode(e,'walk'),true);assert.equal(matchesNode(e,'sit'),false);assert.equal(explainNode('walk',[e]).count,0);assert.equal(explainNode('walk',[e]).corrections,1);assert.equal(explainNode('out:blocked',[e]).kind,'result');assert.equal(explainNode('eat',[]).count,0);
+ assert.equal(explainNode('cycling',[e]).count,1);assert.match(explainNode('cycling',[e]).countExplanation,/1 recorded example started/);assert.equal(matchesNode(e,'cycling'),true);assert.equal(matchesNode(e,'out:blocked'),true);assert.equal(matchesNode(e,'walk'),true);assert.equal(matchesNode(e,'sit'),false);assert.equal(explainNode('walk',[e]).count,0);assert.equal(explainNode('walk',[e]).corrections,1);assert.equal(explainNode('out:blocked',[e]).kind,'result');assert.equal(explainNode('eat',[]).count,0);
 });
